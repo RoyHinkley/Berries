@@ -1,0 +1,183 @@
+using System.Text;
+using Berries.Core;
+using Berries.Core.Domain;
+using Berries.FileSystem.Abstractions;
+using Xunit;
+
+namespace Berries.Core.Tests;
+
+public sealed class BerriesEngineTests
+{
+    [Fact]
+    public async Task BuildInitialPortraitAsync_UsesSyntheticFileSystem()
+    {
+        var root = new FileSystemPath(@"X:\Corpus");
+        var files = new[]
+        {
+            new FileSystemFile(
+                new FileSystemPath(@"X:\Corpus\alpha.txt"),
+                root,
+                100,
+                new DateTimeOffset(2026, 8, 1, 12, 0, 0, TimeSpan.Zero)),
+            new FileSystemFile(
+                new FileSystemPath(@"X:\Corpus\Sub\beta.bin"),
+                new FileSystemPath(@"X:\Corpus\Sub"),
+                250,
+                new DateTimeOffset(2026, 8, 2, 13, 0, 0, TimeSpan.Zero))
+        };
+
+        var fileSystem = new SyntheticFileSystem(
+            new Dictionary<FileSystemPath, IReadOnlyList<FileSystemFile>>
+            {
+                [root] = files
+            });
+        var engine = new BerriesEngine(fileSystem);
+        var corpus = new Corpus(new[] { new CorpusRoot(root) });
+
+        var portrait = await engine.BuildInitialPortraitAsync(corpus);
+
+        Assert.Collection(
+            portrait.Files,
+            file =>
+            {
+                Assert.Equal(files[0].Path, file.Path);
+                Assert.Equal(files[0].ParentDirectory, file.ParentDirectory);
+                Assert.Equal(files[0].Length, file.Length);
+                Assert.Equal(files[0].LastWriteTime, file.LastWriteTime);
+            },
+            file =>
+            {
+                Assert.Equal(files[1].Path, file.Path);
+                Assert.Equal(files[1].ParentDirectory, file.ParentDirectory);
+                Assert.Equal(files[1].Length, file.Length);
+                Assert.Equal(files[1].LastWriteTime, file.LastWriteTime);
+            });
+    }
+
+    [Fact]
+    public void CreateCorpus_NormalizesDuplicateAndNestedRoots()
+    {
+        var fileSystem = new SyntheticFileSystem(
+            new Dictionary<FileSystemPath, IReadOnlyList<FileSystemFile>>());
+        var engine = new BerriesEngine(fileSystem);
+
+        var corpus = engine.CreateCorpus(new[]
+        {
+            new FileSystemPath(@"X:\Corpus\Sub"),
+            new FileSystemPath(@"Y:\Archive"),
+            new FileSystemPath(@"X:\Corpus"),
+            new FileSystemPath(@"X:\Corpus\"),
+            new FileSystemPath(@"Y:\Archive\Nested")
+        });
+
+        Assert.Equal(
+            new[] { @"Y:\Archive", @"X:\Corpus" },
+            corpus.Roots.Select(root => root.Path.Value));
+    }
+
+    [Fact]
+    public async Task DiscoverDuplicatesAsync_HashesOnlyEqualSizeCandidates_AndFindsOnlyEqualContent()
+    {
+        var root = new FileSystemPath(@"X:\Corpus");
+        var paths = new[]
+        {
+            new FileSystemPath(@"X:\Corpus\a.txt"),
+            new FileSystemPath(@"X:\Corpus\b.txt"),
+            new FileSystemPath(@"X:\Corpus\c.txt"),
+            new FileSystemPath(@"X:\Corpus\d.txt")
+        };
+
+        var same = Encoding.UTF8.GetBytes("same bytes");
+        var differentSameLength = Encoding.UTF8.GetBytes("other text");
+        Assert.Equal(same.Length, differentSameLength.Length);
+        var unique = Encoding.UTF8.GetBytes("unique length content");
+
+        var files = new[]
+        {
+            new FileSystemFile(paths[0], root, same.Length),
+            new FileSystemFile(paths[1], root, same.Length),
+            new FileSystemFile(paths[2], root, differentSameLength.Length),
+            new FileSystemFile(paths[3], root, unique.Length)
+        };
+
+        var fileSystem = new SyntheticFileSystem(
+            new Dictionary<FileSystemPath, IReadOnlyList<FileSystemFile>>
+            {
+                [root] = files
+            },
+            new Dictionary<FileSystemPath, byte[]>
+            {
+                [paths[0]] = same,
+                [paths[1]] = same,
+                [paths[2]] = differentSameLength,
+                [paths[3]] = unique
+            });
+        var engine = new BerriesEngine(fileSystem);
+        var portrait = await engine.BuildInitialPortraitAsync(new Corpus(new[] { new CorpusRoot(root) }));
+
+        var result = await engine.DiscoverDuplicatesAsync(portrait);
+
+        var duplicateSet = Assert.Single(result.DuplicateSets);
+        Assert.Equal(2, duplicateSet.InstanceCount);
+        Assert.Equal(new[] { paths[0], paths[1] }, duplicateSet.Files.Select(file => file.Path));
+        Assert.Equal(3, fileSystem.OpenedPaths.Count);
+        Assert.DoesNotContain(paths[3], fileSystem.OpenedPaths);
+        Assert.Equal(2, result.DuplicateFileCount);
+    }
+
+    private sealed class SyntheticFileSystem(
+        IReadOnlyDictionary<FileSystemPath, IReadOnlyList<FileSystemFile>> filesByRoot,
+        IReadOnlyDictionary<FileSystemPath, byte[]>? contentByPath = null) : IFileSystem
+    {
+        private readonly IReadOnlyDictionary<FileSystemPath, byte[]> contentByPath =
+            contentByPath ?? new Dictionary<FileSystemPath, byte[]>();
+
+        public List<FileSystemPath> OpenedPaths { get; } = [];
+
+        public FileSystemPath NormalizePath(FileSystemPath path)
+        {
+            var value = path.Value.Replace('/', '\\').TrimEnd('\\');
+            return new FileSystemPath(value);
+        }
+
+        public IEnumerable<FileSystemFile> EnumerateFiles(FileSystemPath root) =>
+            filesByRoot.TryGetValue(root, out var files)
+                ? files
+                : throw new InvalidOperationException($"Unexpected enumeration root: {root}");
+
+        public Stream OpenRead(FileSystemPath path)
+        {
+            OpenedPaths.Add(path);
+            if (!contentByPath.TryGetValue(path, out var content))
+                throw new InvalidOperationException($"Unexpected content read: {path}");
+
+            return new MemoryStream(content, writable: false);
+        }
+
+        public bool PathsEqual(FileSystemPath left, FileSystemPath right) =>
+            StringComparer.OrdinalIgnoreCase.Equals(
+                NormalizePath(left).Value,
+                NormalizePath(right).Value);
+
+        public bool IsDescendant(FileSystemPath candidate, FileSystemPath ancestor)
+        {
+            var child = NormalizePath(candidate).Value;
+            var parent = NormalizePath(ancestor).Value;
+
+            if (StringComparer.OrdinalIgnoreCase.Equals(child, parent))
+                return false;
+
+            return child.StartsWith(parent + "\\", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public bool Exists(FileSystemPath path) => throw UnexpectedCall();
+        public void CreateDirectory(FileSystemPath path) => throw UnexpectedCall();
+        public void CopyFile(FileSystemPath source, FileSystemPath destination) => throw UnexpectedCall();
+        public void MoveFile(FileSystemPath source, FileSystemPath destination) => throw UnexpectedCall();
+        public void DeleteFile(FileSystemPath path) => throw UnexpectedCall();
+        public void RemoveDirectory(FileSystemPath path) => throw UnexpectedCall();
+
+        private static InvalidOperationException UnexpectedCall() =>
+            new("The test used an unrelated filesystem operation.");
+    }
+}

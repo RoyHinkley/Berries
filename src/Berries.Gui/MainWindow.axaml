@@ -1,0 +1,61 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Berries.Gui.MainWindow"
+        Title="Berries"
+        Width="900"
+        Height="650"
+        MinWidth="700"
+        MinHeight="520">
+  <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="20">
+    <StackPanel Spacing="4">
+      <TextBlock Text="Berries" FontSize="28" FontWeight="SemiBold" />
+      <TextBlock Text="Duplicate-file structural analysis" Opacity="0.65" />
+    </StackPanel>
+
+    <Grid Grid.Row="1" Margin="0,24,0,0" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+      <TextBlock Text="Corpus roots" FontWeight="SemiBold" VerticalAlignment="Center" />
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+        <Button x:Name="AddRootButton" Content="Add..." Click="AddRootButton_Click" />
+        <Button x:Name="RemoveRootButton" Content="Remove" Click="RemoveRootButton_Click" />
+        <Button x:Name="ScanButton" Content="Scan" Click="ScanButton_Click" />
+        <Button x:Name="FindDuplicatesButton" Content="Find duplicates" Click="FindDuplicatesButton_Click" IsEnabled="False" />
+      </StackPanel>
+    </Grid>
+
+    <ListBox x:Name="RootsList"
+             Grid.Row="2"
+             Margin="0,10,0,0"
+             MinHeight="120" />
+
+    <Border Grid.Row="3" Margin="0,20,0,0" Padding="20" BorderThickness="1" CornerRadius="8">
+      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="20" RowSpacing="8">
+        <TextBlock Text="Files" FontWeight="SemiBold" />
+        <TextBlock x:Name="FileCountText" Grid.Column="1" Text="—" />
+
+        <TextBlock Grid.Row="1" Text="Total bytes" FontWeight="SemiBold" />
+        <TextBlock x:Name="TotalBytesText" Grid.Row="1" Grid.Column="1" Text="—" />
+
+        <TextBlock Grid.Row="2" Text="Corpus normalization" FontWeight="SemiBold" />
+        <TextBlock x:Name="NormalizationElapsedText" Grid.Row="2" Grid.Column="1" Text="—" />
+
+        <TextBlock Grid.Row="3" Text="Portrait acquisition" FontWeight="SemiBold" />
+        <TextBlock x:Name="PortraitElapsedText" Grid.Row="3" Grid.Column="1" Text="—" />
+
+        <TextBlock Grid.Row="4" Text="Duplicate files" FontWeight="SemiBold" />
+        <TextBlock x:Name="DuplicateFileCountText" Grid.Row="4" Grid.Column="1" Text="—" />
+
+        <TextBlock Grid.Row="5" Text="Duplicate sets" FontWeight="SemiBold" />
+        <TextBlock x:Name="DuplicateSetCountText" Grid.Row="5" Grid.Column="1" Text="—" />
+
+        <TextBlock Grid.Row="6" Text="Size grouping" FontWeight="SemiBold" />
+        <TextBlock x:Name="SizeGroupingElapsedText" Grid.Row="6" Grid.Column="1" Text="—" />
+
+        <TextBlock Grid.Row="7" Text="Content hashing" FontWeight="SemiBold" />
+        <TextBlock x:Name="HashingElapsedText" Grid.Row="7" Grid.Column="1" Text="—" />
+
+        <TextBlock Grid.Row="8" Text="Status" FontWeight="SemiBold" />
+        <TextBlock x:Name="StatusText" Grid.Row="8" Grid.Column="1" Text="No corpus selected." TextWrapping="Wrap" />
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

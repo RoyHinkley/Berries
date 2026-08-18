@@ -66,12 +66,11 @@ Filesystem access is isolated behind platform-agnostic interfaces.
 Filesystem- specific behavior (NTFS, ext4, APFS, etc.) belongs only in
 filesystem adapter implementations.
 
-A console front end should be possible without changing the analysis
-engine.
+The analysis engine must be usable independently of any front end.
 
 Architectural test:
 
-    If Core cannot be exercised from a console program against a synthetic
+    If Core cannot be exercised by a simple test harness against a synthetic
     portrait, a platform or UI concern has leaked across a boundary.
 
 Tentative solution decomposition:
@@ -98,9 +97,9 @@ Tentative solution decomposition:
 
     Berries.Gui
         Avalonia UI
+    Berries.Core.Tests
+        Platform-independent Core tests using synthetic filesystem/portrait data
 
-    Berries.Console
-        Optional console/diagnostic front end
 
 ## Core terminology
 
