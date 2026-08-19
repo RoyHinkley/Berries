@@ -106,12 +106,14 @@ public partial class MainWindow : Window
         try
         {
             var result = controller.AnalyzeTopCases(25);
+            var duplicateDiscovery = controller.DuplicateDiscovery
+                ?? throw new InvalidOperationException("Duplicate discovery has not completed.");
             CasesReportText.Text = CaseReportFormatter.Format(
                 controller.Scan!,
-                controller.DuplicateDiscovery!,
+                duplicateDiscovery,
                 result,
                 controller.Portrait!.Files,
-                controller.DuplicateDiscovery.DuplicateSets,
+                duplicateDiscovery.DuplicateSets,
                 controller.DirectoryAnalysis!,
                 controller.ScopeAnalysis!,
                 evidenceAnalyzer);
