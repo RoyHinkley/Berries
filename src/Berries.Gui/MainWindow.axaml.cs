@@ -106,8 +106,15 @@ public partial class MainWindow : Window
         try
         {
             var result = controller.AnalyzeTopCases(25);
-            CasesReportText.Text = CaseReportFormatter.Format(result, controller.Portrait!.Files,
-                controller.DuplicateDiscovery!.DuplicateSets, controller.DirectoryAnalysis!, controller.ScopeAnalysis!, evidenceAnalyzer);
+            CasesReportText.Text = CaseReportFormatter.Format(
+                controller.Scan!,
+                controller.DuplicateDiscovery!,
+                result,
+                controller.Portrait!.Files,
+                controller.DuplicateDiscovery.DuplicateSets,
+                controller.DirectoryAnalysis!,
+                controller.ScopeAnalysis!,
+                evidenceAnalyzer);
             StatusText.Text = $"Ranked {result.TotalCaseCount:N0} cases; showing top {result.TopCases.Count:N0}.";
         }
         catch (Exception ex) { StatusText.Text = ex.Message; }
