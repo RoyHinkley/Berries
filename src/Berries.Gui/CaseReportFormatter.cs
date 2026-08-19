@@ -220,12 +220,12 @@ internal static class CaseReportFormatter
         builder.AppendLine($"  roots nested: {(evidence.RootsNested ? "yes" : "no")}");
         builder.AppendLine($"  side breadth: first {evidence.FirstSideBreadth.DirectoryCount:N0} dirs / {evidence.FirstSideBreadth.FileCount:N0} files; " +
                            $"second {evidence.SecondSideBreadth.DirectoryCount:N0} dirs / {evidence.SecondSideBreadth.FileCount:N0} files");
-        builder.AppendLine($"  crossing-evidence directories: {evidence.FirstSideBreadth.CrossingDirectoryCount:N0} / {evidence.SecondSideBreadth.CrossingDirectoryCount:N0}; contributing directory pairs: {pair.DirectoryPairCount:N0}");
+        builder.AppendLine($"  crossing-evidence directories: {evidence.FirstSideBreadth.CrossingDirectoryCount:N0} / {evidence.SecondSideBreadth.CrossingDirectoryCount:N0}; contributing directory pairs: {pair.DirectoryPairCount:N0}; weighted direct evidence {evidence.ContributingWeightedLeverage:N0}");
         builder.AppendLine($"  duplicated contents on effective sides: {evidence.FirstSideDuplicateContentCount:N0} / {evidence.SecondSideDuplicateContentCount:N0}");
         builder.AppendLine($"  cross-side coverage: {Ratio(pair.Leverage, evidence.FirstSideDuplicateContentCount):P1} / {Ratio(pair.Leverage, evidence.SecondSideDuplicateContentCount):P1}; " +
                            $"min {minimumCoverage:P1}; max {maximumCoverage:P1}; asymmetry {CoverageAsymmetry(minimumCoverage, maximumCoverage):P1}");
-        builder.AppendLine($"  direct-evidence concentration: top 1 {evidence.StrongestDirectoryPairFraction:P1}; top 5 {evidence.TopFiveDirectoryPairFraction:P1}; top 10 {evidence.TopTenDirectoryPairFraction:P1}");
-        builder.AppendLine($"  subsidiary ScopePairs: {evidence.SubsidiaryScopePairCount:N0}");
+        builder.AppendLine($"  direct-evidence concentration: top 1 {evidence.StrongestDirectoryPairConcentration:P1}; top 5 {evidence.TopFiveDirectoryPairConcentration:P1}; top 10 {evidence.TopTenDirectoryPairConcentration:P1}");
+        builder.AppendLine($"  subsidiary ScopePairs: {evidence.SubsidiaryScopePairCount:N0}; leverage plateau ≥90% {evidence.SubsidiariesAtNinetyPercentLeverage:N0}, ≥95% {evidence.SubsidiariesAtNinetyFivePercentLeverage:N0}, ≥99% {evidence.SubsidiariesAtNinetyNinePercentLeverage:N0}");
         if (evidence.StrongestSubsidiaryScopePairs.Count > 0)
         {
             builder.AppendLine("  strongest subsidiary ScopePairs:");
@@ -274,7 +274,7 @@ internal static class CaseReportFormatter
         builder.AppendLine($"{indent}shared {pair.Leverage:N0}; coverage {firstCoverage:P1}/{secondCoverage:P1}; Jaccard {jaccard:P1}; degrees {firstDegree:N0}/{secondDegree:N0}; edge concentration {firstConcentration:P1}/{secondConcentration:P1}");
     }
 
-    private static double Ratio(int numerator, int denominator) => denominator == 0 ? 0 : (double)numerator / denominator;
+    private static double Ratio(long numerator, long denominator) => denominator == 0 ? 0 : (double)numerator / denominator;
     private static double Reduction(int child, int parent) => parent == 0 ? 0 : 1d - (double)child / parent;
     private static double CoverageAsymmetry(double minimum, double maximum) => maximum == 0 ? 0 : 1d - minimum / maximum;
     private static string Kind(Case item) => item switch { DuplicateSetCase => "DuplicateSet", SingleDirectoryCase => "SingleDirectory", DirectoryPairCase => "DirectoryPair", ScopePairCase => "ScopePair", _ => item.GetType().Name };
