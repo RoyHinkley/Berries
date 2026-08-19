@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Berries.Core.Analysis;
 using Berries.Core.Domain;
 using Berries.FileSystem.Abstractions;
@@ -16,6 +17,8 @@ public sealed class CaseAnalyzer(IFileSystem fileSystem)
     {
         if (limit < 0)
             throw new ArgumentOutOfRangeException(nameof(limit));
+
+        var timer = Stopwatch.StartNew();
 
         var internalDuplicateContents = new Dictionary<FileSystemPath, HashSet<ContentId>>();
         foreach (var duplicateSet in duplicateSets)
@@ -72,13 +75,15 @@ public sealed class CaseAnalyzer(IFileSystem fileSystem)
             .Select(item => item.Materialize())
             .ToArray();
 
+        timer.Stop();
         return new CaseAnalysisResult(
             topCases,
             candidates.Count,
             duplicateSets.Count,
             internalDuplicateContents.Count,
             directoryPairs.Count,
-            scopePairs.Count);
+            scopePairs.Count,
+            timer.Elapsed);
     }
 
     private bool IsInEffectiveSide(
