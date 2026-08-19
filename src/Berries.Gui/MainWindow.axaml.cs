@@ -94,8 +94,16 @@ public partial class MainWindow : Window
             DuplicateSetCountText.Text = result.DuplicateSets.Count.ToString("N0");
             SizeGroupingElapsedText.Text = FormatElapsed(result.Timing.SizeGrouping);
             HashingElapsedText.Text = FormatElapsed(result.Timing.ContentHashing);
+            FileCountText.Text = result.Portrait.Files.Count.ToString("N0");
+            TotalBytesText.Text = result.Portrait.Files.Sum(file => file.Length).ToString("N0");
+
+            var evictionText = result.Evictions.Count == 0
+                ? string.Empty
+                : $" {result.Evictions.Count:N0} inaccessible file(s) removed from the portrait.";
+
             StatusText.Text = $"Duplicate discovery completed in {FormatElapsed(result.Timing.Total)}; " +
-                              $"set construction {FormatElapsed(result.Timing.DuplicateSetConstruction)}.";
+                              $"set construction {FormatElapsed(result.Timing.DuplicateSetConstruction)}." +
+                              evictionText;
         }
         catch (Exception ex)
         {
