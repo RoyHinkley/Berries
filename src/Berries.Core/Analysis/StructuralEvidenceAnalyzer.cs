@@ -12,6 +12,7 @@ public sealed record ScopeSideBreadth(
 public sealed record ScopePairEvidenceTiming(
     TimeSpan ContributingDirectoryPairs,
     TimeSpan SubsidiaryScopePairs,
+    TimeSpan DuplicateContentCounts,
     TimeSpan ParentBreadth,
     TimeSpan SubsidiaryBreadth,
     TimeSpan Total);
@@ -85,10 +86,13 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
         phaseTimer.Stop();
         var subsidiaryElapsed = phaseTimer.Elapsed;
 
+        phaseTimer.Restart();
         var firstSideContentCount = duplicateSets.Count(set =>
             set.Files.Any(file => IsInEffectiveSide(file.ParentDirectory, pair.FirstRoot, pair.SecondRoot)));
         var secondSideContentCount = duplicateSets.Count(set =>
             set.Files.Any(file => IsInEffectiveSide(file.ParentDirectory, pair.SecondRoot, pair.FirstRoot)));
+        phaseTimer.Stop();
+        var duplicateContentElapsed = phaseTimer.Elapsed;
 
         phaseTimer.Restart();
         var parentBreadth = GetBreadth(pair, portraitFiles, firstCrossingDirectories, secondCrossingDirectories);
@@ -130,6 +134,7 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
             new ScopePairEvidenceTiming(
                 contributingElapsed,
                 subsidiaryElapsed,
+                duplicateContentElapsed,
                 parentBreadthElapsed,
                 subsidiaryBreadthElapsed,
                 totalTimer.Elapsed));
