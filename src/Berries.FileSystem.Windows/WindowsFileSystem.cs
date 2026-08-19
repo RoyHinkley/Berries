@@ -8,6 +8,14 @@ public sealed class WindowsFileSystem : IFileSystem
     public FileSystemPath NormalizePath(FileSystemPath path) =>
         new(Path.TrimEndingDirectorySeparator(Path.GetFullPath(path.Value)));
 
+    public FileSystemPath? GetParentDirectory(FileSystemPath path)
+    {
+        var parent = Directory.GetParent(NormalizePath(path).Value);
+        return parent is null
+            ? null
+            : new FileSystemPath(Path.TrimEndingDirectorySeparator(parent.FullName));
+    }
+
     public IEnumerable<FileSystemFile> EnumerateFiles(FileSystemPath root)
     {
         var options = new EnumerationOptions
