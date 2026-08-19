@@ -1,12 +1,13 @@
 namespace Berries.FileSystem.Abstractions;
 
 /// <summary>
-/// Least-common-denominator filesystem contract required by the initial application.
+/// Least-common-denominator filesystem contract required by the application.
 /// Symbolic/reparse/special-file filtering is the adapter's responsibility.
 /// </summary>
 public interface IFileSystem
 {
     FileSystemPath NormalizePath(FileSystemPath path);
+    FileSystemPath? GetParentDirectory(FileSystemPath path);
     IEnumerable<FileSystemFile> EnumerateFiles(FileSystemPath root);
     Stream OpenRead(FileSystemPath path);
 
