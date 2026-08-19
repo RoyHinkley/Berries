@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Berries.Core;
+using Berries.Core.Cases;
 using Berries.Core.Domain;
 using Berries.FileSystem.Abstractions;
 
@@ -8,14 +9,20 @@ namespace Berries.Gui;
 public sealed class GuiController
 {
     private readonly BerriesEngine engine;
+    private readonly CaseAnalyzer caseAnalyzer;
 
-    public GuiController(BerriesEngine engine) => this.engine = engine;
+    public GuiController(BerriesEngine engine, CaseAnalyzer caseAnalyzer)
+    {
+        this.engine = engine;
+        this.caseAnalyzer = caseAnalyzer;
+    }
 
     public Corpus? Corpus { get; private set; }
     public Portrait? Portrait { get; private set; }
     public DuplicateDiscoveryResult? DuplicateDiscovery { get; private set; }
     public DirectoryAnalysisResult? DirectoryAnalysis { get; private set; }
     public ScopeAnalysisResult? ScopeAnalysis { get; private set; }
+    public CaseAnalysisResult? CaseAnalysis { get; private set; }
 
     public IReadOnlyList<string> NormalizeRoots(IEnumerable<string> rootPaths) =>
         engine.CreateCorpus(rootPaths.Select(path => new FileSystemPath(path)))
@@ -43,6 +50,7 @@ public sealed class GuiController
         DuplicateDiscovery = null;
         DirectoryAnalysis = null;
         ScopeAnalysis = null;
+        CaseAnalysis = null;
         totalTimer.Stop();
 
         return new ScanResult(
@@ -65,6 +73,7 @@ public sealed class GuiController
         Portrait = DuplicateDiscovery.Portrait;
         DirectoryAnalysis = null;
         ScopeAnalysis = null;
+        CaseAnalysis = null;
         return DuplicateDiscovery;
     }
 
@@ -79,6 +88,7 @@ public sealed class GuiController
             DuplicateDiscovery.DuplicateSets,
             cancellationToken);
         ScopeAnalysis = null;
+        CaseAnalysis = null;
         return DirectoryAnalysis;
     }
 
@@ -92,7 +102,22 @@ public sealed class GuiController
             Corpus,
             DuplicateDiscovery.DuplicateSets,
             cancellationToken);
+        CaseAnalysis = null;
         return ScopeAnalysis;
+    }
+
+    public CaseAnalysisResult AnalyzeTopCases(int limit = 25)
+    {
+        if (Portrait is null || DuplicateDiscovery is null || DirectoryAnalysis is null || ScopeAnalysis is null)
+            throw new InvalidOperationException("Scope analysis must complete before case analysis.");
+
+        CaseAnalysis = caseAnalyzer.AnalyzeTop(
+            Portrait,
+            DuplicateDiscovery.DuplicateSets,
+            DirectoryAnalysis.DirectoryPairs,
+            ScopeAnalysis.ScopePairs,
+            limit);
+        return CaseAnalysis;
     }
 }
 
