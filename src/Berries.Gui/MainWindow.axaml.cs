@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Berries.Core;
+using Berries.Core.Analysis;
 using Berries.Core.Cases;
 using Berries.FileSystem.Windows;
 
@@ -10,6 +11,7 @@ namespace Berries.Gui;
 public partial class MainWindow : Window
 {
     private readonly GuiController controller;
+    private readonly StructuralEvidenceAnalyzer evidenceAnalyzer;
     private readonly List<string> roots = [];
 
     public MainWindow()
@@ -17,6 +19,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         var fileSystem = new WindowsFileSystem();
         controller = new GuiController(new BerriesEngine(fileSystem), new CaseAnalyzer(fileSystem));
+        evidenceAnalyzer = new StructuralEvidenceAnalyzer(fileSystem);
         RefreshRoots();
     }
 
@@ -190,7 +193,12 @@ public partial class MainWindow : Window
         try
         {
             var result = controller.AnalyzeTopCases(25);
-            CasesReportText.Text = CaseReportFormatter.Format(result, controller.DuplicateDiscovery!.DuplicateSets);
+            CasesReportText.Text = CaseReportFormatter.Format(
+                result,
+                controller.DuplicateDiscovery!.DuplicateSets,
+                controller.DirectoryAnalysis!,
+                controller.ScopeAnalysis!,
+                evidenceAnalyzer);
             StatusText.Text = $"Ranked {result.TotalCaseCount:N0} cases; showing top {result.TopCases.Count:N0}.";
         }
         catch (Exception ex)
