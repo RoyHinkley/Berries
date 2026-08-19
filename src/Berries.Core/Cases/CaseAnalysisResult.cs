@@ -6,4 +6,5 @@ public sealed record CaseAnalysisResult(
     int DuplicateSetCaseCount,
     int SingleDirectoryCaseCount,
     int DirectoryPairCaseCount,
-    int ScopePairCaseCount);
+    int ScopePairCaseCount,
+    TimeSpan TotalElapsed);
