@@ -57,6 +57,7 @@ public sealed class GuiController
             throw new InvalidOperationException("A portrait must be constructed before duplicate discovery.");
 
         DuplicateDiscovery = await engine.DiscoverDuplicatesAsync(Portrait, progress, cancellationToken);
+        Portrait = DuplicateDiscovery.Portrait;
         return DuplicateDiscovery;
     }
 }
