@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Security;
 using System.Security.Cryptography;
 using Berries.Core.Analysis;
 using Berries.Core.Domain;
@@ -53,7 +54,8 @@ public sealed class BerriesEngine
 
     /// <summary>
     /// Finds byte-identical files in an existing portrait. Files are first grouped by length;
-    /// only members of non-singleton length groups are read and hashed.
+    /// only members of non-singleton length groups are read and hashed. A file that becomes
+    /// inaccessible is evicted from the returned portrait and is not considered further.
     /// </summary>
     public Task<DuplicateDiscoveryResult> DiscoverDuplicatesAsync(
         Portrait portrait,
@@ -116,6 +118,8 @@ public sealed class BerriesEngine
 
         phaseTimer.Restart();
         var hashedFiles = new List<(ContentId Content, FileInstance File)>(candidateFiles);
+        var evictions = new List<FileEviction>();
+        var evictedFiles = new HashSet<FileInstance>();
 
         foreach (var group in candidateGroups)
         {
@@ -123,19 +127,32 @@ public sealed class BerriesEngine
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                using var stream = fileSystem.OpenRead(file.Path);
-                var hash = SHA256.HashData(stream);
-                var content = new ContentId(Convert.ToHexString(hash));
-                hashedFiles.Add((content, file));
-
-                filesHashed++;
-                bytesHashed += file.Length;
-                progress?.Report(new DuplicateDiscoveryProgress(
-                    filesHashed,
-                    candidateFiles,
-                    bytesHashed,
-                    candidateBytes,
-                    file.Path));
+                if (TryAccessFile(
+                    file,
+                    "read for content hashing",
+                    () =>
+                    {
+                        using var stream = fileSystem.OpenRead(file.Path);
+                        return SHA256.HashData(stream);
+                    },
+                    evictions,
+                    out var hash))
+                {
+                    var content = new ContentId(Convert.ToHexString(hash));
+                    hashedFiles.Add((content, file));
+                    filesHashed++;
+                    bytesHashed += file.Length;
+                    progress?.Report(new DuplicateDiscoveryProgress(
+                        filesHashed,
+                        candidateFiles,
+                        bytesHashed,
+                        candidateBytes,
+                        file.Path));
+                }
+                else
+                {
+                    evictedFiles.Add(file);
+                }
             }
         }
         phaseTimer.Stop();
@@ -152,14 +169,43 @@ public sealed class BerriesEngine
         phaseTimer.Stop();
         var duplicateSetConstructionElapsed = phaseTimer.Elapsed;
 
+        var currentPortrait = evictedFiles.Count == 0
+            ? portrait
+            : new Portrait(portrait.Files.Where(file => !evictedFiles.Contains(file)));
+
         totalTimer.Stop();
 
         return new DuplicateDiscoveryResult(
+            currentPortrait,
             duplicateSets,
+            evictions,
             new DuplicateDiscoveryTiming(
                 sizeGroupingElapsed,
                 contentHashingElapsed,
                 duplicateSetConstructionElapsed,
                 totalTimer.Elapsed));
     }
+
+    private static bool TryAccessFile<T>(
+        FileInstance file,
+        string operation,
+        Func<T> access,
+        ICollection<FileEviction> evictions,
+        out T result)
+    {
+        try
+        {
+            result = access();
+            return true;
+        }
+        catch (Exception ex) when (IsFileAccessFailure(ex))
+        {
+            evictions.Add(new FileEviction(file, operation, ex.Message));
+            result = default!;
+            return false;
+        }
+    }
+
+    private static bool IsFileAccessFailure(Exception exception) =>
+        exception is IOException or UnauthorizedAccessException or SecurityException;
 }
