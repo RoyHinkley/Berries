@@ -131,10 +131,42 @@ public partial class MainWindow : Window
                 .Take(25)
                 .Select(pair => $"{pair.Leverage,6:N0}    {pair.First.Value}    ↔    {pair.Second.Value}")
                 .ToArray();
+            ClearScopeSummary();
 
             StatusText.Text = $"Directory analysis completed in {FormatElapsed(result.Timing.Total)}; " +
                               $"records {FormatElapsed(result.Timing.DirectoryRecords)}, " +
                               $"pairs {FormatElapsed(result.Timing.DirectoryPairs)}.";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = ex.Message;
+        }
+        finally
+        {
+            SetControlsEnabled(true);
+        }
+    }
+
+    private async void AnalyzeScopesButton_Click(object? sender, RoutedEventArgs e)
+    {
+        SetControlsEnabled(false);
+        StatusText.Text = "Analyzing scope relationships...";
+
+        try
+        {
+            var result = await controller.AnalyzeScopesAsync();
+            ScopePairCountText.Text = result.ScopePairs.Count.ToString("N0");
+            ScopeAnalysisElapsedText.Text = FormatElapsed(result.Timing.Total);
+            ScopePairsList.ItemsSource = result.ScopePairs
+                .Take(25)
+                .Select(pair => $"{pair.Leverage,6:N0}  [{pair.DirectoryPairCount,5:N0}]    " +
+                                $"{pair.FirstRoot.Value}    ↔    {pair.SecondRoot.Value}")
+                .ToArray();
+
+            StatusText.Text = $"Scope analysis completed in {FormatElapsed(result.Timing.Total)}; " +
+                              $"evidence {FormatElapsed(result.Timing.EvidenceConstruction)}, " +
+                              $"aggregation {FormatElapsed(result.Timing.ScopeAggregation)}, " +
+                              $"results {FormatElapsed(result.Timing.ResultConstruction)}.";
         }
         catch (Exception ex)
         {
@@ -154,6 +186,7 @@ public partial class MainWindow : Window
         RemoveRootButton.IsEnabled = roots.Count > 0;
         FindDuplicatesButton.IsEnabled = controller.Portrait is not null;
         AnalyzeDirectoriesButton.IsEnabled = controller.DuplicateDiscovery is not null;
+        AnalyzeScopesButton.IsEnabled = controller.DirectoryAnalysis is not null;
     }
 
     private void ClearPortraitSummary()
@@ -165,6 +198,7 @@ public partial class MainWindow : Window
         ClearDuplicateSummary();
         FindDuplicatesButton.IsEnabled = false;
         AnalyzeDirectoriesButton.IsEnabled = false;
+        AnalyzeScopesButton.IsEnabled = false;
     }
 
     private void ClearDuplicateSummary()
@@ -182,6 +216,14 @@ public partial class MainWindow : Window
         DirectoryPairCountText.Text = "—";
         DirectoryAnalysisElapsedText.Text = "—";
         DirectoryPairsList.ItemsSource = null;
+        ClearScopeSummary();
+    }
+
+    private void ClearScopeSummary()
+    {
+        ScopePairCountText.Text = "—";
+        ScopeAnalysisElapsedText.Text = "—";
+        ScopePairsList.ItemsSource = null;
     }
 
     private void SetControlsEnabled(bool enabled)
@@ -191,6 +233,7 @@ public partial class MainWindow : Window
         ScanButton.IsEnabled = enabled && roots.Count > 0;
         FindDuplicatesButton.IsEnabled = enabled && controller.Portrait is not null;
         AnalyzeDirectoriesButton.IsEnabled = enabled && controller.DuplicateDiscovery is not null;
+        AnalyzeScopesButton.IsEnabled = enabled && controller.DirectoryAnalysis is not null;
     }
 
     private static string FormatElapsed(TimeSpan elapsed) =>
