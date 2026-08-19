@@ -22,7 +22,14 @@ public sealed record DirectoryGraphNode(
     int MaxPairLeverage,
     int FileCount,
     int DuplicateFileCount,
-    int DuplicateContentCount);
+    int DuplicateContentCount)
+{
+    /// <summary>Mean leverage of incident DirectoryPairs. High degree with a low mean indicates diffuse sharing.</summary>
+    public double MeanPairLeverage => Degree == 0 ? 0 : (double)WeightedDegree / Degree;
+
+    /// <summary>Fraction of weighted degree represented by the strongest incident DirectoryPair.</summary>
+    public double StrongestPairConcentration => WeightedDegree == 0 ? 0 : (double)MaxPairLeverage / WeightedDegree;
+}
 
 internal static class DirectoryGraphAnalyzer
 {
