@@ -76,6 +76,7 @@ public sealed class DirectoryAnalysisTests
     private sealed class UnusedFileSystem : IFileSystem
     {
         public FileSystemPath NormalizePath(FileSystemPath path) => throw UnexpectedCall();
+        public FileSystemPath? GetParentDirectory(FileSystemPath path) => throw UnexpectedCall();
         public IEnumerable<FileSystemFile> EnumerateFiles(FileSystemPath root) => throw UnexpectedCall();
         public Stream OpenRead(FileSystemPath path) => throw UnexpectedCall();
         public bool Exists(FileSystemPath path) => throw UnexpectedCall();
