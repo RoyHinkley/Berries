@@ -2,18 +2,21 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Berries.Core;
+using Berries.Core.Cases;
 using Berries.FileSystem.Windows;
 
 namespace Berries.Gui;
 
 public partial class MainWindow : Window
 {
-    private readonly GuiController controller = new(new BerriesEngine(new WindowsFileSystem()));
+    private readonly GuiController controller;
     private readonly List<string> roots = [];
 
     public MainWindow()
     {
         InitializeComponent();
+        var fileSystem = new WindowsFileSystem();
+        controller = new GuiController(new BerriesEngine(fileSystem), new CaseAnalyzer(fileSystem));
         RefreshRoots();
     }
 
@@ -162,11 +165,33 @@ public partial class MainWindow : Window
                 .Select(pair => $"{pair.Leverage,6:N0}  [{pair.DirectoryPairCount,5:N0}]    " +
                                 $"{pair.FirstRoot.Value}    ↔    {pair.SecondRoot.Value}")
                 .ToArray();
+            ClearCaseSummary();
 
             StatusText.Text = $"Scope analysis completed in {FormatElapsed(result.Timing.Total)}; " +
                               $"evidence {FormatElapsed(result.Timing.EvidenceConstruction)}, " +
                               $"aggregation {FormatElapsed(result.Timing.ScopeAggregation)}, " +
                               $"results {FormatElapsed(result.Timing.ResultConstruction)}.";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = ex.Message;
+        }
+        finally
+        {
+            SetControlsEnabled(true);
+        }
+    }
+
+    private void AnalyzeCasesButton_Click(object? sender, RoutedEventArgs e)
+    {
+        SetControlsEnabled(false);
+        StatusText.Text = "Ranking cases...";
+
+        try
+        {
+            var result = controller.AnalyzeTopCases(25);
+            CasesReportText.Text = CaseReportFormatter.Format(result, controller.DuplicateDiscovery!.DuplicateSets);
+            StatusText.Text = $"Ranked {result.TotalCaseCount:N0} cases; showing top {result.TopCases.Count:N0}.";
         }
         catch (Exception ex)
         {
@@ -187,6 +212,7 @@ public partial class MainWindow : Window
         FindDuplicatesButton.IsEnabled = controller.Portrait is not null;
         AnalyzeDirectoriesButton.IsEnabled = controller.DuplicateDiscovery is not null;
         AnalyzeScopesButton.IsEnabled = controller.DirectoryAnalysis is not null;
+        AnalyzeCasesButton.IsEnabled = controller.ScopeAnalysis is not null;
     }
 
     private void ClearPortraitSummary()
@@ -199,6 +225,7 @@ public partial class MainWindow : Window
         FindDuplicatesButton.IsEnabled = false;
         AnalyzeDirectoriesButton.IsEnabled = false;
         AnalyzeScopesButton.IsEnabled = false;
+        AnalyzeCasesButton.IsEnabled = false;
     }
 
     private void ClearDuplicateSummary()
@@ -224,6 +251,12 @@ public partial class MainWindow : Window
         ScopePairCountText.Text = "—";
         ScopeAnalysisElapsedText.Text = "—";
         ScopePairsList.ItemsSource = null;
+        ClearCaseSummary();
+    }
+
+    private void ClearCaseSummary()
+    {
+        CasesReportText.Text = string.Empty;
     }
 
     private void SetControlsEnabled(bool enabled)
@@ -234,6 +267,7 @@ public partial class MainWindow : Window
         FindDuplicatesButton.IsEnabled = enabled && controller.Portrait is not null;
         AnalyzeDirectoriesButton.IsEnabled = enabled && controller.DuplicateDiscovery is not null;
         AnalyzeScopesButton.IsEnabled = enabled && controller.DirectoryAnalysis is not null;
+        AnalyzeCasesButton.IsEnabled = enabled && controller.ScopeAnalysis is not null;
     }
 
     private static string FormatElapsed(TimeSpan elapsed) =>
