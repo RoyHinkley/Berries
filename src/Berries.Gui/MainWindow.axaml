@@ -2,9 +2,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Berries.Gui.MainWindow"
         Title="Berries"
-        Width="1200"
+        Width="1500"
         Height="900"
-        MinWidth="900"
+        MinWidth="1000"
         MinHeight="700">
   <Grid RowDefinitions="Auto,Auto,150,Auto,*" Margin="20">
     <StackPanel Spacing="4">
@@ -21,6 +21,7 @@
         <Button x:Name="FindDuplicatesButton" Content="Find duplicates" Click="FindDuplicatesButton_Click" IsEnabled="False" />
         <Button x:Name="AnalyzeDirectoriesButton" Content="Analyze directories" Click="AnalyzeDirectoriesButton_Click" IsEnabled="False" />
         <Button x:Name="AnalyzeScopesButton" Content="Analyze scopes" Click="AnalyzeScopesButton_Click" IsEnabled="False" />
+        <Button x:Name="AnalyzeCasesButton" Content="Top cases" Click="AnalyzeCasesButton_Click" IsEnabled="False" />
       </StackPanel>
     </Grid>
 
@@ -74,7 +75,7 @@
       </Grid>
     </Border>
 
-    <Grid Grid.Row="4" Margin="0,20,0,0" ColumnDefinitions="*,*" ColumnSpacing="20">
+    <Grid Grid.Row="4" Margin="0,20,0,0" ColumnDefinitions="*,*,1.35*" ColumnSpacing="20">
       <Grid RowDefinitions="Auto,*">
         <TextBlock Text="Strongest directory pairs" FontWeight="SemiBold" />
         <ListBox x:Name="DirectoryPairsList" Grid.Row="1" Margin="0,8,0,0" />
@@ -82,6 +83,16 @@
       <Grid Grid.Column="1" RowDefinitions="Auto,*">
         <TextBlock Text="Strongest scope pairs" FontWeight="SemiBold" />
         <ListBox x:Name="ScopePairsList" Grid.Row="1" Margin="0,8,0,0" />
+      </Grid>
+      <Grid Grid.Column="2" RowDefinitions="Auto,*">
+        <TextBlock Text="Top cases — Ctrl+A, Ctrl+C to copy" FontWeight="SemiBold" />
+        <TextBox x:Name="CasesReportText"
+                 Grid.Row="1"
+                 Margin="0,8,0,0"
+                 IsReadOnly="True"
+                 AcceptsReturn="True"
+                 TextWrapping="NoWrap"
+                 FontFamily="Consolas" />
       </Grid>
     </Grid>
   </Grid>
