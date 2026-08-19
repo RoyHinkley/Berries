@@ -14,20 +14,22 @@ Target framework is .NET 10. The GUI references Avalonia 12.1.0 and is built as 
 
 ## Current implementation
 
-The first working vertical slices now cover corpus construction, initial portrait acquisition, and duplicate discovery.
+The working vertical slices now cover corpus construction, initial portrait acquisition, duplicate discovery, and direct-directory structural analysis.
 
 1. The GUI maintains a persistent list of corpus roots. `Add` uses a single-directory picker; `Remove` removes the selected root.
 2. `BerriesEngine.CreateCorpus` normalizes selected paths before enumeration: paths are canonicalized, exact duplicates are removed, and roots contained by another selected root are discarded. The stored `Corpus` therefore contains the minimal disjoint root set.
 3. `GuiController` awaits `BerriesEngine.BuildInitialPortraitAsync` to acquire filesystem state and construct the initial portrait.
-4. `BerriesEngine` owns the worker-thread boundary and supports cancellation and platform-neutral progress reporting.
-5. Core obtains filesystem state only through synchronous `IFileSystem`; the abstraction describes required filesystem capabilities without prescribing platform implementation strategy.
+4. `BerriesEngine` owns worker-thread boundaries for potentially long-running operations and supports cancellation; filesystem enumeration itself remains synchronous because that is what the platform exposes.
+5. Core obtains filesystem state only through `IFileSystem`; the abstraction describes required filesystem capabilities without prescribing platform implementation strategy.
 6. `WindowsFileSystem` recursively enumerates regular files while avoiding reparse-point traversal.
-7. Portrait construction from the acquired file records remains synchronous.
+7. Portrait construction from acquired file records remains synchronous and deterministic.
 8. Duplicate discovery first groups portrait files by length. Only files in non-singleton length groups are opened and hashed.
 9. Candidate files are hashed with SHA-256. Files sharing a hash are partitioned into `DuplicateSet` instances; singleton hashes are discarded.
-10. The GUI keeps portrait acquisition and duplicate discovery as separate operations so their performance can be observed independently.
+10. Directory analysis derives `DirectoryRecord`s only for directories directly containing duplicated content. Each record contains direct file count, duplicated-file count, and distinct duplicated-content count; descendants are not folded into these statistics.
+11. For each `DuplicateSet`, every unordered pair of distinct directories directly representing that content contributes one unit of leverage to a `DirectoryPair`. Multiple instances of the same content within one directory do not increase pair leverage.
+12. `DirectoryPair`s are ordered by descending leverage. The temporary GUI displays counts, phase timing, and the 25 strongest pairs.
 
-Phase timing is included as development instrumentation. Portrait acquisition reports scan time. Duplicate discovery separately measures size grouping, content hashing, duplicate-set construction, and total elapsed time. These measurements are intended to guide later filesystem/performance work; correctness takes precedence over premature optimization.
+Phase timing is included as development instrumentation. Portrait acquisition reports scan time. Duplicate discovery separately measures size grouping, content hashing, duplicate-set construction, and total elapsed time. Directory analysis separately measures directory-record construction, DirectoryPair construction, and total elapsed time. These measurements are intended to guide later filesystem/performance work; correctness takes precedence over premature optimization.
 
 The filesystem abstraction may eventually warrant performance-oriented refinement. In particular, platform adapters should remain free to obtain metadata efficiently in bulk or during enumeration, and Core should not require metadata it does not actually use. No optimization is justified yet without measurements showing a material cost.
 
@@ -45,10 +47,12 @@ Portraits remain immutable snapshots. An operation that evicts files returns a r
 
 ## Tests
 
-`Berries.Core.Tests` now contains five tests. The original three had passed before the accessibility-policy change; two new regression tests exercise that policy and should be run after pulling this revision.
+`Berries.Core.Tests` contains the five previously passing tests plus a new directory-analysis test.
 
-The tests exercise Core against synthetic filesystem data, including asynchronous portrait construction, corpus-root normalization, and duplicate discovery. Duplicate-discovery coverage verifies that equal-content files form a duplicate set, same-size files with different content do not, uniquely-sized files are never opened for hashing, an I/O failure evicts the affected file while analysis continues, and a programming failure is not swallowed as an eviction.
+The existing tests exercise Core against synthetic filesystem data, including asynchronous portrait construction, corpus-root normalization, duplicate discovery, file eviction on I/O failure, and propagation of programming failures.
+
+The directory-analysis test exercises the new structural layer without using the filesystem abstraction. It verifies direct directory statistics, distinct-content pair leverage, suppression of leverage inflation from repeated instances of the same content in one directory, and leverage ordering.
 
 ## Not yet implemented
 
-Structural directory/pair/scope analysis, Case discovery and ranking, Situations and Resolutions, Dispositions, virtual Action Plans/Portrait transformation, execution planning, and physical filesystem execution remain future work described in `PROJECT.md`.
+ScopePair analysis, Case discovery and ranking, Situations and Resolutions, Dispositions, virtual Action Plans/Portrait transformation, execution planning, and physical filesystem execution remain future work described in `PROJECT.md`.
