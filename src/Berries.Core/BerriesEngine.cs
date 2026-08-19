@@ -65,6 +65,18 @@ public sealed class BerriesEngine
             () => DiscoverDuplicates(portrait, progress, cancellationToken),
             cancellationToken);
 
+    /// <summary>
+    /// Builds direct-directory duplicate statistics and unordered DirectoryPairs from duplicate sets.
+    /// Pair leverage is the number of distinct duplicated contents represented directly in both directories.
+    /// </summary>
+    public Task<DirectoryAnalysisResult> AnalyzeDirectoriesAsync(
+        Portrait portrait,
+        IReadOnlyList<DuplicateSet> duplicateSets,
+        CancellationToken cancellationToken = default) =>
+        Task.Run(
+            () => AnalyzeDirectories(portrait, duplicateSets, cancellationToken),
+            cancellationToken);
+
     private Portrait BuildInitialPortrait(
         Corpus corpus,
         IProgress<ScanProgress>? progress,
@@ -183,6 +195,94 @@ public sealed class BerriesEngine
                 sizeGroupingElapsed,
                 contentHashingElapsed,
                 duplicateSetConstructionElapsed,
+                totalTimer.Elapsed));
+    }
+
+    private static DirectoryAnalysisResult AnalyzeDirectories(
+        Portrait portrait,
+        IReadOnlyList<DuplicateSet> duplicateSets,
+        CancellationToken cancellationToken)
+    {
+        var totalTimer = Stopwatch.StartNew();
+        var phaseTimer = Stopwatch.StartNew();
+
+        var duplicateFileCounts = new Dictionary<FileSystemPath, int>();
+        var duplicateContentsByDirectory = new Dictionary<FileSystemPath, HashSet<ContentId>>();
+
+        foreach (var duplicateSet in duplicateSets)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            foreach (var file in duplicateSet.Files)
+            {
+                duplicateFileCounts.TryGetValue(file.ParentDirectory, out var count);
+                duplicateFileCounts[file.ParentDirectory] = count + 1;
+
+                if (!duplicateContentsByDirectory.TryGetValue(file.ParentDirectory, out var contents))
+                {
+                    contents = [];
+                    duplicateContentsByDirectory[file.ParentDirectory] = contents;
+                }
+
+                contents.Add(duplicateSet.Content);
+            }
+        }
+
+        var directories = portrait.Files
+            .GroupBy(file => file.ParentDirectory)
+            .Where(group => duplicateContentsByDirectory.ContainsKey(group.Key))
+            .Select(group => new DirectoryRecord(
+                group.Key,
+                group.Count(),
+                duplicateFileCounts[group.Key],
+                duplicateContentsByDirectory[group.Key].Count))
+            .OrderBy(directory => directory.Path.Value, StringComparer.Ordinal)
+            .ToArray();
+
+        phaseTimer.Stop();
+        var directoryRecordsElapsed = phaseTimer.Elapsed;
+
+        phaseTimer.Restart();
+        var pairCounts = new Dictionary<(FileSystemPath First, FileSystemPath Second), int>();
+
+        foreach (var duplicateSet in duplicateSets)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var representedDirectories = duplicateSet.Files
+                .Select(file => file.ParentDirectory)
+                .Distinct()
+                .OrderBy(path => path.Value, StringComparer.Ordinal)
+                .ToArray();
+
+            for (var firstIndex = 0; firstIndex < representedDirectories.Length - 1; firstIndex++)
+            {
+                for (var secondIndex = firstIndex + 1; secondIndex < representedDirectories.Length; secondIndex++)
+                {
+                    var key = (representedDirectories[firstIndex], representedDirectories[secondIndex]);
+                    pairCounts.TryGetValue(key, out var count);
+                    pairCounts[key] = count + 1;
+                }
+            }
+        }
+
+        var directoryPairs = pairCounts
+            .Select(pair => new DirectoryPair(pair.Key.First, pair.Key.Second, pair.Value))
+            .OrderByDescending(pair => pair.Leverage)
+            .ThenBy(pair => pair.First.Value, StringComparer.Ordinal)
+            .ThenBy(pair => pair.Second.Value, StringComparer.Ordinal)
+            .ToArray();
+
+        phaseTimer.Stop();
+        var directoryPairsElapsed = phaseTimer.Elapsed;
+
+        totalTimer.Stop();
+        return new DirectoryAnalysisResult(
+            directories,
+            directoryPairs,
+            new DirectoryAnalysisTiming(
+                directoryRecordsElapsed,
+                directoryPairsElapsed,
                 totalTimer.Elapsed));
     }
 
