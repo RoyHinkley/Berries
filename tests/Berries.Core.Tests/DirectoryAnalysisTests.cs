@@ -69,8 +69,21 @@ public sealed class DirectoryAnalysisTests
         Assert.Equal(2, result.DirectoryPairs[0].Leverage);
         Assert.Equal(directoryA, result.DirectoryPairs[0].First);
         Assert.Equal(directoryB, result.DirectoryPairs[0].Second);
-
         Assert.All(result.DirectoryPairs.Skip(1), pair => Assert.Equal(1, pair.Leverage));
+
+        Assert.Equal(3, result.Graph.TotalDirectoryCount);
+        Assert.Equal(3, result.Graph.DuplicateDirectoryCount);
+        Assert.Equal(2, result.Graph.InternalDuplicateDirectoryCount);
+        Assert.Equal(3, result.Graph.PairParticipatingDirectoryCount);
+        Assert.Equal(3, result.Graph.DirectoryPairCount);
+        Assert.Equal(1, result.Graph.ConnectedComponentCount);
+        Assert.Equal(3, result.Graph.LargestComponentSize);
+        Assert.Equal(1.0, result.Graph.PairDensity);
+
+        var nodeA = Assert.Single(result.Graph.Nodes, node => node.Directory == directoryA);
+        Assert.Equal(2, nodeA.Degree);
+        Assert.Equal(3, nodeA.WeightedDegree);
+        Assert.Equal(2, nodeA.MaxPairLeverage);
     }
 
     private sealed class UnusedFileSystem : IFileSystem
