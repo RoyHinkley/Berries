@@ -83,7 +83,8 @@ internal static class CaseReportFormatter
         foreach (var node in graph.Nodes.Where(node => node.Degree > 0).Take(10))
         {
             builder.AppendLine($"    degree {node.Degree,5:N0}  weighted {node.WeightedDegree,7:N0}  " +
-                               $"max-edge {node.MaxPairLeverage,5:N0}  {node.Directory.Value}");
+                               $"mean-edge {node.MeanPairLeverage,6:N2}  max-edge {node.MaxPairLeverage,5:N0}  " +
+                               $"concentration {node.StrongestPairConcentration,6:P1}  {node.Directory.Value}");
         }
     }
 
@@ -108,7 +109,9 @@ internal static class CaseReportFormatter
         if (nodes.TryGetValue(item.Directory, out var node))
         {
             builder.AppendLine($"  graph: degree {node.Degree:N0}; weighted degree {node.WeightedDegree:N0}; " +
-                               $"max pair leverage {node.MaxPairLeverage:N0}; duplicated contents {node.DuplicateContentCount:N0}");
+                               $"mean pair leverage {node.MeanPairLeverage:N2}; max pair leverage {node.MaxPairLeverage:N0}; " +
+                               $"strongest-pair concentration {node.StrongestPairConcentration:P1}; " +
+                               $"duplicated contents {node.DuplicateContentCount:N0}");
         }
     }
 
@@ -157,7 +160,9 @@ internal static class CaseReportFormatter
             builder.AppendLine("  strongest subsidiary ScopePairs:");
             foreach (var subsidiary in evidence.StrongestSubsidiaryScopePairs)
             {
-                builder.AppendLine($"    L {subsidiary.Leverage,5:N0}  DP {subsidiary.DirectoryPairCount,5:N0}  " +
+                builder.AppendLine($"    L {subsidiary.Leverage,5:N0}  retain {Ratio(subsidiary.Leverage, pair.Leverage),6:P1}  " +
+                                   $"DP {subsidiary.DirectoryPairCount,5:N0}  " +
+                                   $"evidence {Ratio(subsidiary.DirectoryPairCount, pair.DirectoryPairCount),6:P1}  " +
                                    $"{subsidiary.FirstRoot.Value}");
                 builder.AppendLine($"                       ↔ {subsidiary.SecondRoot.Value}");
             }
@@ -190,11 +195,16 @@ internal static class CaseReportFormatter
         var secondCoverage = Ratio(pair.Leverage, second.DuplicateContentCount);
         var union = first.DuplicateContentCount + second.DuplicateContentCount - pair.Leverage;
         var jaccard = Ratio(pair.Leverage, union);
-        var firstDegree = nodes.TryGetValue(pair.First, out var firstNode) ? firstNode.Degree : 0;
-        var secondDegree = nodes.TryGetValue(pair.Second, out var secondNode) ? secondNode.Degree : 0;
+        var firstNode = nodes.TryGetValue(pair.First, out var firstGraphNode) ? firstGraphNode : null;
+        var secondNode = nodes.TryGetValue(pair.Second, out var secondGraphNode) ? secondGraphNode : null;
+        var firstDegree = firstNode?.Degree ?? 0;
+        var secondDegree = secondNode?.Degree ?? 0;
+        var firstConcentration = firstNode is null ? 0 : Ratio(pair.Leverage, firstNode.WeightedDegree);
+        var secondConcentration = secondNode is null ? 0 : Ratio(pair.Leverage, secondNode.WeightedDegree);
 
         builder.AppendLine($"{indent}shared {pair.Leverage:N0}; coverage {firstCoverage:P1}/{secondCoverage:P1}; " +
-                           $"Jaccard {jaccard:P1}; degrees {firstDegree:N0}/{secondDegree:N0}");
+                           $"Jaccard {jaccard:P1}; degrees {firstDegree:N0}/{secondDegree:N0}; " +
+                           $"edge concentration {firstConcentration:P1}/{secondConcentration:P1}");
     }
 
     private static double Ratio(int numerator, int denominator) =>
