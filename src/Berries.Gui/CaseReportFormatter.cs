@@ -1,7 +1,6 @@
 using System.Text;
 using Berries.Core.Analysis;
 using Berries.Core.Cases;
-using Berries.Core.Domain;
 
 namespace Berries.Gui;
 
@@ -17,7 +16,7 @@ internal static class CaseReportFormatter
                            $"single directories {result.SingleDirectoryCaseCount:N0}, " +
                            $"directory pairs {result.DirectoryPairCaseCount:N0}, " +
                            $"scope pairs {result.ScopePairCaseCount:N0}]");
-        builder.AppendLine($"Top {result.TopCases.Count:N0} by leverage");
+        builder.AppendLine($"Top {result.TopCases.Count:N0} by leverage; ranking/materialization {FormatElapsed(result.TotalElapsed)}");
         builder.AppendLine();
 
         for (var index = 0; index < result.TopCases.Count; index++)
@@ -88,4 +87,9 @@ internal static class CaseReportFormatter
                 break;
         }
     }
+
+    private static string FormatElapsed(TimeSpan elapsed) =>
+        elapsed.TotalSeconds >= 1
+            ? elapsed.TotalSeconds.ToString("N3") + " s"
+            : elapsed.TotalMilliseconds.ToString("N1") + " ms";
 }
