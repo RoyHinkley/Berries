@@ -7,9 +7,16 @@ public sealed record ScopePairEvidence(
     bool RootsNested,
     int FirstSideDuplicateContentCount,
     int SecondSideDuplicateContentCount,
+    int EffectiveDirectoryCount,
+    int EffectiveFileCount,
     int SubsidiaryScopePairCount,
-    IReadOnlyList<ScopePair> StrongestSubsidiaryScopePairs,
+    IReadOnlyList<ScopePairEvidenceSummary> StrongestSubsidiaryScopePairs,
     IReadOnlyList<DirectoryPair> StrongestContributingDirectoryPairs);
+
+public sealed record ScopePairEvidenceSummary(
+    ScopePair Pair,
+    int EffectiveDirectoryCount,
+    int EffectiveFileCount);
 
 /// <summary>
 /// Computes inexpensive objective evidence for sampled structural cases without enlarging
@@ -19,6 +26,7 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
 {
     public ScopePairEvidence AnalyzeScopePair(
         ScopePair pair,
+        IReadOnlyList<FileInstance> portraitFiles,
         IReadOnlyList<DuplicateSet> duplicateSets,
         IReadOnlyList<DirectoryPair> directoryPairs,
         IReadOnlyList<ScopePair> scopePairs,
@@ -55,13 +63,28 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
                 pair.SecondRoot,
                 pair.FirstRoot)));
 
+        var breadth = GetBreadth(pair, portraitFiles);
+        var strongestSubsidiaries = subsidiaries
+            .Take(limit)
+            .Select(candidate =>
+            {
+                var candidateBreadth = GetBreadth(candidate, portraitFiles);
+                return new ScopePairEvidenceSummary(
+                    candidate,
+                    candidateBreadth.DirectoryCount,
+                    candidateBreadth.FileCount);
+            })
+            .ToArray();
+
         return new ScopePairEvidence(
             fileSystem.IsDescendant(pair.FirstRoot, pair.SecondRoot)
                 || fileSystem.IsDescendant(pair.SecondRoot, pair.FirstRoot),
             firstSideContentCount,
             secondSideContentCount,
+            breadth.DirectoryCount,
+            breadth.FileCount,
             subsidiaries.Length,
-            subsidiaries.Take(limit).ToArray(),
+            strongestSubsidiaries,
             contributingDirectoryPairs);
     }
 
@@ -74,6 +97,26 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
                 && IsInEffectiveSide(candidate.SecondRoot, parent.SecondRoot, parent.FirstRoot))
             || (IsInEffectiveSide(candidate.SecondRoot, parent.FirstRoot, parent.SecondRoot)
                 && IsInEffectiveSide(candidate.FirstRoot, parent.SecondRoot, parent.FirstRoot));
+    }
+
+    private (int DirectoryCount, int FileCount) GetBreadth(
+        ScopePair pair,
+        IReadOnlyList<FileInstance> portraitFiles)
+    {
+        var directories = new HashSet<FileSystemPath>();
+        var fileCount = 0;
+
+        foreach (var file in portraitFiles)
+        {
+            if (!IsInEffectiveSide(file.ParentDirectory, pair.FirstRoot, pair.SecondRoot)
+                && !IsInEffectiveSide(file.ParentDirectory, pair.SecondRoot, pair.FirstRoot))
+                continue;
+
+            fileCount++;
+            directories.Add(file.ParentDirectory);
+        }
+
+        return (directories.Count, fileCount);
     }
 
     private bool SameUnorderedPair(ScopePair first, ScopePair second) =>
