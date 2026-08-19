@@ -24,11 +24,15 @@ public sealed record ScopePairEvidence(
     ScopeSideBreadth FirstSideBreadth,
     ScopeSideBreadth SecondSideBreadth,
     int SubsidiaryScopePairCount,
+    int SubsidiariesAtNinetyPercentLeverage,
+    int SubsidiariesAtNinetyFivePercentLeverage,
+    int SubsidiariesAtNinetyNinePercentLeverage,
     IReadOnlyList<ScopePairEvidenceSummary> StrongestSubsidiaryScopePairs,
     IReadOnlyList<DirectoryPair> StrongestContributingDirectoryPairs,
-    double StrongestDirectoryPairFraction,
-    double TopFiveDirectoryPairFraction,
-    double TopTenDirectoryPairFraction,
+    long ContributingWeightedLeverage,
+    double StrongestDirectoryPairConcentration,
+    double TopFiveDirectoryPairConcentration,
+    double TopTenDirectoryPairConcentration,
     ScopePairEvidenceTiming Timing);
 
 public sealed record ScopePairEvidenceSummary(
@@ -58,6 +62,7 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
         var contributing = new List<DirectoryPair>();
         var firstCrossingDirectories = new HashSet<FileSystemPath>();
         var secondCrossingDirectories = new HashSet<FileSystemPath>();
+        long contributingWeightedLeverage = 0;
 
         foreach (var candidate in directoryPairs)
         {
@@ -66,6 +71,7 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
 
             firstCrossingDirectories.Add(firstDirectory);
             secondCrossingDirectories.Add(secondDirectory);
+            contributingWeightedLeverage += candidate.Leverage;
             InsertStrongest(contributing, candidate, limit, CompareDirectoryPairs);
         }
 
@@ -75,12 +81,19 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
         phaseTimer.Restart();
         var strongestSubsidiaries = new List<ScopePair>();
         var subsidiaryCount = 0;
+        var atNinety = 0;
+        var atNinetyFive = 0;
+        var atNinetyNine = 0;
         foreach (var candidate in scopePairs)
         {
             if (!IsStrictSubsidiary(candidate, pair))
                 continue;
 
             subsidiaryCount++;
+            var ratio = Ratio(candidate.Leverage, pair.Leverage);
+            if (ratio >= 0.90) atNinety++;
+            if (ratio >= 0.95) atNinetyFive++;
+            if (ratio >= 0.99) atNinetyNine++;
             InsertStrongest(strongestSubsidiaries, candidate, limit, CompareScopePairs);
         }
         phaseTimer.Stop();
@@ -117,7 +130,6 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
         var subsidiaryBreadthElapsed = phaseTimer.Elapsed;
 
         totalTimer.Stop();
-        var leverage = pair.Leverage;
         return new ScopePairEvidence(
             fileSystem.IsDescendant(pair.FirstRoot, pair.SecondRoot)
                 || fileSystem.IsDescendant(pair.SecondRoot, pair.FirstRoot),
@@ -126,11 +138,15 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
             parentBreadth.First,
             parentBreadth.Second,
             subsidiaryCount,
+            atNinety,
+            atNinetyFive,
+            atNinetyNine,
             subsidiarySummaries,
             contributing,
-            Ratio(contributing.Take(1).Sum(item => item.Leverage), leverage),
-            Ratio(contributing.Take(5).Sum(item => item.Leverage), leverage),
-            Ratio(contributing.Take(10).Sum(item => item.Leverage), leverage),
+            contributingWeightedLeverage,
+            Ratio(contributing.Take(1).Sum(item => item.Leverage), contributingWeightedLeverage),
+            Ratio(contributing.Take(5).Sum(item => item.Leverage), contributingWeightedLeverage),
+            Ratio(contributing.Take(10).Sum(item => item.Leverage), contributingWeightedLeverage),
             new ScopePairEvidenceTiming(
                 contributingElapsed,
                 subsidiaryElapsed,
@@ -283,6 +299,6 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
         return result != 0 ? result : StringComparer.Ordinal.Compare(first.SecondRoot.Value, second.SecondRoot.Value);
     }
 
-    private static double Ratio(int numerator, int denominator) =>
+    private static double Ratio(long numerator, long denominator) =>
         denominator == 0 ? 0 : (double)numerator / denominator;
 }
