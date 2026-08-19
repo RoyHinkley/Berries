@@ -32,14 +32,16 @@ public sealed class StructuralEvidenceTests
         Assert.Equal(2, evidence.SecondSideBreadth.DirectoryCount); Assert.Equal(2, evidence.SecondSideBreadth.FileCount);
         Assert.Equal(2, evidence.FirstSideBreadth.CrossingDirectoryCount); Assert.Equal(2, evidence.SecondSideBreadth.CrossingDirectoryCount);
         Assert.Equal(1, evidence.SubsidiaryScopePairCount);
+        Assert.Equal(0, evidence.SubsidiariesAtNinetyPercentLeverage);
         var childSummary = Assert.Single(evidence.StrongestSubsidiaryScopePairs);
         Assert.Equal(child, childSummary.Pair);
         Assert.Equal(1, childSummary.FirstSideBreadth.DirectoryCount); Assert.Equal(1, childSummary.FirstSideBreadth.FileCount);
         Assert.Equal(1, childSummary.SecondSideBreadth.DirectoryCount); Assert.Equal(1, childSummary.SecondSideBreadth.FileCount);
         Assert.Equal(1, childSummary.FirstRootDepthChange); Assert.Equal(1, childSummary.SecondRootDepthChange);
         Assert.Equal(2, evidence.StrongestContributingDirectoryPairs.Count);
-        Assert.Equal(0.5, evidence.StrongestDirectoryPairFraction);
-        Assert.Equal(1.0, evidence.TopFiveDirectoryPairFraction);
+        Assert.Equal(2, evidence.ContributingWeightedLeverage);
+        Assert.Equal(0.5, evidence.StrongestDirectoryPairConcentration);
+        Assert.Equal(1.0, evidence.TopFiveDirectoryPairConcentration);
     }
 
     [Fact]
