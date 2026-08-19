@@ -14,10 +14,6 @@ public sealed class BerriesEngine
 
     public BerriesEngine(IFileSystem fileSystem) => this.fileSystem = fileSystem;
 
-    /// <summary>
-    /// Constructs a corpus from user-selected roots. Exact duplicates and roots contained by
-    /// another selected root are removed before any filesystem enumeration occurs.
-    /// </summary>
     public Corpus CreateCorpus(IEnumerable<FileSystemPath> selectedRoots)
     {
         var roots = new List<FileSystemPath>();
@@ -39,11 +35,6 @@ public sealed class BerriesEngine
         return new Corpus(roots.Select(path => new CorpusRoot(path)));
     }
 
-    /// <summary>
-    /// Acquires filesystem state and constructs an initial portrait without blocking the caller.
-    /// Filesystem enumeration itself is synchronous because that is what the platform exposes;
-    /// the engine owns the worker-thread boundary so clients do not have to.
-    /// </summary>
     public Task<Portrait> BuildInitialPortraitAsync(
         Corpus corpus,
         IProgress<ScanProgress>? progress = null,
@@ -52,11 +43,6 @@ public sealed class BerriesEngine
             () => BuildInitialPortrait(corpus, progress, cancellationToken),
             cancellationToken);
 
-    /// <summary>
-    /// Finds byte-identical files in an existing portrait. Files are first grouped by length;
-    /// only members of non-singleton length groups are read and hashed. A file that becomes
-    /// inaccessible is evicted from the returned portrait and is not considered further.
-    /// </summary>
     public Task<DuplicateDiscoveryResult> DiscoverDuplicatesAsync(
         Portrait portrait,
         IProgress<DuplicateDiscoveryProgress>? progress = null,
@@ -65,16 +51,20 @@ public sealed class BerriesEngine
             () => DiscoverDuplicates(portrait, progress, cancellationToken),
             cancellationToken);
 
-    /// <summary>
-    /// Builds direct-directory duplicate statistics and unordered DirectoryPairs from duplicate sets.
-    /// Pair leverage is the number of distinct duplicated contents represented directly in both directories.
-    /// </summary>
     public Task<DirectoryAnalysisResult> AnalyzeDirectoriesAsync(
         Portrait portrait,
         IReadOnlyList<DuplicateSet> duplicateSets,
         CancellationToken cancellationToken = default) =>
         Task.Run(
             () => AnalyzeDirectories(portrait, duplicateSets, cancellationToken),
+            cancellationToken);
+
+    public Task<ScopeAnalysisResult> AnalyzeScopesAsync(
+        Corpus corpus,
+        IReadOnlyList<DuplicateSet> duplicateSets,
+        CancellationToken cancellationToken = default) =>
+        Task.Run(
+            () => AnalyzeScopes(corpus, duplicateSets, cancellationToken),
             cancellationToken);
 
     private Portrait BuildInitialPortrait(
@@ -286,6 +276,172 @@ public sealed class BerriesEngine
                 totalTimer.Elapsed));
     }
 
+    private ScopeAnalysisResult AnalyzeScopes(
+        Corpus corpus,
+        IReadOnlyList<DuplicateSet> duplicateSets,
+        CancellationToken cancellationToken)
+    {
+        var totalTimer = Stopwatch.StartNew();
+        var phaseTimer = Stopwatch.StartNew();
+
+        var evidence = new List<(ContentId Content, FileSystemPath First, FileSystemPath Second)>();
+
+        foreach (var duplicateSet in duplicateSets)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var representedDirectories = duplicateSet.Files
+                .Select(file => file.ParentDirectory)
+                .Distinct()
+                .OrderBy(path => path.Value, StringComparer.Ordinal)
+                .ToArray();
+
+            for (var firstIndex = 0; firstIndex < representedDirectories.Length - 1; firstIndex++)
+            {
+                for (var secondIndex = firstIndex + 1; secondIndex < representedDirectories.Length; secondIndex++)
+                {
+                    evidence.Add((
+                        duplicateSet.Content,
+                        representedDirectories[firstIndex],
+                        representedDirectories[secondIndex]));
+                }
+            }
+        }
+
+        phaseTimer.Stop();
+        var evidenceElapsed = phaseTimer.Elapsed;
+
+        phaseTimer.Restart();
+        var ancestorsByDirectory = new Dictionary<FileSystemPath, IReadOnlyList<FileSystemPath>>();
+        var accumulators = new Dictionary<(FileSystemPath First, FileSystemPath Second), ScopeAccumulator>();
+
+        foreach (var edge in evidence)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var firstAncestors = GetAncestorsWithinCorpus(edge.First, corpus, ancestorsByDirectory);
+            var secondAncestors = GetAncestorsWithinCorpus(edge.Second, corpus, ancestorsByDirectory);
+            var directPair = CanonicalPair(edge.First, edge.Second);
+
+            foreach (var firstRoot in firstAncestors)
+            {
+                foreach (var secondRoot in secondAncestors)
+                {
+                    if (fileSystem.PathsEqual(firstRoot, secondRoot))
+                        continue;
+
+                    var roots = CanonicalPair(firstRoot, secondRoot);
+                    if (!CrossesEffectiveSides(edge.First, edge.Second, roots.First, roots.Second))
+                        continue;
+
+                    if (!accumulators.TryGetValue(roots, out var accumulator))
+                    {
+                        accumulator = new ScopeAccumulator();
+                        accumulators[roots] = accumulator;
+                    }
+
+                    accumulator.Contents.Add(edge.Content);
+                    accumulator.DirectoryPairs.Add(directPair);
+                }
+            }
+        }
+
+        phaseTimer.Stop();
+        var aggregationElapsed = phaseTimer.Elapsed;
+
+        phaseTimer.Restart();
+        var scopePairs = accumulators
+            .Select(item => new ScopePair(
+                item.Key.First,
+                item.Key.Second,
+                item.Value.Contents.Count,
+                item.Value.DirectoryPairs.Count))
+            .OrderByDescending(pair => pair.Leverage)
+            .ThenByDescending(pair => pair.DirectoryPairCount)
+            .ThenBy(pair => pair.FirstRoot.Value, StringComparer.Ordinal)
+            .ThenBy(pair => pair.SecondRoot.Value, StringComparer.Ordinal)
+            .ToArray();
+        phaseTimer.Stop();
+        var resultElapsed = phaseTimer.Elapsed;
+
+        totalTimer.Stop();
+        return new ScopeAnalysisResult(
+            scopePairs,
+            new ScopeAnalysisTiming(
+                evidenceElapsed,
+                aggregationElapsed,
+                resultElapsed,
+                totalTimer.Elapsed));
+    }
+
+    private IReadOnlyList<FileSystemPath> GetAncestorsWithinCorpus(
+        FileSystemPath directory,
+        Corpus corpus,
+        IDictionary<FileSystemPath, IReadOnlyList<FileSystemPath>> cache)
+    {
+        if (cache.TryGetValue(directory, out var cached))
+            return cached;
+
+        var corpusRoot = corpus.Roots
+            .Select(root => root.Path)
+            .SingleOrDefault(root =>
+                fileSystem.PathsEqual(directory, root) || fileSystem.IsDescendant(directory, root));
+
+        if (corpusRoot.Value is null)
+            throw new InvalidOperationException($"Directory is outside the corpus: {directory}");
+
+        var ancestors = new List<FileSystemPath>();
+        var current = directory;
+
+        while (true)
+        {
+            ancestors.Add(current);
+            if (fileSystem.PathsEqual(current, corpusRoot))
+                break;
+
+            current = fileSystem.GetParentDirectory(current)
+                ?? throw new InvalidOperationException(
+                    $"Could not reach corpus root {corpusRoot} while walking ancestors of {directory}.");
+        }
+
+        cache[directory] = ancestors;
+        return ancestors;
+    }
+
+    private bool CrossesEffectiveSides(
+        FileSystemPath firstDirectory,
+        FileSystemPath secondDirectory,
+        FileSystemPath firstRoot,
+        FileSystemPath secondRoot) =>
+        (IsInEffectiveSide(firstDirectory, firstRoot, secondRoot)
+            && IsInEffectiveSide(secondDirectory, secondRoot, firstRoot))
+        || (IsInEffectiveSide(secondDirectory, firstRoot, secondRoot)
+            && IsInEffectiveSide(firstDirectory, secondRoot, firstRoot));
+
+    private bool IsInEffectiveSide(
+        FileSystemPath directory,
+        FileSystemPath ownRoot,
+        FileSystemPath otherRoot)
+    {
+        if (!Contains(ownRoot, directory))
+            return false;
+
+        if (fileSystem.IsDescendant(otherRoot, ownRoot) && Contains(otherRoot, directory))
+            return false;
+
+        return true;
+    }
+
+    private bool Contains(FileSystemPath root, FileSystemPath path) =>
+        fileSystem.PathsEqual(root, path) || fileSystem.IsDescendant(path, root);
+
+    private static (FileSystemPath First, FileSystemPath Second) CanonicalPair(
+        FileSystemPath first,
+        FileSystemPath second) =>
+        StringComparer.Ordinal.Compare(first.Value, second.Value) <= 0
+            ? (first, second)
+            : (second, first);
+
     private static bool TryAccessFile<T>(
         FileInstance file,
         string operation,
@@ -308,4 +464,10 @@ public sealed class BerriesEngine
 
     private static bool IsFileAccessFailure(Exception exception) =>
         exception is IOException or UnauthorizedAccessException or SecurityException;
+
+    private sealed class ScopeAccumulator
+    {
+        public HashSet<ContentId> Contents { get; } = [];
+        public HashSet<(FileSystemPath First, FileSystemPath Second)> DirectoryPairs { get; } = [];
+    }
 }
