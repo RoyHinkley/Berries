@@ -18,7 +18,8 @@ public sealed class CaseAnalyzer(IFileSystem fileSystem)
         if (limit < 0)
             throw new ArgumentOutOfRangeException(nameof(limit));
 
-        var timer = Stopwatch.StartNew();
+        var totalTimer = Stopwatch.StartNew();
+        var phaseTimer = Stopwatch.StartNew();
 
         var internalDuplicateContents = new Dictionary<FileSystemPath, HashSet<ContentId>>();
         foreach (var duplicateSet in duplicateSets)
@@ -67,15 +68,25 @@ public sealed class CaseAnalyzer(IFileSystem fileSystem)
                         IsInEffectiveSide(file.ParentDirectory, pair.FirstRoot, pair.SecondRoot)
                         || IsInEffectiveSide(file.ParentDirectory, pair.SecondRoot, pair.FirstRoot)).ToArray()))));
 
-        var topCases = candidates
+        phaseTimer.Stop();
+        var candidateConstructionElapsed = phaseTimer.Elapsed;
+
+        phaseTimer.Restart();
+        var selected = candidates
             .OrderByDescending(item => item.Leverage)
             .ThenBy(item => item.Kind, StringComparer.Ordinal)
             .ThenBy(item => item.Key, StringComparer.Ordinal)
             .Take(limit)
-            .Select(item => item.Materialize())
             .ToArray();
+        phaseTimer.Stop();
+        var rankingElapsed = phaseTimer.Elapsed;
 
-        timer.Stop();
+        phaseTimer.Restart();
+        var topCases = selected.Select(item => item.Materialize()).ToArray();
+        phaseTimer.Stop();
+        var materializationElapsed = phaseTimer.Elapsed;
+
+        totalTimer.Stop();
         return new CaseAnalysisResult(
             topCases,
             candidates.Count,
@@ -83,7 +94,11 @@ public sealed class CaseAnalyzer(IFileSystem fileSystem)
             internalDuplicateContents.Count,
             directoryPairs.Count,
             scopePairs.Count,
-            timer.Elapsed);
+            new CaseAnalysisTiming(
+                candidateConstructionElapsed,
+                rankingElapsed,
+                materializationElapsed,
+                totalTimer.Elapsed));
     }
 
     private bool IsInEffectiveSide(
