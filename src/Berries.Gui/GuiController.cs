@@ -11,9 +11,11 @@ public sealed class GuiController
 
     public GuiController(BerriesEngine engine) => this.engine = engine;
 
+    public Corpus? Corpus { get; private set; }
     public Portrait? Portrait { get; private set; }
     public DuplicateDiscoveryResult? DuplicateDiscovery { get; private set; }
     public DirectoryAnalysisResult? DirectoryAnalysis { get; private set; }
+    public ScopeAnalysisResult? ScopeAnalysis { get; private set; }
 
     public IReadOnlyList<string> NormalizeRoots(IEnumerable<string> rootPaths) =>
         engine.CreateCorpus(rootPaths.Select(path => new FileSystemPath(path)))
@@ -29,21 +31,22 @@ public sealed class GuiController
         var totalTimer = Stopwatch.StartNew();
 
         var phaseTimer = Stopwatch.StartNew();
-        var corpus = engine.CreateCorpus(rootPaths.Select(path => new FileSystemPath(path)));
+        Corpus = engine.CreateCorpus(rootPaths.Select(path => new FileSystemPath(path)));
         phaseTimer.Stop();
         var normalizationElapsed = phaseTimer.Elapsed;
 
         phaseTimer.Restart();
-        Portrait = await engine.BuildInitialPortraitAsync(corpus, progress, cancellationToken);
+        Portrait = await engine.BuildInitialPortraitAsync(Corpus, progress, cancellationToken);
         phaseTimer.Stop();
         var portraitElapsed = phaseTimer.Elapsed;
 
         DuplicateDiscovery = null;
         DirectoryAnalysis = null;
+        ScopeAnalysis = null;
         totalTimer.Stop();
 
         return new ScanResult(
-            corpus.Roots.Select(root => root.Path.Value).ToArray(),
+            Corpus.Roots.Select(root => root.Path.Value).ToArray(),
             Portrait.Files.Count,
             Portrait.Files.Sum(file => file.Length),
             normalizationElapsed,
@@ -61,6 +64,7 @@ public sealed class GuiController
         DuplicateDiscovery = await engine.DiscoverDuplicatesAsync(Portrait, progress, cancellationToken);
         Portrait = DuplicateDiscovery.Portrait;
         DirectoryAnalysis = null;
+        ScopeAnalysis = null;
         return DuplicateDiscovery;
     }
 
@@ -74,7 +78,21 @@ public sealed class GuiController
             Portrait,
             DuplicateDiscovery.DuplicateSets,
             cancellationToken);
+        ScopeAnalysis = null;
         return DirectoryAnalysis;
+    }
+
+    public async Task<ScopeAnalysisResult> AnalyzeScopesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (Corpus is null || DuplicateDiscovery is null)
+            throw new InvalidOperationException("Duplicate discovery must complete before scope analysis.");
+
+        ScopeAnalysis = await engine.AnalyzeScopesAsync(
+            Corpus,
+            DuplicateDiscovery.DuplicateSets,
+            cancellationToken);
+        return ScopeAnalysis;
     }
 }
 
