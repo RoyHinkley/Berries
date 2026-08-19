@@ -19,6 +19,7 @@ public sealed class GuiController
 
     public Corpus? Corpus { get; private set; }
     public Portrait? Portrait { get; private set; }
+    public ScanResult? Scan { get; private set; }
     public DuplicateDiscoveryResult? DuplicateDiscovery { get; private set; }
     public DirectoryAnalysisResult? DirectoryAnalysis { get; private set; }
     public ScopeAnalysisResult? ScopeAnalysis { get; private set; }
@@ -53,13 +54,14 @@ public sealed class GuiController
         CaseAnalysis = null;
         totalTimer.Stop();
 
-        return new ScanResult(
+        Scan = new ScanResult(
             Corpus.Roots.Select(root => root.Path.Value).ToArray(),
             Portrait.Files.Count,
             Portrait.Files.Sum(file => file.Length),
             normalizationElapsed,
             portraitElapsed,
             totalTimer.Elapsed);
+        return Scan;
     }
 
     public async Task<DuplicateDiscoveryResult> DiscoverDuplicatesAsync(
