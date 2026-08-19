@@ -266,10 +266,17 @@ public sealed class BerriesEngine
         phaseTimer.Stop();
         var directoryPairsElapsed = phaseTimer.Elapsed;
 
+        var graph = DirectoryGraphAnalyzer.Analyze(
+            portrait,
+            directories,
+            directoryPairs,
+            duplicateSets);
+
         totalTimer.Stop();
         return new DirectoryAnalysisResult(
             directories,
             directoryPairs,
+            graph,
             new DirectoryAnalysisTiming(
                 directoryRecordsElapsed,
                 directoryPairsElapsed,
