@@ -123,14 +123,96 @@ public sealed class BerriesEngineTests
         Assert.Equal(3, fileSystem.OpenedPaths.Count);
         Assert.DoesNotContain(paths[3], fileSystem.OpenedPaths);
         Assert.Equal(2, result.DuplicateFileCount);
+        Assert.Empty(result.Evictions);
+        Assert.Same(portrait, result.Portrait);
+    }
+
+    [Fact]
+    public async Task DiscoverDuplicatesAsync_EvictsFileOnIoFailure_AndContinues()
+    {
+        var root = new FileSystemPath(@"X:\Corpus");
+        var a = new FileSystemPath(@"X:\Corpus\a.txt");
+        var busy = new FileSystemPath(@"X:\Corpus\busy.txt");
+        var c = new FileSystemPath(@"X:\Corpus\c.txt");
+        var content = Encoding.UTF8.GetBytes("same bytes");
+
+        var files = new[]
+        {
+            new FileSystemFile(a, root, content.Length),
+            new FileSystemFile(busy, root, content.Length),
+            new FileSystemFile(c, root, content.Length)
+        };
+
+        var fileSystem = new SyntheticFileSystem(
+            new Dictionary<FileSystemPath, IReadOnlyList<FileSystemFile>>
+            {
+                [root] = files
+            },
+            new Dictionary<FileSystemPath, byte[]>
+            {
+                [a] = content,
+                [c] = content
+            },
+            new Dictionary<FileSystemPath, Exception>
+            {
+                [busy] = new IOException("File is busy.")
+            });
+        var engine = new BerriesEngine(fileSystem);
+        var portrait = await engine.BuildInitialPortraitAsync(new Corpus(new[] { new CorpusRoot(root) }));
+
+        var result = await engine.DiscoverDuplicatesAsync(portrait);
+
+        Assert.DoesNotContain(result.Portrait.Files, file => file.Path == busy);
+        Assert.Equal(2, result.Portrait.Files.Count);
+        var eviction = Assert.Single(result.Evictions);
+        Assert.Equal(busy, eviction.File.Path);
+        Assert.Contains("busy", eviction.Reason, StringComparison.OrdinalIgnoreCase);
+        var duplicateSet = Assert.Single(result.DuplicateSets);
+        Assert.Equal(new[] { a, c }, duplicateSet.Files.Select(file => file.Path));
+    }
+
+    [Fact]
+    public async Task DiscoverDuplicatesAsync_DoesNotHideProgrammingErrors()
+    {
+        var root = new FileSystemPath(@"X:\Corpus");
+        var a = new FileSystemPath(@"X:\Corpus\a.txt");
+        var b = new FileSystemPath(@"X:\Corpus\b.txt");
+        var content = Encoding.UTF8.GetBytes("same bytes");
+        var files = new[]
+        {
+            new FileSystemFile(a, root, content.Length),
+            new FileSystemFile(b, root, content.Length)
+        };
+
+        var fileSystem = new SyntheticFileSystem(
+            new Dictionary<FileSystemPath, IReadOnlyList<FileSystemFile>>
+            {
+                [root] = files
+            },
+            new Dictionary<FileSystemPath, byte[]>
+            {
+                [a] = content
+            },
+            new Dictionary<FileSystemPath, Exception>
+            {
+                [b] = new InvalidOperationException("Synthetic programming failure.")
+            });
+        var engine = new BerriesEngine(fileSystem);
+        var portrait = await engine.BuildInitialPortraitAsync(new Corpus(new[] { new CorpusRoot(root) }));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => engine.DiscoverDuplicatesAsync(portrait));
     }
 
     private sealed class SyntheticFileSystem(
         IReadOnlyDictionary<FileSystemPath, IReadOnlyList<FileSystemFile>> filesByRoot,
-        IReadOnlyDictionary<FileSystemPath, byte[]>? contentByPath = null) : IFileSystem
+        IReadOnlyDictionary<FileSystemPath, byte[]>? contentByPath = null,
+        IReadOnlyDictionary<FileSystemPath, Exception>? openFailures = null) : IFileSystem
     {
         private readonly IReadOnlyDictionary<FileSystemPath, byte[]> contentByPath =
             contentByPath ?? new Dictionary<FileSystemPath, byte[]>();
+        private readonly IReadOnlyDictionary<FileSystemPath, Exception> openFailures =
+            openFailures ?? new Dictionary<FileSystemPath, Exception>();
 
         public List<FileSystemPath> OpenedPaths { get; } = [];
 
@@ -148,6 +230,10 @@ public sealed class BerriesEngineTests
         public Stream OpenRead(FileSystemPath path)
         {
             OpenedPaths.Add(path);
+
+            if (openFailures.TryGetValue(path, out var failure))
+                throw failure;
+
             if (!contentByPath.TryGetValue(path, out var content))
                 throw new InvalidOperationException($"Unexpected content read: {path}");
 
