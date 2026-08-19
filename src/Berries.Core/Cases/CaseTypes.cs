@@ -21,4 +21,4 @@ public sealed record DirectoryPairCase(
 public sealed record ScopePairCase(
     ScopePair Pair,
     IReadOnlyList<FileInstance> BoundedFiles)
-    : Case(BoundedFiles, Pair.ApproximateLeverage);
+    : Case(BoundedFiles, Pair.Leverage);
