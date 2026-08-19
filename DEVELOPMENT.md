@@ -14,7 +14,7 @@ Target framework is .NET 10. The GUI references Avalonia 12.1.0 and is built as 
 
 ## Current implementation
 
-The working vertical slices now cover corpus construction, initial portrait acquisition, duplicate discovery, and direct-directory structural analysis.
+The working vertical slices now cover corpus construction, initial portrait acquisition, duplicate discovery, direct-directory structural analysis, and ScopePair analysis.
 
 1. The GUI maintains a persistent list of corpus roots. `Add` uses a single-directory picker; `Remove` removes the selected root.
 2. `BerriesEngine.CreateCorpus` normalizes selected paths before enumeration: paths are canonicalized, exact duplicates are removed, and roots contained by another selected root are discarded. The stored `Corpus` therefore contains the minimal disjoint root set.
@@ -28,8 +28,12 @@ The working vertical slices now cover corpus construction, initial portrait acqu
 10. Directory analysis derives `DirectoryRecord`s only for directories directly containing duplicated content. Each record contains direct file count, duplicated-file count, and distinct duplicated-content count; descendants are not folded into these statistics.
 11. For each `DuplicateSet`, every unordered pair of distinct directories directly representing that content contributes one unit of leverage to a `DirectoryPair`. Multiple instances of the same content within one directory do not increase pair leverage.
 12. `DirectoryPair`s are ordered by descending leverage. The temporary GUI displays counts, phase timing, and the 25 strongest pairs.
+13. Scope analysis walks directory ancestry only through the filesystem abstraction; Core does not parse platform path syntax. `IFileSystem.GetParentDirectory` supplies the one hierarchy operation required.
+14. Each direct duplicated-content relationship contributes evidence to every containing pair of directory-rooted scopes within the corpus. ScopePair leverage is the number of distinct duplicated contents crossing the two effective sides; `DirectoryPairCount` records the number of distinct direct DirectoryPairs supplying that evidence.
+15. ScopePair sides are always effectively disjoint. If one scope root is a descendant of the other, the descendant subtree is omitted from the ancestor side before evidence is counted. Identical roots are never a ScopePair.
+16. ScopePairs are ordered by descending leverage, then descending contributing DirectoryPair count. The temporary GUI displays counts, phase timing, and the 25 strongest pairs alongside the strongest direct DirectoryPairs.
 
-Phase timing is included as development instrumentation. Portrait acquisition reports scan time. Duplicate discovery separately measures size grouping, content hashing, duplicate-set construction, and total elapsed time. Directory analysis separately measures directory-record construction, DirectoryPair construction, and total elapsed time. These measurements are intended to guide later filesystem/performance work; correctness takes precedence over premature optimization.
+Phase timing is included as development instrumentation. Portrait acquisition reports scan time. Duplicate discovery separately measures size grouping, content hashing, duplicate-set construction, and total elapsed time. Directory analysis separately measures directory-record construction, DirectoryPair construction, and total elapsed time. Scope analysis separately measures direct evidence construction, scope aggregation, result construction, and total elapsed time. These measurements are intended to guide later filesystem/performance work; correctness takes precedence over premature optimization.
 
 The filesystem abstraction may eventually warrant performance-oriented refinement. In particular, platform adapters should remain free to obtain metadata efficiently in bulk or during enumeration, and Core should not require metadata it does not actually use. No optimization is justified yet without measurements showing a material cost.
 
@@ -47,12 +51,12 @@ Portraits remain immutable snapshots. An operation that evicts files returns a r
 
 ## Tests
 
-`Berries.Core.Tests` contains the five previously passing tests plus a new directory-analysis test.
+`Berries.Core.Tests` should contain eight tests after this revision: the six previously passing tests plus two ScopePair tests.
 
-The existing tests exercise Core against synthetic filesystem data, including asynchronous portrait construction, corpus-root normalization, duplicate discovery, file eviction on I/O failure, and propagation of programming failures.
+The existing tests exercise Core against synthetic filesystem data, including asynchronous portrait construction, corpus-root normalization, duplicate discovery, file eviction on I/O failure, propagation of programming failures, and direct directory analysis.
 
-The directory-analysis test exercises the new structural layer without using the filesystem abstraction. It verifies direct directory statistics, distinct-content pair leverage, suppression of leverage inflation from repeated instances of the same content in one directory, and leverage ordering.
+The ScopePair tests verify two governing properties: descendant DirectoryPairs aggregate into higher-level scope leverage by distinct content, and when scope roots are nested, duplicated content wholly inside the descendant subtree does not leak into the ancestor side. Scope analysis requires path hierarchy semantics but performs no file I/O.
 
 ## Not yet implemented
 
-ScopePair analysis, Case discovery and ranking, Situations and Resolutions, Dispositions, virtual Action Plans/Portrait transformation, execution planning, and physical filesystem execution remain future work described in `PROJECT.md`.
+Case discovery and ranking, Situations and Resolutions, Dispositions, virtual Action Plans/Portrait transformation, execution planning, and physical filesystem execution remain future work described in `PROJECT.md`.
