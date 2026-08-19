@@ -2,6 +2,7 @@ using System.Text;
 using Berries.Core;
 using Berries.Core.Analysis;
 using Berries.Core.Cases;
+using Berries.Core.Domain;
 using Berries.FileSystem.Abstractions;
 
 namespace Berries.Gui;
@@ -10,6 +11,7 @@ internal static class CaseReportFormatter
 {
     public static string Format(
         CaseAnalysisResult result,
+        IReadOnlyList<FileInstance> portraitFiles,
         IReadOnlyList<DuplicateSet> duplicateSets,
         DirectoryAnalysisResult directoryAnalysis,
         ScopeAnalysisResult scopeAnalysis,
@@ -26,6 +28,7 @@ internal static class CaseReportFormatter
                            $"single directories {result.SingleDirectoryCaseCount:N0}, " +
                            $"directory pairs {result.DirectoryPairCaseCount:N0}, " +
                            $"scope pairs {result.ScopePairCaseCount:N0}]");
+        AppendLeverageDistributions(builder, duplicateSets, directoryAnalysis, scopeAnalysis, result);
         builder.AppendLine($"Top {result.TopCases.Count:N0} by leverage; ranking/materialization {FormatElapsed(result.TotalElapsed)}");
         builder.AppendLine();
 
@@ -39,33 +42,57 @@ internal static class CaseReportFormatter
                 case DuplicateSetCase duplicate:
                     AppendDuplicateSet(builder, duplicate);
                     break;
-
                 case SingleDirectoryCase directory:
                     AppendSingleDirectory(builder, directory, nodes);
                     break;
-
                 case DirectoryPairCase pair:
                     AppendDirectoryPair(builder, pair.Pair, records, nodes);
                     break;
-
                 case ScopePairCase pair:
-                    AppendScopePair(
-                        builder,
-                        pair,
-                        duplicateSets,
-                        directoryAnalysis,
-                        scopeAnalysis,
-                        evidenceAnalyzer,
-                        records,
-                        nodes);
+                    AppendScopePair(builder, pair, portraitFiles, duplicateSets, directoryAnalysis,
+                        scopeAnalysis, evidenceAnalyzer, records, nodes);
                     break;
             }
-
             builder.AppendLine();
         }
-
         return builder.ToString();
     }
+
+    private static void AppendLeverageDistributions(
+        StringBuilder builder,
+        IReadOnlyList<DuplicateSet> duplicateSets,
+        DirectoryAnalysisResult directoryAnalysis,
+        ScopeAnalysisResult scopeAnalysis,
+        CaseAnalysisResult result)
+    {
+        builder.AppendLine("Leverage distributions (min / Q1 / median / Q3 / max):");
+        AppendDistribution(builder, "DuplicateSet", Enumerable.Repeat(1, duplicateSets.Count));
+        AppendDistribution(builder, "SingleDirectory", result.TopCases.OfType<SingleDirectoryCase>().Select(item => item.Leverage),
+            result.SingleDirectoryCaseCount, sampled: true);
+        AppendDistribution(builder, "DirectoryPair", directoryAnalysis.DirectoryPairs.Select(item => item.Leverage));
+        AppendDistribution(builder, "ScopePair", scopeAnalysis.ScopePairs.Select(item => item.Leverage));
+    }
+
+    private static void AppendDistribution(StringBuilder builder, string name, IEnumerable<int> values,
+        int? populationCount = null, bool sampled = false)
+    {
+        var ordered = values.OrderBy(value => value).ToArray();
+        if (ordered.Length == 0)
+        {
+            builder.AppendLine($"  {name,-16} —");
+            return;
+        }
+        if (sampled)
+        {
+            builder.AppendLine($"  {name,-16} population {populationCount:N0}; distribution deferred (not materialized)");
+            return;
+        }
+        builder.AppendLine($"  {name,-16} {ordered[0],5:N0} / {Quantile(ordered, .25),5:N0} / " +
+                           $"{Quantile(ordered, .50),5:N0} / {Quantile(ordered, .75),5:N0} / {ordered[^1],5:N0}");
+    }
+
+    private static int Quantile(int[] ordered, double fraction) =>
+        ordered[(int)Math.Round((ordered.Length - 1) * fraction, MidpointRounding.AwayFromZero)];
 
     private static void AppendGraphSummary(StringBuilder builder, DirectoryGraphAnalysis graph)
     {
@@ -78,46 +105,29 @@ internal static class CaseReportFormatter
         builder.AppendLine($"  connected components (including isolated duplicate directories): {graph.ConnectedComponentCount:N0}");
         builder.AppendLine($"  largest component: {graph.LargestComponentSize:N0} directories");
         builder.AppendLine($"  pair density among participating directories: {graph.PairDensity:P3}");
-
         builder.AppendLine("  strongest hubs by degree:");
         foreach (var node in graph.Nodes.Where(node => node.Degree > 0).Take(10))
-        {
-            builder.AppendLine($"    degree {node.Degree,5:N0}  weighted {node.WeightedDegree,7:N0}  " +
-                               $"mean-edge {node.MeanPairLeverage,6:N2}  max-edge {node.MaxPairLeverage,5:N0}  " +
-                               $"concentration {node.StrongestPairConcentration,6:P1}  {node.Directory.Value}");
-        }
+            builder.AppendLine($"    degree {node.Degree,5:N0}  weighted {node.WeightedDegree,7:N0}  mean-edge {node.MeanPairLeverage,6:N2}  max-edge {node.MaxPairLeverage,5:N0}  concentration {node.StrongestPairConcentration,6:P1}  {node.Directory.Value}");
     }
 
     private static void AppendDuplicateSet(StringBuilder builder, DuplicateSetCase item)
     {
         builder.AppendLine($"  content: {item.DuplicateSet.Content}");
         builder.AppendLine($"  instances: {item.DuplicateSet.InstanceCount:N0}");
-        foreach (var file in item.DuplicateSet.Files.Take(12))
-            builder.AppendLine($"    {file.Path.Value}");
-        if (item.DuplicateSet.Files.Count > 12)
-            builder.AppendLine($"    ... {item.DuplicateSet.Files.Count - 12:N0} more instance(s)");
+        foreach (var file in item.DuplicateSet.Files.Take(12)) builder.AppendLine($"    {file.Path.Value}");
+        if (item.DuplicateSet.Files.Count > 12) builder.AppendLine($"    ... {item.DuplicateSet.Files.Count - 12:N0} more instance(s)");
     }
 
-    private static void AppendSingleDirectory(
-        StringBuilder builder,
-        SingleDirectoryCase item,
+    private static void AppendSingleDirectory(StringBuilder builder, SingleDirectoryCase item,
         IReadOnlyDictionary<FileSystemPath, DirectoryGraphNode> nodes)
     {
         builder.AppendLine($"  directory: {item.Directory.Value}");
         builder.AppendLine($"  bounded files: {item.Files.Count:N0}; internally duplicated contents: {item.DuplicateContentCount:N0}");
-
         if (nodes.TryGetValue(item.Directory, out var node))
-        {
-            builder.AppendLine($"  graph: degree {node.Degree:N0}; weighted degree {node.WeightedDegree:N0}; " +
-                               $"mean pair leverage {node.MeanPairLeverage:N2}; max pair leverage {node.MaxPairLeverage:N0}; " +
-                               $"strongest-pair concentration {node.StrongestPairConcentration:P1}; " +
-                               $"duplicated contents {node.DuplicateContentCount:N0}");
-        }
+            builder.AppendLine($"  graph: degree {node.Degree:N0}; weighted degree {node.WeightedDegree:N0}; mean pair leverage {node.MeanPairLeverage:N2}; max pair leverage {node.MaxPairLeverage:N0}; strongest-pair concentration {node.StrongestPairConcentration:P1}; duplicated contents {node.DuplicateContentCount:N0}");
     }
 
-    private static void AppendDirectoryPair(
-        StringBuilder builder,
-        DirectoryPair pair,
+    private static void AppendDirectoryPair(StringBuilder builder, DirectoryPair pair,
         IReadOnlyDictionary<FileSystemPath, DirectoryRecord> records,
         IReadOnlyDictionary<FileSystemPath, DirectoryGraphNode> nodes)
     {
@@ -126,48 +136,35 @@ internal static class CaseReportFormatter
         AppendDirectoryPairStats(builder, pair, records, nodes, "  ");
     }
 
-    private static void AppendScopePair(
-        StringBuilder builder,
-        ScopePairCase item,
-        IReadOnlyList<DuplicateSet> duplicateSets,
-        DirectoryAnalysisResult directoryAnalysis,
-        ScopeAnalysisResult scopeAnalysis,
+    private static void AppendScopePair(StringBuilder builder, ScopePairCase item,
+        IReadOnlyList<FileInstance> portraitFiles, IReadOnlyList<DuplicateSet> duplicateSets,
+        DirectoryAnalysisResult directoryAnalysis, ScopeAnalysisResult scopeAnalysis,
         StructuralEvidenceAnalyzer evidenceAnalyzer,
         IReadOnlyDictionary<FileSystemPath, DirectoryRecord> records,
         IReadOnlyDictionary<FileSystemPath, DirectoryGraphNode> nodes)
     {
         var pair = item.Pair;
-        var evidence = evidenceAnalyzer.AnalyzeScopePair(
-            pair,
-            duplicateSets,
-            directoryAnalysis.DirectoryPairs,
-            scopeAnalysis.ScopePairs,
-            10);
-
+        var evidence = evidenceAnalyzer.AnalyzeScopePair(pair, portraitFiles, duplicateSets,
+            directoryAnalysis.DirectoryPairs, scopeAnalysis.ScopePairs, 10);
         builder.AppendLine($"  first:  {pair.FirstRoot.Value}");
         builder.AppendLine($"  second: {pair.SecondRoot.Value}");
         builder.AppendLine($"  roots nested: {(evidence.RootsNested ? "yes" : "no")}");
-        builder.AppendLine($"  bounded files: {item.Files.Count:N0}; contributing directory pairs: {pair.DirectoryPairCount:N0}");
-        builder.AppendLine($"  duplicated contents on effective sides: " +
-                           $"{evidence.FirstSideDuplicateContentCount:N0} / {evidence.SecondSideDuplicateContentCount:N0}");
-        builder.AppendLine($"  cross-side coverage: " +
-                           $"{Ratio(pair.Leverage, evidence.FirstSideDuplicateContentCount):P1} / " +
-                           $"{Ratio(pair.Leverage, evidence.SecondSideDuplicateContentCount):P1}");
+        builder.AppendLine($"  breadth: {evidence.EffectiveDirectoryCount:N0} directories; {evidence.EffectiveFileCount:N0} files; contributing directory pairs: {pair.DirectoryPairCount:N0}");
+        builder.AppendLine($"  duplicated contents on effective sides: {evidence.FirstSideDuplicateContentCount:N0} / {evidence.SecondSideDuplicateContentCount:N0}");
+        builder.AppendLine($"  cross-side coverage: {Ratio(pair.Leverage, evidence.FirstSideDuplicateContentCount):P1} / {Ratio(pair.Leverage, evidence.SecondSideDuplicateContentCount):P1}");
         builder.AppendLine($"  subsidiary ScopePairs: {evidence.SubsidiaryScopePairCount:N0}");
-
         if (evidence.StrongestSubsidiaryScopePairs.Count > 0)
         {
             builder.AppendLine("  strongest subsidiary ScopePairs:");
-            foreach (var subsidiary in evidence.StrongestSubsidiaryScopePairs)
+            foreach (var summary in evidence.StrongestSubsidiaryScopePairs)
             {
-                builder.AppendLine($"    L {subsidiary.Leverage,5:N0}  retain {Ratio(subsidiary.Leverage, pair.Leverage),6:P1}  " +
-                                   $"DP {subsidiary.DirectoryPairCount,5:N0}  " +
-                                   $"evidence {Ratio(subsidiary.DirectoryPairCount, pair.DirectoryPairCount),6:P1}  " +
-                                   $"{subsidiary.FirstRoot.Value}");
+                var subsidiary = summary.Pair;
+                builder.AppendLine($"    L {subsidiary.Leverage,5:N0}  ratio {Ratio(subsidiary.Leverage, pair.Leverage),6:P1}  DP {subsidiary.DirectoryPairCount,5:N0}  evidence {Ratio(subsidiary.DirectoryPairCount, pair.DirectoryPairCount),6:P1}  " +
+                                   $"dirs {summary.EffectiveDirectoryCount,5:N0} ({Reduction(summary.EffectiveDirectoryCount, evidence.EffectiveDirectoryCount),6:P1} less)  " +
+                                   $"files {summary.EffectiveFileCount,7:N0} ({Reduction(summary.EffectiveFileCount, evidence.EffectiveFileCount),6:P1} less)  {subsidiary.FirstRoot.Value}");
                 builder.AppendLine($"                       ↔ {subsidiary.SecondRoot.Value}");
             }
         }
-
         if (evidence.StrongestContributingDirectoryPairs.Count > 0)
         {
             builder.AppendLine("  strongest contributing DirectoryPairs:");
@@ -180,17 +177,11 @@ internal static class CaseReportFormatter
         }
     }
 
-    private static void AppendDirectoryPairStats(
-        StringBuilder builder,
-        DirectoryPair pair,
+    private static void AppendDirectoryPairStats(StringBuilder builder, DirectoryPair pair,
         IReadOnlyDictionary<FileSystemPath, DirectoryRecord> records,
-        IReadOnlyDictionary<FileSystemPath, DirectoryGraphNode> nodes,
-        string indent)
+        IReadOnlyDictionary<FileSystemPath, DirectoryGraphNode> nodes, string indent)
     {
-        if (!records.TryGetValue(pair.First, out var first)
-            || !records.TryGetValue(pair.Second, out var second))
-            return;
-
+        if (!records.TryGetValue(pair.First, out var first) || !records.TryGetValue(pair.Second, out var second)) return;
         var firstCoverage = Ratio(pair.Leverage, first.DuplicateContentCount);
         var secondCoverage = Ratio(pair.Leverage, second.DuplicateContentCount);
         var union = first.DuplicateContentCount + second.DuplicateContentCount - pair.Leverage;
@@ -201,26 +192,11 @@ internal static class CaseReportFormatter
         var secondDegree = secondNode?.Degree ?? 0;
         var firstConcentration = firstNode is null ? 0 : Ratio(pair.Leverage, firstNode.WeightedDegree);
         var secondConcentration = secondNode is null ? 0 : Ratio(pair.Leverage, secondNode.WeightedDegree);
-
-        builder.AppendLine($"{indent}shared {pair.Leverage:N0}; coverage {firstCoverage:P1}/{secondCoverage:P1}; " +
-                           $"Jaccard {jaccard:P1}; degrees {firstDegree:N0}/{secondDegree:N0}; " +
-                           $"edge concentration {firstConcentration:P1}/{secondConcentration:P1}");
+        builder.AppendLine($"{indent}shared {pair.Leverage:N0}; coverage {firstCoverage:P1}/{secondCoverage:P1}; Jaccard {jaccard:P1}; degrees {firstDegree:N0}/{secondDegree:N0}; edge concentration {firstConcentration:P1}/{secondConcentration:P1}");
     }
 
-    private static double Ratio(int numerator, int denominator) =>
-        denominator == 0 ? 0 : (double)numerator / denominator;
-
-    private static string Kind(Case item) => item switch
-    {
-        DuplicateSetCase => "DuplicateSet",
-        SingleDirectoryCase => "SingleDirectory",
-        DirectoryPairCase => "DirectoryPair",
-        ScopePairCase => "ScopePair",
-        _ => item.GetType().Name
-    };
-
-    private static string FormatElapsed(TimeSpan elapsed) =>
-        elapsed.TotalSeconds >= 1
-            ? elapsed.TotalSeconds.ToString("N3") + " s"
-            : elapsed.TotalMilliseconds.ToString("N1") + " ms";
+    private static double Ratio(int numerator, int denominator) => denominator == 0 ? 0 : (double)numerator / denominator;
+    private static double Reduction(int child, int parent) => parent == 0 ? 0 : 1d - (double)child / parent;
+    private static string Kind(Case item) => item switch { DuplicateSetCase => "DuplicateSet", SingleDirectoryCase => "SingleDirectory", DirectoryPairCase => "DirectoryPair", ScopePairCase => "ScopePair", _ => item.GetType().Name };
+    private static string FormatElapsed(TimeSpan elapsed) => elapsed.TotalSeconds >= 1 ? elapsed.TotalSeconds.ToString("N3") + " s" : elapsed.TotalMilliseconds.ToString("N1") + " ms";
 }
