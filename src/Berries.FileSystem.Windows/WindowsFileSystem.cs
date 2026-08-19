@@ -31,7 +31,11 @@ public sealed class WindowsFileSystem : IFileSystem
         }
     }
 
-    public Stream OpenRead(FileSystemPath path) => File.OpenRead(path.Value);
+    public Stream OpenRead(FileSystemPath path) => new FileStream(
+        path.Value,
+        FileMode.Open,
+        FileAccess.Read,
+        FileShare.ReadWrite | FileShare.Delete);
 
     public bool Exists(FileSystemPath path) => throw new NotImplementedException();
     public void CreateDirectory(FileSystemPath path) => throw new NotImplementedException();
