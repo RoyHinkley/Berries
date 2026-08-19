@@ -13,6 +13,7 @@ public sealed class GuiController
 
     public Portrait? Portrait { get; private set; }
     public DuplicateDiscoveryResult? DuplicateDiscovery { get; private set; }
+    public DirectoryAnalysisResult? DirectoryAnalysis { get; private set; }
 
     public IReadOnlyList<string> NormalizeRoots(IEnumerable<string> rootPaths) =>
         engine.CreateCorpus(rootPaths.Select(path => new FileSystemPath(path)))
@@ -38,6 +39,7 @@ public sealed class GuiController
         var portraitElapsed = phaseTimer.Elapsed;
 
         DuplicateDiscovery = null;
+        DirectoryAnalysis = null;
         totalTimer.Stop();
 
         return new ScanResult(
@@ -58,7 +60,21 @@ public sealed class GuiController
 
         DuplicateDiscovery = await engine.DiscoverDuplicatesAsync(Portrait, progress, cancellationToken);
         Portrait = DuplicateDiscovery.Portrait;
+        DirectoryAnalysis = null;
         return DuplicateDiscovery;
+    }
+
+    public async Task<DirectoryAnalysisResult> AnalyzeDirectoriesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (Portrait is null || DuplicateDiscovery is null)
+            throw new InvalidOperationException("Duplicate discovery must complete before directory analysis.");
+
+        DirectoryAnalysis = await engine.AnalyzeDirectoriesAsync(
+            Portrait,
+            DuplicateDiscovery.DuplicateSets,
+            cancellationToken);
+        return DirectoryAnalysis;
     }
 }
 
