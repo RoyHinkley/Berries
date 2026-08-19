@@ -14,7 +14,7 @@ Target framework is .NET 10. The GUI references Avalonia 12.1.0 and is built as 
 
 ## Current implementation
 
-The working vertical slices now cover corpus construction, initial portrait acquisition, duplicate discovery, direct-directory structural analysis, and ScopePair analysis.
+The working vertical slices now cover corpus construction, initial portrait acquisition, duplicate discovery, direct-directory structural analysis, ScopePair analysis, and unified Case ranking/sampling.
 
 1. The GUI maintains a persistent list of corpus roots. `Add` uses a single-directory picker; `Remove` removes the selected root.
 2. `BerriesEngine.CreateCorpus` normalizes selected paths before enumeration: paths are canonicalized, exact duplicates are removed, and roots contained by another selected root are discarded. The stored `Corpus` therefore contains the minimal disjoint root set.
@@ -32,6 +32,10 @@ The working vertical slices now cover corpus construction, initial portrait acqu
 14. Each direct duplicated-content relationship contributes evidence to every containing pair of directory-rooted scopes within the corpus. ScopePair leverage is the number of distinct duplicated contents crossing the two effective sides; `DirectoryPairCount` records the number of distinct direct DirectoryPairs supplying that evidence.
 15. ScopePair sides are always effectively disjoint. If one scope root is a descendant of the other, the descendant subtree is omitted from the ancestor side before evidence is counted. Identical roots are never a ScopePair.
 16. ScopePairs are ordered by descending leverage, then descending contributing DirectoryPair count. The temporary GUI displays counts, phase timing, and the 25 strongest pairs alongside the strongest direct DirectoryPairs.
+17. `CaseAnalyzer` forms one objective population from DuplicateSet, internally duplicated single-directory, DirectoryPair, and ScopePair cases. All four use the common `Case.Leverage` metric.
+18. Case ranking is deliberately lightweight: all candidate cases are ranked by leverage before their bounded file sets are materialized. Only the requested sample (currently the top 25) is materialized, avoiding a potentially enormous duplication of portrait membership across thousands of overlapping ScopePairs.
+19. Structural case bounds include unique files as required by `PROJECT.md`: a single-directory case contains all direct files in that directory; a DirectoryPair case contains all direct files in both directories; a ScopePair case contains all files on its two effective disjoint sides.
+20. The temporary GUI provides a read-only, selectable top-case report containing population counts, case type, leverage, structural identity, bounded-file counts, duplicated-content/file counts, and a small sample of duplicated paths. The entire report can be copied for empirical Situation/characteristic analysis.
 
 Phase timing is included as development instrumentation. Portrait acquisition reports scan time. Duplicate discovery separately measures size grouping, content hashing, duplicate-set construction, and total elapsed time. Directory analysis separately measures directory-record construction, DirectoryPair construction, and total elapsed time. Scope analysis separately measures direct evidence construction, scope aggregation, result construction, and total elapsed time. These measurements are intended to guide later filesystem/performance work; correctness takes precedence over premature optimization.
 
@@ -51,12 +55,16 @@ Portraits remain immutable snapshots. An operation that evicts files returns a r
 
 ## Tests
 
-`Berries.Core.Tests` should contain eight tests after this revision: the six previously passing tests plus two ScopePair tests.
+`Berries.Core.Tests` should contain eleven tests after this revision: the eight previously passing tests plus three Case-analysis tests.
 
-The existing tests exercise Core against synthetic filesystem data, including asynchronous portrait construction, corpus-root normalization, duplicate discovery, file eviction on I/O failure, propagation of programming failures, and direct directory analysis.
+The existing tests exercise Core against synthetic filesystem data, including asynchronous portrait construction, corpus-root normalization, duplicate discovery, file eviction on I/O failure, propagation of programming failures, direct directory analysis, and ScopePair analysis.
 
-The ScopePair tests verify two governing properties: descendant DirectoryPairs aggregate into higher-level scope leverage by distinct content, and when scope roots are nested, duplicated content wholly inside the descendant subtree does not leak into the ancestor side. Scope analysis requires path hierarchy semantics but performs no file I/O.
+The Case-analysis tests verify population counts and all four Case types, inclusion of unique files within structural bounds, disjoint effective-side bounding for nested ScopePairs, leverage ordering, and that only the requested top sample is materialized.
+
+## Current empirical-development step
+
+No Situation inference or characteristic classifier has been implemented. The present goal is to inspect successive high-leverage samples from real corpora. We will use the objective evidence in those samples to identify characteristic sets that constrain plausible Situations, mark matching cases as empirically covered, and then inspect the next highest-leverage uncovered cases. If objective structure does not narrow a case semantically, that is an acceptable result: the user must supply the Situation.
 
 ## Not yet implemented
 
-Case discovery and ranking, Situations and Resolutions, Dispositions, virtual Action Plans/Portrait transformation, execution planning, and physical filesystem execution remain future work described in `PROJECT.md`.
+Empirical characteristic coverage, Situation/Resolution mapping, Dispositions, virtual Action Plans/Portrait transformation, execution planning, and physical filesystem execution remain future work described in `PROJECT.md`.
