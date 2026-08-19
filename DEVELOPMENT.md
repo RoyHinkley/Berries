@@ -31,11 +31,23 @@ Phase timing is included as development instrumentation. Portrait acquisition re
 
 The filesystem abstraction may eventually warrant performance-oriented refinement. In particular, platform adapters should remain free to obtain metadata efficiently in bulk or during enumeration, and Core should not require metadata it does not actually use. No optimization is justified yet without measurements showing a material cost.
 
+## File accessibility policy
+
+Every file in the current Portrait is a file Berries still considers safely actionable.
+
+When a filesystem operation on a particular file fails because the file is unavailable or inaccessible (`IOException`, `UnauthorizedAccessException`, or `SecurityException`), that file is evicted from the current Portrait for the remainder of the session. Subsequent analysis acts as though the file no longer exists. The failed operation and reason are retained as a `FileEviction` diagnostic record.
+
+Programming and other non-filesystem failures are not converted into file evictions; they continue to propagate normally so defects are not hidden.
+
+On Windows, content reads request permissive sharing (`FileShare.ReadWrite | FileShare.Delete`) so Berries can coexist with other processes when Windows permits it. If an existing handle still prevents access, the file is evicted rather than causing the analysis to fail.
+
+Portraits remain immutable snapshots. An operation that evicts files returns a replacement current Portrait rather than modifying the input Portrait in place.
+
 ## Tests
 
-`Berries.Core.Tests` currently contains three passing tests.
+`Berries.Core.Tests` now contains five tests. The original three had passed before the accessibility-policy change; two new regression tests exercise that policy and should be run after pulling this revision.
 
-The tests exercise Core against synthetic filesystem data, including asynchronous portrait construction, corpus-root normalization, and duplicate discovery. Duplicate-discovery coverage verifies that equal-content files form a duplicate set, same-size files with different content do not, and uniquely-sized files are never opened for hashing.
+The tests exercise Core against synthetic filesystem data, including asynchronous portrait construction, corpus-root normalization, and duplicate discovery. Duplicate-discovery coverage verifies that equal-content files form a duplicate set, same-size files with different content do not, uniquely-sized files are never opened for hashing, an I/O failure evicts the affected file while analysis continues, and a programming failure is not swallowed as an eviction.
 
 ## Not yet implemented
 
