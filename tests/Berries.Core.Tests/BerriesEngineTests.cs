@@ -222,6 +222,16 @@ public sealed class BerriesEngineTests
             return new FileSystemPath(value);
         }
 
+        public FileSystemPath? GetParentDirectory(FileSystemPath path)
+        {
+            var value = NormalizePath(path).Value;
+            var separator = value.LastIndexOf('\\');
+            if (separator <= 2)
+                return null;
+
+            return new FileSystemPath(value[..separator]);
+        }
+
         public IEnumerable<FileSystemFile> EnumerateFiles(FileSystemPath root) =>
             filesByRoot.TryGetValue(root, out var files)
                 ? files
