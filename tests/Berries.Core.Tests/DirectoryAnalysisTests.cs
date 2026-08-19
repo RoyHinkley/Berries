@@ -84,6 +84,8 @@ public sealed class DirectoryAnalysisTests
         Assert.Equal(2, nodeA.Degree);
         Assert.Equal(3, nodeA.WeightedDegree);
         Assert.Equal(2, nodeA.MaxPairLeverage);
+        Assert.Equal(1.5, nodeA.MeanPairLeverage);
+        Assert.Equal(2.0 / 3.0, nodeA.StrongestPairConcentration, 10);
     }
 
     private sealed class UnusedFileSystem : IFileSystem
