@@ -8,7 +8,7 @@ namespace Berries.Core.Tests;
 public sealed class ScopeAnalysisTests
 {
     [Fact]
-    public async Task AnalyzeScopesAsync_AggregatesDescendantDirectoryPairsByDistinctContent()
+    public async Task AnalyzeScopesAsync_AggregatesDescendantDirectoryPairEvidence()
     {
         var root = Path(@"X:\Corpus");
         var a = Path(@"X:\Corpus\A");
@@ -23,6 +23,34 @@ public sealed class ScopeAnalysisTests
         {
             new DuplicateSet(new ContentId("01"), new[] { aOne, bOne }),
             new DuplicateSet(new ContentId("02"), new[] { aTwo, bTwo })
+        };
+
+        var engine = new BerriesEngine(new TestFileSystem());
+        var result = await engine.AnalyzeScopesAsync(
+            new Corpus(new[] { new CorpusRoot(root) }),
+            duplicateSets);
+
+        var pair = Assert.Single(result.ScopePairs,
+            pair => pair.FirstRoot == a && pair.SecondRoot == b);
+
+        Assert.Equal(2, pair.Leverage);
+        Assert.Equal(2, pair.DirectoryPairCount);
+    }
+
+    [Fact]
+    public async Task AnalyzeScopesAsync_WeightedLeverageMayCountOneContentThroughSeveralDirectoryPairs()
+    {
+        var root = Path(@"X:\Corpus");
+        var a = Path(@"X:\Corpus\A");
+        var b = Path(@"X:\Corpus\B");
+
+        var aOne = File(@"X:\Corpus\A\One", "a1");
+        var aTwo = File(@"X:\Corpus\A\Two", "a2");
+        var bOne = File(@"X:\Corpus\B\One", "b1");
+
+        var duplicateSets = new[]
+        {
+            new DuplicateSet(new ContentId("same"), new[] { aOne, aTwo, bOne })
         };
 
         var engine = new BerriesEngine(new TestFileSystem());
