@@ -37,18 +37,10 @@ internal static class DirectoryGraphAnalyzer
         Portrait portrait,
         IReadOnlyList<DirectoryRecord> directories,
         IReadOnlyList<DirectoryPair> directoryPairs,
-        IReadOnlyList<DuplicateSet> duplicateSets)
+        IReadOnlySet<FileSystemPath> internalDuplicateDirectories)
     {
         var totalDirectoryCount = portrait.Files
             .Select(file => file.ParentDirectory)
-            .Distinct()
-            .Count();
-
-        var internalDuplicateDirectories = duplicateSets
-            .SelectMany(set => set.Files
-                .GroupBy(file => file.ParentDirectory)
-                .Where(group => group.Count() > 1)
-                .Select(group => group.Key))
             .Distinct()
             .Count();
 
@@ -123,7 +115,7 @@ internal static class DirectoryGraphAnalyzer
         return new DirectoryGraphAnalysis(
             totalDirectoryCount,
             directories.Count,
-            internalDuplicateDirectories,
+            internalDuplicateDirectories.Count,
             participating.Length,
             directoryPairs.Count,
             componentCount,
