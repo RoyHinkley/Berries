@@ -291,7 +291,7 @@ public sealed class BerriesEngine
         var totalTimer = Stopwatch.StartNew();
         var phaseTimer = Stopwatch.StartNew();
 
-        var evidence = new List<(ContentId Content, FileSystemPath First, FileSystemPath Second)>();
+        var evidence = new List<(FileSystemPath First, FileSystemPath Second)>();
 
         foreach (var duplicateSet in duplicateSets)
         {
@@ -308,7 +308,6 @@ public sealed class BerriesEngine
                 for (var secondIndex = firstIndex + 1; secondIndex < representedDirectories.Length; secondIndex++)
                 {
                     evidence.Add((
-                        duplicateSet.Content,
                         representedDirectories[firstIndex],
                         representedDirectories[secondIndex]));
                 }
@@ -347,7 +346,7 @@ public sealed class BerriesEngine
                         accumulators[roots] = accumulator;
                     }
 
-                    accumulator.Contents.Add(edge.Content);
+                    accumulator.Leverage++;
                     accumulator.DirectoryPairs.Add(directPair);
                 }
             }
@@ -361,7 +360,7 @@ public sealed class BerriesEngine
             .Select(item => new ScopePair(
                 item.Key.First,
                 item.Key.Second,
-                item.Value.Contents.Count,
+                item.Value.Leverage,
                 item.Value.DirectoryPairs.Count))
             .OrderByDescending(pair => pair.Leverage)
             .ThenByDescending(pair => pair.DirectoryPairCount)
@@ -474,7 +473,7 @@ public sealed class BerriesEngine
 
     private sealed class ScopeAccumulator
     {
-        public HashSet<ContentId> Contents { get; } = [];
+        public int Leverage { get; set; }
         public HashSet<(FileSystemPath First, FileSystemPath Second)> DirectoryPairs { get; } = [];
     }
 }
