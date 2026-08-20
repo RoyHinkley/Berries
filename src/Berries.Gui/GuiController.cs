@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Berries.Core;
+using Berries.Core.Analysis;
 using Berries.Core.Cases;
 using Berries.Core.Domain;
 using Berries.FileSystem.Abstractions;
@@ -24,6 +25,7 @@ public sealed class GuiController
     public DirectoryAnalysisResult? DirectoryAnalysis { get; private set; }
     public ScopeAnalysisResult? ScopeAnalysis { get; private set; }
     public CaseAnalysisResult? CaseAnalysis { get; private set; }
+    public DuplicateSettlements DuplicateSettlements { get; } = new();
 
     public IReadOnlyList<string> NormalizeRoots(IEnumerable<string> rootPaths) =>
         engine.CreateCorpus(rootPaths.Select(path => new FileSystemPath(path)))
@@ -48,6 +50,7 @@ public sealed class GuiController
         phaseTimer.Stop();
         var portraitElapsed = phaseTimer.Elapsed;
 
+        DuplicateSettlements.Clear();
         DuplicateDiscovery = null;
         DirectoryAnalysis = null;
         ScopeAnalysis = null;
@@ -88,6 +91,7 @@ public sealed class GuiController
         DirectoryAnalysis = await engine.AnalyzeDirectoriesAsync(
             Portrait,
             DuplicateDiscovery.DuplicateSets,
+            DuplicateSettlements,
             cancellationToken);
         ScopeAnalysis = null;
         CaseAnalysis = null;
