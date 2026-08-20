@@ -104,9 +104,11 @@ Each DirectoryPair contributes evidence to containing pairs of ancestor-or-self 
 
 A ScopePair has two effective sides. For non-overlapping roots these are the ordinary recursive scopes. For nested roots, the descendant subtree is omitted from the ancestor side and constitutes the other side. The two effective sides are always disjoint.
 
-Only duplicated Content represented across both effective sides contributes ScopePair leverage.
+Only duplicate relationships represented across both effective sides contribute ScopePair leverage.
 
-Current ScopePair leverage is **exact**: count distinct duplicated Contents crossing the effective-side cut. Do not sum descendant DirectoryPair weights in a way that can count the same Content more than once.
+Current experimental ScopePair leverage is the **weighted cut size**: sum the DirectoryPair leverage crossing the effective-side cut. Equivalently, a duplicated Content contributes once for each contributing DirectoryPair through which it crosses the cut. The same Content may therefore contribute more than once to a ScopePair.
+
+This deliberately replaces exact distinct-Content ScopePair leverage for the current experiment. Exact counting required a distinct Content set for every ScopePair and was very expensive at large scale. The purpose of the experiment is to determine whether that precision materially improves Case prioritization. If weighted cut size preserves the useful high-leverage ordering, exact ScopePair leverage is unnecessary computation.
 
 DirectoryPairCount records the number of distinct direct DirectoryPairs contributing evidence to the ScopePair.
 
@@ -141,7 +143,7 @@ If the descendant root moves downward from B to B\C, the effective sides become:
 
 The part of B outside B\C moves from the descendant side to the ancestor side. Duplicate relationships formerly internal to B can therefore become cross-cut relationships, while other relationships can cease crossing the cut.
 
-Consequently, leverage can increase or decrease as a ScopePair boundary moves downward. This is not approximation error; it is real repartitioning of the same objective duplication graph.
+Consequently, leverage can increase or decrease as a ScopePair boundary moves downward. This reflects real repartitioning of the same objective duplication graph.
 
 This makes boundary movement itself useful structural evidence. Related ScopePairs reached by moving roots through the directory hierarchy should not automatically be treated as strict subset/refinement relationships.
 
@@ -173,12 +175,9 @@ To avoid unnecessary memory expansion, lightweight Case candidates can be ranked
 
 ## Leverage
 
-Leverage is defined in `MODEL.md` and is retained as an objective payoff measure.
+Leverage is retained as an objective payoff measure, but its implementation need only be precise enough to support useful prioritization.
 
-It answers:
-
-    How many distinct duplicated Content relationships does this Case's
-    defining structure directly address?
+For DuplicateSet, Single-directory, and DirectoryPair Cases it remains an exact distinct-Content count. For ScopePairs the current experiment uses weighted crossing evidence as described above.
 
 It does not answer:
 
