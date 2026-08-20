@@ -55,8 +55,19 @@ public sealed class BerriesEngine
         Portrait portrait,
         IReadOnlyList<DuplicateSet> duplicateSets,
         CancellationToken cancellationToken = default) =>
+        AnalyzeDirectoriesAsync(
+            portrait,
+            duplicateSets,
+            new DuplicateSettlements(),
+            cancellationToken);
+
+    public Task<DirectoryAnalysisResult> AnalyzeDirectoriesAsync(
+        Portrait portrait,
+        IReadOnlyList<DuplicateSet> duplicateSets,
+        DuplicateSettlements settlements,
+        CancellationToken cancellationToken = default) =>
         Task.Run(
-            () => AnalyzeDirectories(portrait, duplicateSets, cancellationToken),
+            () => AnalyzeDirectories(portrait, duplicateSets, settlements, cancellationToken),
             cancellationToken);
 
     public Task<ScopeAnalysisResult> AnalyzeScopesAsync(
@@ -191,41 +202,64 @@ public sealed class BerriesEngine
     private static DirectoryAnalysisResult AnalyzeDirectories(
         Portrait portrait,
         IReadOnlyList<DuplicateSet> duplicateSets,
+        DuplicateSettlements settlements,
         CancellationToken cancellationToken)
     {
         var totalTimer = Stopwatch.StartNew();
         var phaseTimer = Stopwatch.StartNew();
 
-        var duplicateFileCounts = new Dictionary<FileSystemPath, int>();
-        var duplicateContentsByDirectory = new Dictionary<FileSystemPath, HashSet<ContentId>>();
+        var unresolvedFilesByDirectory = new Dictionary<FileSystemPath, HashSet<FileSystemPath>>();
+        var unresolvedContentsByDirectory = new Dictionary<FileSystemPath, HashSet<ContentId>>();
+        var internalDuplicateDirectories = new HashSet<FileSystemPath>();
+        var pairContents = new Dictionary<(FileSystemPath First, FileSystemPath Second), HashSet<ContentId>>();
 
         foreach (var duplicateSet in duplicateSets)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            foreach (var file in duplicateSet.Files)
+            if (settlements.IsContentAccepted(duplicateSet.Content))
+                continue;
+
+            var files = duplicateSet.Files;
+            for (var firstIndex = 0; firstIndex < files.Count - 1; firstIndex++)
             {
-                duplicateFileCounts.TryGetValue(file.ParentDirectory, out var count);
-                duplicateFileCounts[file.ParentDirectory] = count + 1;
+                var first = files[firstIndex];
 
-                if (!duplicateContentsByDirectory.TryGetValue(file.ParentDirectory, out var contents))
+                for (var secondIndex = firstIndex + 1; secondIndex < files.Count; secondIndex++)
                 {
-                    contents = [];
-                    duplicateContentsByDirectory[file.ParentDirectory] = contents;
-                }
+                    var second = files[secondIndex];
+                    if (settlements.IsPairAccepted(duplicateSet.Content, first, second))
+                        continue;
 
-                contents.Add(duplicateSet.Content);
+                    AddUnresolvedFile(first, duplicateSet.Content, unresolvedFilesByDirectory, unresolvedContentsByDirectory);
+                    AddUnresolvedFile(second, duplicateSet.Content, unresolvedFilesByDirectory, unresolvedContentsByDirectory);
+
+                    if (first.ParentDirectory == second.ParentDirectory)
+                    {
+                        internalDuplicateDirectories.Add(first.ParentDirectory);
+                        continue;
+                    }
+
+                    var key = CanonicalPair(first.ParentDirectory, second.ParentDirectory);
+                    if (!pairContents.TryGetValue(key, out var contents))
+                    {
+                        contents = [];
+                        pairContents[key] = contents;
+                    }
+
+                    contents.Add(duplicateSet.Content);
+                }
             }
         }
 
         var directories = portrait.Files
             .GroupBy(file => file.ParentDirectory)
-            .Where(group => duplicateContentsByDirectory.ContainsKey(group.Key))
+            .Where(group => unresolvedContentsByDirectory.ContainsKey(group.Key))
             .Select(group => new DirectoryRecord(
                 group.Key,
                 group.Count(),
-                duplicateFileCounts[group.Key],
-                duplicateContentsByDirectory[group.Key].Count))
+                unresolvedFilesByDirectory[group.Key].Count,
+                unresolvedContentsByDirectory[group.Key].Count))
             .OrderBy(directory => directory.Path.Value, StringComparer.Ordinal)
             .ToArray();
 
@@ -233,36 +267,12 @@ public sealed class BerriesEngine
         var directoryRecordsElapsed = phaseTimer.Elapsed;
 
         phaseTimer.Restart();
-        var pairCounts = new Dictionary<(FileSystemPath First, FileSystemPath Second), int>();
-
-        foreach (var duplicateSet in duplicateSets)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var representedDirectories = duplicateSet.Files
-                .Select(file => file.ParentDirectory)
-                .Distinct()
-                .OrderBy(path => path.Value, StringComparer.Ordinal)
-                .ToArray();
-
-            for (var firstIndex = 0; firstIndex < representedDirectories.Length - 1; firstIndex++)
-            {
-                for (var secondIndex = firstIndex + 1; secondIndex < representedDirectories.Length; secondIndex++)
-                {
-                    var key = (representedDirectories[firstIndex], representedDirectories[secondIndex]);
-                    pairCounts.TryGetValue(key, out var count);
-                    pairCounts[key] = count + 1;
-                }
-            }
-        }
-
-        var directoryPairs = pairCounts
-            .Select(pair => new DirectoryPair(pair.Key.First, pair.Key.Second, pair.Value))
+        var directoryPairs = pairContents
+            .Select(pair => new DirectoryPair(pair.Key.First, pair.Key.Second, pair.Value.Count))
             .OrderByDescending(pair => pair.Leverage)
             .ThenBy(pair => pair.First.Value, StringComparer.Ordinal)
             .ThenBy(pair => pair.Second.Value, StringComparer.Ordinal)
             .ToArray();
-
         phaseTimer.Stop();
         var directoryPairsElapsed = phaseTimer.Elapsed;
 
@@ -270,7 +280,7 @@ public sealed class BerriesEngine
             portrait,
             directories,
             directoryPairs,
-            duplicateSets);
+            internalDuplicateDirectories);
 
         totalTimer.Stop();
         return new DirectoryAnalysisResult(
@@ -281,6 +291,27 @@ public sealed class BerriesEngine
                 directoryRecordsElapsed,
                 directoryPairsElapsed,
                 totalTimer.Elapsed));
+    }
+
+    private static void AddUnresolvedFile(
+        FileInstance file,
+        ContentId content,
+        IDictionary<FileSystemPath, HashSet<FileSystemPath>> filesByDirectory,
+        IDictionary<FileSystemPath, HashSet<ContentId>> contentsByDirectory)
+    {
+        if (!filesByDirectory.TryGetValue(file.ParentDirectory, out var files))
+        {
+            files = [];
+            filesByDirectory[file.ParentDirectory] = files;
+        }
+        files.Add(file.Path);
+
+        if (!contentsByDirectory.TryGetValue(file.ParentDirectory, out var contents))
+        {
+            contents = [];
+            contentsByDirectory[file.ParentDirectory] = contents;
+        }
+        contents.Add(content);
     }
 
     private ScopeAnalysisResult AnalyzeScopes(
