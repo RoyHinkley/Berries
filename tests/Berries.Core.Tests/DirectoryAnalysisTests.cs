@@ -88,6 +88,70 @@ public sealed class DirectoryAnalysisTests
         Assert.Equal(2.0 / 3.0, nodeA.StrongestPairConcentration, 10);
     }
 
+    [Fact]
+    public async Task AnalyzeDirectoriesAsync_WholeDuplicateSetSettlement_RemovesItsEvidence()
+    {
+        FileInstance File(string directory, string name) =>
+            new(new FileSystemPath($@"X:\Corpus\{directory}\{name}"), 10,
+                new FileSystemPath($@"X:\Corpus\{directory}"));
+
+        var a1 = File("A", "shared");
+        var b1 = File("B", "shared");
+        var c1 = File("C", "shared");
+        var a2 = File("A", "other");
+        var b2 = File("B", "other");
+        var acceptedContent = new DuplicateSet(new ContentId("accepted"), new[] { a1, b1, c1 });
+        var unresolvedContent = new DuplicateSet(new ContentId("unresolved"), new[] { a2, b2 });
+        var portrait = new Portrait(new[] { a1, b1, c1, a2, b2 });
+        var settlements = new DuplicateSettlements();
+        settlements.Accept(acceptedContent);
+
+        var engine = new BerriesEngine(new UnusedFileSystem());
+        var result = await engine.AnalyzeDirectoriesAsync(
+            portrait,
+            new[] { acceptedContent, unresolvedContent },
+            settlements);
+
+        Assert.Equal(2, result.Directories.Count);
+        Assert.DoesNotContain(result.Directories, record => record.Path == c1.ParentDirectory);
+        var pair = Assert.Single(result.DirectoryPairs);
+        Assert.Equal(a1.ParentDirectory, pair.First);
+        Assert.Equal(b1.ParentDirectory, pair.Second);
+        Assert.Equal(1, pair.Leverage);
+    }
+
+    [Fact]
+    public async Task AnalyzeDirectoriesAsync_PairwiseSettlement_RemovesOnlyThatRelationship()
+    {
+        FileInstance File(string directory, string name) =>
+            new(new FileSystemPath($@"X:\Corpus\{directory}\{name}"), 10,
+                new FileSystemPath($@"X:\Corpus\{directory}"));
+
+        var a = File("A", "same");
+        var b = File("B", "same");
+        var c = File("C", "same");
+        var content = new ContentId("same-content");
+        var duplicateSet = new DuplicateSet(content, new[] { a, b, c });
+        var settlements = new DuplicateSettlements();
+        settlements.AcceptPair(content, a, b);
+
+        var engine = new BerriesEngine(new UnusedFileSystem());
+        var result = await engine.AnalyzeDirectoriesAsync(
+            new Portrait(new[] { a, b, c }),
+            new[] { duplicateSet },
+            settlements);
+
+        Assert.Equal(3, result.Directories.Count);
+        Assert.Equal(2, result.DirectoryPairs.Count);
+        Assert.DoesNotContain(result.DirectoryPairs,
+            pair => (pair.First == a.ParentDirectory && pair.Second == b.ParentDirectory)
+                || (pair.First == b.ParentDirectory && pair.Second == a.ParentDirectory));
+        Assert.Contains(result.DirectoryPairs,
+            pair => pair.First == a.ParentDirectory && pair.Second == c.ParentDirectory);
+        Assert.Contains(result.DirectoryPairs,
+            pair => pair.First == b.ParentDirectory && pair.Second == c.ParentDirectory);
+    }
+
     private sealed class UnusedFileSystem : IFileSystem
     {
         public FileSystemPath NormalizePath(FileSystemPath path) => throw UnexpectedCall();
