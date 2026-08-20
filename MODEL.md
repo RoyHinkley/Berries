@@ -158,9 +158,7 @@ Temporary verified storage used by the ExecutionPlan to secure required Content 
 
 ### Leverage
 
-The number of distinct duplicated Contents whose duplicate relationship is directly addressed by the Case's defining structure.
-
-Leverage measures reduction in duplicate-content decisions, not bytes saved and not every duplicate incidentally located inside Case bounds.
+Leverage is an objective estimate of how much defining duplication a Case could address. It is used for prioritization, not as an invariant requiring unnecessary computational precision.
 
 By Case type:
 
@@ -176,10 +174,14 @@ By Case type:
                    both directories
 
     ScopePair Case
-        leverage = distinct duplicated Contents represented across the two
-                   effective sides of the ScopePair cut
+        current experimental leverage = weighted cut size: the sum of
+                   DirectoryPair leverage crossing the effective-side cut
 
-For ScopePairs, leverage therefore measures duplicated-content connectivity crossing the cut. Duplicates internal to either effective side do not contribute to that ScopePair's leverage and need not be resolved by a Resolution of that Case.
+The ScopePair measure intentionally allows one Content to contribute through several DirectoryPairs. Earlier code counted each crossing Content exactly once; current empirical work is testing whether that extra precision materially improves prioritization. If not, exact ScopePair leverage is wasted computation and should remain unnecessary.
+
+For ScopePairs, leverage still measures duplicated-content connectivity crossing the cut. Duplicates internal to either effective side do not contribute to that ScopePair's leverage and need not be resolved by a Resolution of that Case.
+
+Leverage measures duplicate-decision payoff, not bytes saved and not every duplicate incidentally located inside Case bounds.
 
 ### Hidden
 
