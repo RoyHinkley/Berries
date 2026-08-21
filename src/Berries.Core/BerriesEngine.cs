@@ -70,12 +70,12 @@ public sealed class BerriesEngine
             () => AnalyzeDirectories(portrait, duplicateSets, settlements, cancellationToken),
             cancellationToken);
 
-    public Task<ScopeAnalysisResult> AnalyzeScopesAsync(
+    public Task<BranchAnalysisResult> AnalyzeBranchesAsync(
         Corpus corpus,
         IReadOnlyList<DirectoryPair> directoryPairs,
         CancellationToken cancellationToken = default) =>
         Task.Run(
-            () => AnalyzeScopes(corpus, directoryPairs, cancellationToken),
+            () => AnalyzeBranches(corpus, directoryPairs, cancellationToken),
             cancellationToken);
 
     private Portrait BuildInitialPortrait(
@@ -314,7 +314,7 @@ public sealed class BerriesEngine
         contents.Add(content);
     }
 
-    private ScopeAnalysisResult AnalyzeScopes(
+    private BranchAnalysisResult AnalyzeBranches(
         Corpus corpus,
         IReadOnlyList<DirectoryPair> directoryPairs,
         CancellationToken cancellationToken)
@@ -327,7 +327,7 @@ public sealed class BerriesEngine
 
         phaseTimer.Restart();
         var ancestorsByDirectory = new Dictionary<FileSystemPath, IReadOnlyList<FileSystemPath>>();
-        var accumulators = new Dictionary<(FileSystemPath First, FileSystemPath Second), ScopeAccumulator>();
+        var accumulators = new Dictionary<(FileSystemPath First, FileSystemPath Second), BranchAccumulator>();
 
         foreach (var edge in evidence)
         {
@@ -350,7 +350,7 @@ public sealed class BerriesEngine
 
                     if (!accumulators.TryGetValue(roots, out var accumulator))
                     {
-                        accumulator = new ScopeAccumulator();
+                        accumulator = new BranchAccumulator();
                         accumulators[roots] = accumulator;
                     }
 
@@ -364,8 +364,8 @@ public sealed class BerriesEngine
         var aggregationElapsed = phaseTimer.Elapsed;
 
         phaseTimer.Restart();
-        var scopePairs = accumulators
-            .Select(item => new ScopePair(
+        var branchPairs = accumulators
+            .Select(item => new BranchPair(
                 item.Key.First,
                 item.Key.Second,
                 item.Value.Leverage,
@@ -379,9 +379,9 @@ public sealed class BerriesEngine
         var resultElapsed = phaseTimer.Elapsed;
 
         totalTimer.Stop();
-        return new ScopeAnalysisResult(
-            scopePairs,
-            new ScopeAnalysisTiming(
+        return new BranchAnalysisResult(
+            branchPairs,
+            new BranchAnalysisTiming(
                 evidenceElapsed,
                 aggregationElapsed,
                 resultElapsed,
@@ -479,7 +479,7 @@ public sealed class BerriesEngine
     private static bool IsFileAccessFailure(Exception exception) =>
         exception is IOException or UnauthorizedAccessException or SecurityException;
 
-    private sealed class ScopeAccumulator
+    private sealed class BranchAccumulator
     {
         public int Leverage { get; set; }
         public HashSet<(FileSystemPath First, FileSystemPath Second)> DirectoryPairs { get; } = [];
