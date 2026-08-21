@@ -102,9 +102,9 @@ Report-time structural analysis is separately instrumented because large corpora
 
 ## Tests
 
-`Berries.Core.Tests` currently contains sixteen tests.
+`Berries.Core.Tests` currently contains seventeen tests.
 
-Coverage includes Corpus normalization, Portrait construction, duplicate discovery, file eviction, propagation of programming failures, settlement-aware directory analysis, graph metrics, DirectoryPair-driven ScopePair analysis including weighted evidence and nested cuts, Case ranking/bounding, and structural evidence.
+Coverage includes Corpus normalization, Portrait construction, duplicate discovery, file eviction, propagation of programming failures, settlement-aware directory analysis, graph metrics, DirectoryPair-driven ScopePair analysis including weighted evidence and nested cuts, settlement propagation through DirectoryPairs into ScopePairs, Case ranking/bounding, and structural evidence.
 
 The settlement tests cover both whole-DuplicateSet acceptance and selective pairwise acceptance with other mates remaining unresolved.
 
