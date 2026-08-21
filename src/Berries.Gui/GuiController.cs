@@ -82,6 +82,57 @@ public sealed class GuiController
         return DuplicateDiscovery;
     }
 
+    public IReadOnlyList<SprinkledDuplicateCandidate> FindSprinkledDuplicateCandidates(int minimumDirectories = 3)
+    {
+        if (DuplicateDiscovery is null)
+            throw new InvalidOperationException("Duplicate discovery must complete before candidate screening.");
+        if (minimumDirectories < 2)
+            throw new ArgumentOutOfRangeException(nameof(minimumDirectories));
+
+        return DuplicateDiscovery.DuplicateSets
+            .Where(set => !DuplicateSettlements.IsContentAccepted(set.Content))
+            .Select(set =>
+            {
+                var names = set.Files
+                    .Select(file => System.IO.Path.GetFileName(file.Path.Value))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                if (names.Length != 1 || string.IsNullOrWhiteSpace(names[0]))
+                    return null;
+
+                var directoryCount = set.Files
+                    .Select(file => file.ParentDirectory)
+                    .Distinct()
+                    .Count();
+
+                // Exploratory phenotype: one same-name instance in each represented directory.
+                if (directoryCount != set.Files.Count || directoryCount < minimumDirectories)
+                    return null;
+
+                return new SprinkledDuplicateCandidate(
+                    set,
+                    names[0],
+                    set.Files.Count,
+                    directoryCount);
+            })
+            .Where(candidate => candidate is not null)
+            .Cast<SprinkledDuplicateCandidate>()
+            .OrderByDescending(candidate => candidate.DirectoryCount)
+            .ThenBy(candidate => candidate.FileName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(candidate => candidate.DuplicateSet.Content.Value, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    public void AcceptWholeDuplicateSets(IEnumerable<SprinkledDuplicateCandidate> candidates)
+    {
+        foreach (var candidate in candidates)
+            DuplicateSettlements.Accept(candidate.DuplicateSet);
+
+        DirectoryAnalysis = null;
+        ScopeAnalysis = null;
+        CaseAnalysis = null;
+    }
+
     public async Task<DirectoryAnalysisResult> AnalyzeDirectoriesAsync(
         CancellationToken cancellationToken = default)
     {
@@ -126,148 +177,6 @@ public sealed class GuiController
             limit);
         return CaseAnalysis;
     }
-
-    public async Task<ProspectiveSettlementComparison?> CompareProspectiveWholeSetSettlementAsync(
-        int topCaseLimit = 25,
-        CancellationToken cancellationToken = default)
-    {
-        if (Corpus is null || Portrait is null || DuplicateDiscovery is null
-            || DirectoryAnalysis is null || ScopeAnalysis is null || CaseAnalysis is null)
-            throw new InvalidOperationException("Complete baseline case analysis before settlement comparison.");
-
-        var candidate = SelectProspectiveWholeSetSettlement();
-        if (candidate is null)
-            return null;
-
-        var totalTimer = Stopwatch.StartNew();
-        var experimentalSettlements = DuplicateSettlements.Copy();
-        experimentalSettlements.Accept(candidate.DuplicateSet);
-
-        var settledDirectories = await engine.AnalyzeDirectoriesAsync(
-            Portrait,
-            DuplicateDiscovery.DuplicateSets,
-            experimentalSettlements,
-            cancellationToken);
-
-        var settledScopes = await engine.AnalyzeScopesAsync(
-            Corpus,
-            settledDirectories.DirectoryPairs,
-            cancellationToken);
-
-        var settledCases = caseAnalyzer.AnalyzeTop(
-            Portrait,
-            DuplicateDiscovery.DuplicateSets,
-            settledDirectories.DirectoryPairs,
-            settledScopes.ScopePairs,
-            experimentalSettlements,
-            topCaseLimit);
-
-        totalTimer.Stop();
-
-        var baselineKeys = CaseAnalysis.TopCases.Select(CaseIdentity).ToArray();
-        var settledKeys = settledCases.TopCases.Select(CaseIdentity).ToArray();
-        var settledKeySet = settledKeys.ToHashSet(StringComparer.Ordinal);
-        var overlap = baselineKeys.Count(settledKeySet.Contains);
-        var sameRank = baselineKeys.Zip(settledKeys).Count(pair => pair.First == pair.Second);
-
-        return new ProspectiveSettlementComparison(
-            candidate,
-            DirectoryAnalysis,
-            ScopeAnalysis,
-            CaseAnalysis,
-            settledDirectories,
-            settledScopes,
-            settledCases,
-            overlap,
-            sameRank,
-            totalTimer.Elapsed);
-    }
-
-    private ProspectiveSettlementCandidate? SelectProspectiveWholeSetSettlement()
-    {
-        if (DuplicateDiscovery is null || DirectoryAnalysis is null)
-            return null;
-
-        var pairLookup = DirectoryAnalysis.DirectoryPairs.ToDictionary(
-            pair => CanonicalPair(pair.First, pair.Second));
-        var candidates = new List<ProspectiveSettlementCandidate>();
-
-        foreach (var duplicateSet in DuplicateDiscovery.DuplicateSets)
-        {
-            if (!DuplicateSettlements.HasUnresolvedRelationship(duplicateSet)
-                || duplicateSet.Files.Count < 3)
-                continue;
-
-            var names = duplicateSet.Files
-                .Select(file => System.IO.Path.GetFileName(file.Path.Value))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            if (names.Length != 1 || string.IsNullOrEmpty(names[0]))
-                continue;
-
-            var directories = duplicateSet.Files
-                .Select(file => file.ParentDirectory)
-                .Distinct()
-                .OrderBy(path => path.Value, StringComparer.Ordinal)
-                .ToArray();
-
-            // This exploratory phenotype intentionally targets one same-name instance per directory.
-            if (directories.Length != duplicateSet.Files.Count)
-                continue;
-
-            long inducedPairs = 0;
-            long otherSharedTotal = 0;
-            var maxOtherShared = 0;
-
-            for (var firstIndex = 0; firstIndex < directories.Length - 1; firstIndex++)
-            {
-                for (var secondIndex = firstIndex + 1; secondIndex < directories.Length; secondIndex++)
-                {
-                    inducedPairs++;
-                    if (!pairLookup.TryGetValue(
-                            CanonicalPair(directories[firstIndex], directories[secondIndex]),
-                            out var pair))
-                        continue;
-
-                    var otherShared = Math.Max(0, pair.Leverage - 1);
-                    otherSharedTotal += otherShared;
-                    maxOtherShared = Math.Max(maxOtherShared, otherShared);
-                }
-            }
-
-            candidates.Add(new ProspectiveSettlementCandidate(
-                duplicateSet,
-                names[0],
-                duplicateSet.Files.Count,
-                directories.Length,
-                inducedPairs,
-                inducedPairs == 0 ? 0 : (double)otherSharedTotal / inducedPairs,
-                maxOtherShared));
-        }
-
-        return candidates
-            .OrderByDescending(candidate => candidate.InducedDirectoryPairCount)
-            .ThenBy(candidate => candidate.MeanOtherSharedContent)
-            .ThenBy(candidate => candidate.MaxOtherSharedContent)
-            .ThenBy(candidate => candidate.CommonFileName, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
-    }
-
-    private static (FileSystemPath First, FileSystemPath Second) CanonicalPair(
-        FileSystemPath first,
-        FileSystemPath second) =>
-        StringComparer.Ordinal.Compare(first.Value, second.Value) <= 0
-            ? (first, second)
-            : (second, first);
-
-    private static string CaseIdentity(Case item) => item switch
-    {
-        DuplicateSetCase duplicate => "D:" + duplicate.DuplicateSet.Content.Value,
-        SingleDirectoryCase directory => "S:" + directory.Directory.Value,
-        DirectoryPairCase pair => "P:" + pair.Pair.First.Value + "\n" + pair.Pair.Second.Value,
-        ScopePairCase pair => "C:" + pair.Pair.FirstRoot.Value + "\n" + pair.Pair.SecondRoot.Value,
-        _ => item.GetType().FullName ?? item.GetType().Name
-    };
 }
 
 public sealed record ScanResult(
