@@ -24,13 +24,13 @@ public sealed class CaseAnalysisTests
             new DuplicateSet(new ContentId("01"), new[] { a1, a2, b1 })
         };
         var directoryPairs = new[] { new DirectoryPair(a, b, 1) };
-        var scopePairs = new[] { new ScopePair(a, b, 1, 1) };
+        var branchPairs = new[] { new BranchPair(a, b, 1, 1) };
 
         var result = new CaseAnalyzer(new TestFileSystem()).AnalyzeTop(
             portrait,
             duplicateSets,
             directoryPairs,
-            scopePairs,
+            branchPairs,
             25);
 
         Assert.Equal(4, result.TotalCaseCount);
@@ -38,18 +38,18 @@ public sealed class CaseAnalysisTests
         Assert.Equal(1, result.DuplicateSetCaseCount);
         Assert.Equal(1, result.SingleDirectoryCaseCount);
         Assert.Equal(1, result.DirectoryPairCaseCount);
-        Assert.Equal(1, result.ScopePairCaseCount);
+        Assert.Equal(1, result.BranchPairCaseCount);
         Assert.All(result.TopCases, item => Assert.Equal(1, item.Leverage));
 
         var directoryCase = Assert.Single(result.TopCases.OfType<SingleDirectoryCase>());
         Assert.Contains(unique, directoryCase.Files);
 
-        var scopeCase = Assert.Single(result.TopCases.OfType<ScopePairCase>());
-        Assert.Equal(4, scopeCase.Files.Count);
+        var branchCase = Assert.Single(result.TopCases.OfType<BranchPairCase>());
+        Assert.Equal(4, branchCase.Files.Count);
     }
 
     [Fact]
-    public void AnalyzeTop_NestedScopePairBoundsDisjointEffectiveSides()
+    public void AnalyzeTop_NestedBranchPairBoundsDisjointEffectiveSides()
     {
         var parent = Path(@"X:\Corpus\Parent");
         var child = Path(@"X:\Corpus\Parent\Child");
@@ -62,12 +62,12 @@ public sealed class CaseAnalysisTests
             portrait,
             Array.Empty<DuplicateSet>(),
             Array.Empty<DirectoryPair>(),
-            new[] { new ScopePair(parent, child, 1, 1) },
+            new[] { new BranchPair(parent, child, 1, 1) },
             25);
 
-        var scopeCase = Assert.Single(result.TopCases.OfType<ScopePairCase>());
-        Assert.Equal(3, scopeCase.Files.Count);
-        Assert.Equal(3, scopeCase.Files.Distinct().Count());
+        var branchCase = Assert.Single(result.TopCases.OfType<BranchPairCase>());
+        Assert.Equal(3, branchCase.Files.Count);
+        Assert.Equal(3, branchCase.Files.Distinct().Count());
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public sealed class CaseAnalysisTests
         var b = Path(@"X:\Corpus\B");
         var portrait = new Portrait(new[] { File(a, "a"), File(b, "b") });
         var pairs = Enumerable.Range(1, 100)
-            .Select(index => new ScopePair(a, b, index, 1))
+            .Select(index => new BranchPair(a, b, index, 1))
             .ToArray();
 
         var result = new CaseAnalyzer(new TestFileSystem()).AnalyzeTop(
