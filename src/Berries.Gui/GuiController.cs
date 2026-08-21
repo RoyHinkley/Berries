@@ -23,7 +23,7 @@ public sealed class GuiController
     public ScanResult? Scan { get; private set; }
     public DuplicateDiscoveryResult? DuplicateDiscovery { get; private set; }
     public DirectoryAnalysisResult? DirectoryAnalysis { get; private set; }
-    public ScopeAnalysisResult? ScopeAnalysis { get; private set; }
+    public BranchAnalysisResult? BranchAnalysis { get; private set; }
     public CaseAnalysisResult? CaseAnalysis { get; private set; }
     public DuplicateSettlements DuplicateSettlements { get; } = new();
 
@@ -53,7 +53,7 @@ public sealed class GuiController
         DuplicateSettlements.Clear();
         DuplicateDiscovery = null;
         DirectoryAnalysis = null;
-        ScopeAnalysis = null;
+        BranchAnalysis = null;
         CaseAnalysis = null;
         totalTimer.Stop();
 
@@ -77,7 +77,7 @@ public sealed class GuiController
         DuplicateDiscovery = await engine.DiscoverDuplicatesAsync(Portrait, progress, cancellationToken);
         Portrait = DuplicateDiscovery.Portrait;
         DirectoryAnalysis = null;
-        ScopeAnalysis = null;
+        BranchAnalysis = null;
         CaseAnalysis = null;
         return DuplicateDiscovery;
     }
@@ -129,7 +129,7 @@ public sealed class GuiController
             DuplicateSettlements.Accept(candidate.DuplicateSet);
 
         DirectoryAnalysis = null;
-        ScopeAnalysis = null;
+        BranchAnalysis = null;
         CaseAnalysis = null;
     }
 
@@ -144,35 +144,35 @@ public sealed class GuiController
             DuplicateDiscovery.DuplicateSets,
             DuplicateSettlements,
             cancellationToken);
-        ScopeAnalysis = null;
+        BranchAnalysis = null;
         CaseAnalysis = null;
         return DirectoryAnalysis;
     }
 
-    public async Task<ScopeAnalysisResult> AnalyzeScopesAsync(
+    public async Task<BranchAnalysisResult> AnalyzeBranchesAsync(
         CancellationToken cancellationToken = default)
     {
         if (Corpus is null || DirectoryAnalysis is null)
-            throw new InvalidOperationException("Directory analysis must complete before scope analysis.");
+            throw new InvalidOperationException("Directory analysis must complete before branch analysis.");
 
-        ScopeAnalysis = await engine.AnalyzeScopesAsync(
+        BranchAnalysis = await engine.AnalyzeBranchesAsync(
             Corpus,
             DirectoryAnalysis.DirectoryPairs,
             cancellationToken);
         CaseAnalysis = null;
-        return ScopeAnalysis;
+        return BranchAnalysis;
     }
 
     public CaseAnalysisResult AnalyzeTopCases(int limit = 25)
     {
-        if (Portrait is null || DuplicateDiscovery is null || DirectoryAnalysis is null || ScopeAnalysis is null)
-            throw new InvalidOperationException("Scope analysis must complete before case analysis.");
+        if (Portrait is null || DuplicateDiscovery is null || DirectoryAnalysis is null || BranchAnalysis is null)
+            throw new InvalidOperationException("Branch analysis must complete before case analysis.");
 
         CaseAnalysis = caseAnalyzer.AnalyzeTop(
             Portrait,
             DuplicateDiscovery.DuplicateSets,
             DirectoryAnalysis.DirectoryPairs,
-            ScopeAnalysis.ScopePairs,
+            BranchAnalysis.BranchPairs,
             DuplicateSettlements,
             limit);
         return CaseAnalysis;
