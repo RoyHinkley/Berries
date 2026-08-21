@@ -12,7 +12,7 @@ public sealed record CaseAnalysisResult(
     int DuplicateSetCaseCount,
     int SingleDirectoryCaseCount,
     int DirectoryPairCaseCount,
-    int ScopePairCaseCount,
+    int BranchPairCaseCount,
     CaseAnalysisTiming Timing)
 {
     public TimeSpan TotalElapsed => Timing.Total;
