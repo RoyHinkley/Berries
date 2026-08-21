@@ -60,11 +60,11 @@
         <TextBlock Grid.Row="10" Text="Directory analysis" FontWeight="SemiBold" />
         <TextBlock x:Name="DirectoryAnalysisElapsedText" Grid.Row="10" Grid.Column="1" Text="—" />
 
-        <TextBlock Grid.Row="11" Text="Scope pairs" FontWeight="SemiBold" />
-        <TextBlock x:Name="ScopePairCountText" Grid.Row="11" Grid.Column="1" Text="—" />
+        <TextBlock Grid.Row="11" Text="Branch pairs" FontWeight="SemiBold" />
+        <TextBlock x:Name="BranchPairCountText" Grid.Row="11" Grid.Column="1" Text="—" />
 
-        <TextBlock Grid.Row="12" Text="Scope analysis" FontWeight="SemiBold" />
-        <TextBlock x:Name="ScopeAnalysisElapsedText" Grid.Row="12" Grid.Column="1" Text="—" />
+        <TextBlock Grid.Row="12" Text="Branch analysis" FontWeight="SemiBold" />
+        <TextBlock x:Name="BranchAnalysisElapsedText" Grid.Row="12" Grid.Column="1" Text="—" />
 
         <TextBlock Grid.Row="13" Text="Status" FontWeight="SemiBold" />
         <TextBlock x:Name="StatusText" Grid.Row="13" Grid.Column="1" Text="No corpus selected." TextWrapping="Wrap" />
@@ -77,8 +77,8 @@
         <ListBox x:Name="DirectoryPairsList" Grid.Row="1" Margin="0,8,0,0" />
       </Grid>
       <Grid Grid.Column="1" RowDefinitions="Auto,*">
-        <TextBlock Text="Strongest scope pairs" FontWeight="SemiBold" />
-        <ListBox x:Name="ScopePairsList" Grid.Row="1" Margin="0,8,0,0" />
+        <TextBlock Text="Strongest branch pairs" FontWeight="SemiBold" />
+        <ListBox x:Name="BranchPairsList" Grid.Row="1" Margin="0,8,0,0" />
       </Grid>
       <Grid Grid.Column="2" RowDefinitions="Auto,*">
         <TextBlock Text="Top cases and settlement comparison — Ctrl+A, Ctrl+C to copy" FontWeight="SemiBold" />
