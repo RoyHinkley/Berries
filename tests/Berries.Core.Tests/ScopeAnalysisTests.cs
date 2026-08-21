@@ -1,5 +1,4 @@
 using Berries.Core.Analysis;
-using Berries.Core.Domain;
 using Berries.FileSystem.Abstractions;
 using Xunit;
 
@@ -14,21 +13,16 @@ public sealed class ScopeAnalysisTests
         var a = Path(@"X:\Corpus\A");
         var b = Path(@"X:\Corpus\B");
 
-        var aOne = File(@"X:\Corpus\A\One", "a1");
-        var bOne = File(@"X:\Corpus\B\Uno", "b1");
-        var aTwo = File(@"X:\Corpus\A\Two", "a2");
-        var bTwo = File(@"X:\Corpus\B\Dos", "b2");
-
-        var duplicateSets = new[]
+        var directoryPairs = new[]
         {
-            new DuplicateSet(new ContentId("01"), new[] { aOne, bOne }),
-            new DuplicateSet(new ContentId("02"), new[] { aTwo, bTwo })
+            new DirectoryPair(Path(@"X:\Corpus\A\One"), Path(@"X:\Corpus\B\Uno"), 1),
+            new DirectoryPair(Path(@"X:\Corpus\A\Two"), Path(@"X:\Corpus\B\Dos"), 1)
         };
 
         var engine = new BerriesEngine(new TestFileSystem());
         var result = await engine.AnalyzeScopesAsync(
             new Corpus(new[] { new CorpusRoot(root) }),
-            duplicateSets);
+            directoryPairs);
 
         var pair = Assert.Single(result.ScopePairs,
             pair => pair.FirstRoot == a && pair.SecondRoot == b);
@@ -38,30 +32,27 @@ public sealed class ScopeAnalysisTests
     }
 
     [Fact]
-    public async Task AnalyzeScopesAsync_WeightedLeverageMayCountOneContentThroughSeveralDirectoryPairs()
+    public async Task AnalyzeScopesAsync_UsesDirectoryPairWeights()
     {
         var root = Path(@"X:\Corpus");
         var a = Path(@"X:\Corpus\A");
         var b = Path(@"X:\Corpus\B");
 
-        var aOne = File(@"X:\Corpus\A\One", "a1");
-        var aTwo = File(@"X:\Corpus\A\Two", "a2");
-        var bOne = File(@"X:\Corpus\B\One", "b1");
-
-        var duplicateSets = new[]
+        var directoryPairs = new[]
         {
-            new DuplicateSet(new ContentId("same"), new[] { aOne, aTwo, bOne })
+            new DirectoryPair(Path(@"X:\Corpus\A\One"), Path(@"X:\Corpus\B\One"), 2),
+            new DirectoryPair(Path(@"X:\Corpus\A\Two"), Path(@"X:\Corpus\B\One"), 1)
         };
 
         var engine = new BerriesEngine(new TestFileSystem());
         var result = await engine.AnalyzeScopesAsync(
             new Corpus(new[] { new CorpusRoot(root) }),
-            duplicateSets);
+            directoryPairs);
 
         var pair = Assert.Single(result.ScopePairs,
             pair => pair.FirstRoot == a && pair.SecondRoot == b);
 
-        Assert.Equal(2, pair.Leverage);
+        Assert.Equal(3, pair.Leverage);
         Assert.Equal(2, pair.DirectoryPairCount);
     }
 
@@ -72,21 +63,22 @@ public sealed class ScopeAnalysisTests
         var parent = Path(@"X:\Corpus\Parent");
         var inside = Path(@"X:\Corpus\Parent\Inside");
 
-        var outsideFile = File(@"X:\Corpus\Parent\Outside", "outside");
-        var insideFile = File(@"X:\Corpus\Parent\Inside\One", "inside");
-        var insideA = File(@"X:\Corpus\Parent\Inside\Two", "a");
-        var insideB = File(@"X:\Corpus\Parent\Inside\Three", "b");
-
-        var duplicateSets = new[]
+        var directoryPairs = new[]
         {
-            new DuplicateSet(new ContentId("crossing"), new[] { outsideFile, insideFile }),
-            new DuplicateSet(new ContentId("internal"), new[] { insideA, insideB })
+            new DirectoryPair(
+                Path(@"X:\Corpus\Parent\Outside"),
+                Path(@"X:\Corpus\Parent\Inside\One"),
+                1),
+            new DirectoryPair(
+                Path(@"X:\Corpus\Parent\Inside\Two"),
+                Path(@"X:\Corpus\Parent\Inside\Three"),
+                1)
         };
 
         var engine = new BerriesEngine(new TestFileSystem());
         var result = await engine.AnalyzeScopesAsync(
             new Corpus(new[] { new CorpusRoot(root) }),
-            duplicateSets);
+            directoryPairs);
 
         var pair = Assert.Single(result.ScopePairs,
             pair => pair.FirstRoot == parent && pair.SecondRoot == inside);
@@ -94,9 +86,6 @@ public sealed class ScopeAnalysisTests
         Assert.Equal(1, pair.Leverage);
         Assert.Equal(1, pair.DirectoryPairCount);
     }
-
-    private static FileInstance File(string directory, string name) =>
-        new(Path(directory + "\\" + name), 10, Path(directory));
 
     private static FileSystemPath Path(string value) => new(value);
 
