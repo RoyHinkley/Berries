@@ -58,7 +58,7 @@ internal static class SettlementComparisonFormatter
     {
         var delta = after - before;
         var percent = before == 0 ? 0 : (double)(before - after) / before;
-        builder.AppendLine($"    {label,-25} {before,10:N0} -> {after,10:N0}  ({delta,+#;-#;0}; {percent,7:P1} reduction)");
+        builder.AppendLine($"    {label,-25} {before,10:N0} -> {after,10:N0}  ({delta:+#;-#;0}; {percent,7:P1} reduction)");
     }
 
     private static string FormatElapsed(TimeSpan elapsed) =>
