@@ -12,13 +12,13 @@ public sealed class CaseAnalyzer(IFileSystem fileSystem)
         Portrait portrait,
         IReadOnlyList<DuplicateSet> duplicateSets,
         IReadOnlyList<DirectoryPair> directoryPairs,
-        IReadOnlyList<ScopePair> scopePairs,
+        IReadOnlyList<BranchPair> branchPairs,
         int limit = 25) =>
         AnalyzeTop(
             portrait,
             duplicateSets,
             directoryPairs,
-            scopePairs,
+            branchPairs,
             new DuplicateSettlements(),
             limit);
 
@@ -26,7 +26,7 @@ public sealed class CaseAnalyzer(IFileSystem fileSystem)
         Portrait portrait,
         IReadOnlyList<DuplicateSet> duplicateSets,
         IReadOnlyList<DirectoryPair> directoryPairs,
-        IReadOnlyList<ScopePair> scopePairs,
+        IReadOnlyList<BranchPair> branchPairs,
         DuplicateSettlements settlements,
         int limit = 25)
     {
@@ -61,7 +61,7 @@ public sealed class CaseAnalyzer(IFileSystem fileSystem)
         }
 
         var candidates = new List<CaseCandidate>(
-            unresolvedDuplicateSets.Length + internalDuplicateContents.Count + directoryPairs.Count + scopePairs.Count);
+            unresolvedDuplicateSets.Length + internalDuplicateContents.Count + directoryPairs.Count + branchPairs.Count);
 
         candidates.AddRange(unresolvedDuplicateSets.Select(set =>
             new CaseCandidate(1, "DuplicateSet", set.Content.Value, () => new DuplicateSetCase(set))));
@@ -81,9 +81,9 @@ public sealed class CaseAnalyzer(IFileSystem fileSystem)
                         fileSystem.PathsEqual(file.ParentDirectory, pair.First)
                         || fileSystem.PathsEqual(file.ParentDirectory, pair.Second)).ToArray()))));
 
-        candidates.AddRange(scopePairs.Select(pair =>
-            new CaseCandidate(pair.Leverage, "ScopePair", pair.FirstRoot.Value + "\n" + pair.SecondRoot.Value, () =>
-                new ScopePairCase(
+        candidates.AddRange(branchPairs.Select(pair =>
+            new CaseCandidate(pair.Leverage, "BranchPair", pair.FirstRoot.Value + "\n" + pair.SecondRoot.Value, () =>
+                new BranchPairCase(
                     pair,
                     portrait.Files.Where(file =>
                         IsInEffectiveSide(file.ParentDirectory, pair.FirstRoot, pair.SecondRoot)
@@ -114,7 +114,7 @@ public sealed class CaseAnalyzer(IFileSystem fileSystem)
             unresolvedDuplicateSets.Length,
             internalDuplicateContents.Count,
             directoryPairs.Count,
-            scopePairs.Count,
+            branchPairs.Count,
             new CaseAnalysisTiming(
                 candidateConstructionElapsed,
                 rankingElapsed,
