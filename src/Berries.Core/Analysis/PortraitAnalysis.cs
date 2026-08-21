@@ -5,4 +5,4 @@ public sealed record PortraitAnalysis(
     IReadOnlyList<DuplicateSet> DuplicateSets,
     IReadOnlyList<DirectoryRecord> Directories,
     IReadOnlyList<DirectoryPair> DirectoryPairs,
-    IReadOnlyList<ScopePair> ScopePairs);
+    IReadOnlyList<BranchPair> BranchPairs);
