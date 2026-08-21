@@ -8,7 +8,7 @@ namespace Berries.Core.Tests;
 public sealed class StructuralEvidenceTests
 {
     [Fact]
-    public void AnalyzeScopePair_FindsContributingPairs_Coverage_Subsidiaries_AndBreadth()
+    public void AnalyzeBranchPair_FindsContributingPairs_Coverage_Subsidiaries_AndBreadth()
     {
         var fs = new TestFileSystem();
         var analyzer = new StructuralEvidenceAnalyzer(fs);
@@ -23,17 +23,17 @@ public sealed class StructuralEvidenceTests
             new DuplicateSet(new ContentId("03"), new[] { onlyA, onlyACopy }) };
         var portraitFiles = new[] { fA1, fB1, fA2, fB2, onlyA, onlyACopy };
         var directoryPairs = new[] { new DirectoryPair(a1, b1, 1), new DirectoryPair(a2, b2, 1) };
-        var parent = new ScopePair(a, b, 2, 2); var child = new ScopePair(a1, b1, 1, 1); var other = new ScopePair(a1, a2, 1, 1);
-        var evidence = analyzer.AnalyzeScopePair(parent, portraitFiles, duplicateSets, directoryPairs, new[] { parent, child, other });
+        var parent = new BranchPair(a, b, 2, 2); var child = new BranchPair(a1, b1, 1, 1); var other = new BranchPair(a1, a2, 1, 1);
+        var evidence = analyzer.AnalyzeBranchPair(parent, portraitFiles, duplicateSets, directoryPairs, new[] { parent, child, other });
 
         Assert.False(evidence.RootsNested);
         Assert.Equal(3, evidence.FirstSideDuplicateContentCount); Assert.Equal(2, evidence.SecondSideDuplicateContentCount);
         Assert.Equal(3, evidence.FirstSideBreadth.DirectoryCount); Assert.Equal(4, evidence.FirstSideBreadth.FileCount);
         Assert.Equal(2, evidence.SecondSideBreadth.DirectoryCount); Assert.Equal(2, evidence.SecondSideBreadth.FileCount);
         Assert.Equal(2, evidence.FirstSideBreadth.CrossingDirectoryCount); Assert.Equal(2, evidence.SecondSideBreadth.CrossingDirectoryCount);
-        Assert.Equal(1, evidence.SubsidiaryScopePairCount);
+        Assert.Equal(1, evidence.SubsidiaryBranchPairCount);
         Assert.Equal(0, evidence.SubsidiariesAtNinetyPercentLeverage);
-        var childSummary = Assert.Single(evidence.StrongestSubsidiaryScopePairs);
+        var childSummary = Assert.Single(evidence.StrongestSubsidiaryBranchPairs);
         Assert.Equal(child, childSummary.Pair);
         Assert.Equal(1, childSummary.FirstSideBreadth.DirectoryCount); Assert.Equal(1, childSummary.FirstSideBreadth.FileCount);
         Assert.Equal(1, childSummary.SecondSideBreadth.DirectoryCount); Assert.Equal(1, childSummary.SecondSideBreadth.FileCount);
@@ -45,7 +45,7 @@ public sealed class StructuralEvidenceTests
     }
 
     [Fact]
-    public void AnalyzeScopePair_RecognizesNestedRoots_AndExcludesDescendantSubtreeFromAncestorSide()
+    public void AnalyzeBranchPair_RecognizesNestedRoots_AndExcludesDescendantSubtreeFromAncestorSide()
     {
         var analyzer = new StructuralEvidenceAnalyzer(new TestFileSystem());
         var parent = Path(@"X:\Corpus\Parent"); var child = Path(@"X:\Corpus\Parent\Child");
@@ -53,14 +53,14 @@ public sealed class StructuralEvidenceTests
         var crossing = new DuplicateSet(new ContentId("cross"), new[] { File(outside, "a"), File(inside, "b") });
         var internalChild = new DuplicateSet(new ContentId("internal"), new[] { File(inside, "c"), File(inside, "d") });
         var portraitFiles = crossing.Files.Concat(internalChild.Files).ToArray();
-        var pair = new ScopePair(parent, child, 1, 1);
-        var evidence = analyzer.AnalyzeScopePair(pair, portraitFiles, new[] { crossing, internalChild }, new[] { new DirectoryPair(outside, inside, 1) }, new[] { pair });
+        var pair = new BranchPair(parent, child, 1, 1);
+        var evidence = analyzer.AnalyzeBranchPair(pair, portraitFiles, new[] { crossing, internalChild }, new[] { new DirectoryPair(outside, inside, 1) }, new[] { pair });
 
         Assert.True(evidence.RootsNested); Assert.Equal(1, evidence.FirstSideDuplicateContentCount); Assert.Equal(2, evidence.SecondSideDuplicateContentCount);
         Assert.Equal(1, evidence.FirstSideBreadth.DirectoryCount); Assert.Equal(1, evidence.FirstSideBreadth.FileCount);
         Assert.Equal(1, evidence.SecondSideBreadth.DirectoryCount); Assert.Equal(3, evidence.SecondSideBreadth.FileCount);
         Assert.Equal(1, evidence.FirstSideBreadth.CrossingDirectoryCount); Assert.Equal(1, evidence.SecondSideBreadth.CrossingDirectoryCount);
-        Assert.Empty(evidence.StrongestSubsidiaryScopePairs); Assert.Single(evidence.StrongestContributingDirectoryPairs);
+        Assert.Empty(evidence.StrongestSubsidiaryBranchPairs); Assert.Single(evidence.StrongestContributingDirectoryPairs);
     }
 
     private static FileInstance File(FileSystemPath directory, string name) => new(Path(directory.Value + "\\" + name), 10, directory);
