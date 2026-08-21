@@ -4,56 +4,56 @@ using Berries.FileSystem.Abstractions;
 
 namespace Berries.Core.Analysis;
 
-public sealed record ScopeSideBreadth(
+public sealed record BranchSideBreadth(
     int DirectoryCount,
     int FileCount,
     int CrossingDirectoryCount);
 
-public sealed record ScopePairEvidenceTiming(
+public sealed record BranchPairEvidenceTiming(
     TimeSpan ContributingDirectoryPairs,
-    TimeSpan SubsidiaryScopePairs,
+    TimeSpan SubsidiaryBranchPairs,
     TimeSpan DuplicateContentCounts,
     TimeSpan ParentBreadth,
     TimeSpan SubsidiaryBreadth,
     TimeSpan Total);
 
-public sealed record ScopePairEvidence(
+public sealed record BranchPairEvidence(
     bool RootsNested,
     int FirstSideDuplicateContentCount,
     int SecondSideDuplicateContentCount,
-    ScopeSideBreadth FirstSideBreadth,
-    ScopeSideBreadth SecondSideBreadth,
-    int SubsidiaryScopePairCount,
+    BranchSideBreadth FirstSideBreadth,
+    BranchSideBreadth SecondSideBreadth,
+    int SubsidiaryBranchPairCount,
     int SubsidiariesAtNinetyPercentLeverage,
     int SubsidiariesAtNinetyFivePercentLeverage,
     int SubsidiariesAtNinetyNinePercentLeverage,
-    IReadOnlyList<ScopePairEvidenceSummary> StrongestSubsidiaryScopePairs,
+    IReadOnlyList<BranchPairEvidenceSummary> StrongestSubsidiaryBranchPairs,
     IReadOnlyList<DirectoryPair> StrongestContributingDirectoryPairs,
     long ContributingWeightedLeverage,
     double StrongestDirectoryPairConcentration,
     double TopFiveDirectoryPairConcentration,
     double TopTenDirectoryPairConcentration,
-    ScopePairEvidenceTiming Timing);
+    BranchPairEvidenceTiming Timing);
 
-public sealed record ScopePairEvidenceSummary(
-    ScopePair Pair,
-    ScopeSideBreadth FirstSideBreadth,
-    ScopeSideBreadth SecondSideBreadth,
+public sealed record BranchPairEvidenceSummary(
+    BranchPair Pair,
+    BranchSideBreadth FirstSideBreadth,
+    BranchSideBreadth SecondSideBreadth,
     int FirstRootDepthChange,
     int SecondRootDepthChange);
 
 /// <summary>
 /// Computes inexpensive objective evidence for sampled structural cases without enlarging
-/// the persistent ScopePair graph.
+/// the persistent BranchPair graph.
 /// </summary>
 public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
 {
-    public ScopePairEvidence AnalyzeScopePair(
-        ScopePair pair,
+    public BranchPairEvidence AnalyzeBranchPair(
+        BranchPair pair,
         IReadOnlyList<FileInstance> portraitFiles,
         IReadOnlyList<DuplicateSet> duplicateSets,
         IReadOnlyList<DirectoryPair> directoryPairs,
-        IReadOnlyList<ScopePair> scopePairs,
+        IReadOnlyList<BranchPair> branchPairs,
         int limit = 10)
     {
         var totalTimer = Stopwatch.StartNew();
@@ -79,12 +79,12 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
         var contributingElapsed = phaseTimer.Elapsed;
 
         phaseTimer.Restart();
-        var strongestSubsidiaries = new List<ScopePair>();
+        var strongestSubsidiaries = new List<BranchPair>();
         var subsidiaryCount = 0;
         var atNinety = 0;
         var atNinetyFive = 0;
         var atNinetyNine = 0;
-        foreach (var candidate in scopePairs)
+        foreach (var candidate in branchPairs)
         {
             if (!IsStrictSubsidiary(candidate, pair))
                 continue;
@@ -94,7 +94,7 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
             if (ratio >= 0.90) atNinety++;
             if (ratio >= 0.95) atNinetyFive++;
             if (ratio >= 0.99) atNinetyNine++;
-            InsertStrongest(strongestSubsidiaries, candidate, limit, CompareScopePairs);
+            InsertStrongest(strongestSubsidiaries, candidate, limit, CompareBranchPairs);
         }
         phaseTimer.Stop();
         var subsidiaryElapsed = phaseTimer.Elapsed;
@@ -118,7 +118,7 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
             {
                 var candidateBreadth = GetBreadth(candidate, portraitFiles, null, null);
                 var oriented = OrientSubsidiary(candidate, pair);
-                return new ScopePairEvidenceSummary(
+                return new BranchPairEvidenceSummary(
                     candidate,
                     candidateBreadth.First,
                     candidateBreadth.Second,
@@ -130,7 +130,7 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
         var subsidiaryBreadthElapsed = phaseTimer.Elapsed;
 
         totalTimer.Stop();
-        return new ScopePairEvidence(
+        return new BranchPairEvidence(
             fileSystem.IsDescendant(pair.FirstRoot, pair.SecondRoot)
                 || fileSystem.IsDescendant(pair.SecondRoot, pair.FirstRoot),
             firstSideContentCount,
@@ -147,7 +147,7 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
             Ratio(contributing.Take(1).Sum(item => item.Leverage), contributingWeightedLeverage),
             Ratio(contributing.Take(5).Sum(item => item.Leverage), contributingWeightedLeverage),
             Ratio(contributing.Take(10).Sum(item => item.Leverage), contributingWeightedLeverage),
-            new ScopePairEvidenceTiming(
+            new BranchPairEvidenceTiming(
                 contributingElapsed,
                 subsidiaryElapsed,
                 duplicateContentElapsed,
@@ -156,7 +156,7 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
                 totalTimer.Elapsed));
     }
 
-    public bool IsStrictSubsidiary(ScopePair candidate, ScopePair parent)
+    public bool IsStrictSubsidiary(BranchPair candidate, BranchPair parent)
     {
         if (SameUnorderedPair(candidate, parent))
             return false;
@@ -167,8 +167,8 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
                 && IsInEffectiveSide(candidate.FirstRoot, parent.SecondRoot, parent.FirstRoot));
     }
 
-    private (ScopeSideBreadth First, ScopeSideBreadth Second) GetBreadth(
-        ScopePair pair,
+    private (BranchSideBreadth First, BranchSideBreadth Second) GetBreadth(
+        BranchPair pair,
         IReadOnlyList<FileInstance> portraitFiles,
         IReadOnlySet<FileSystemPath>? firstCrossingDirectories,
         IReadOnlySet<FileSystemPath>? secondCrossingDirectories)
@@ -193,11 +193,11 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
         }
 
         return (
-            new ScopeSideBreadth(firstDirectories.Count, firstFiles, firstCrossingDirectories?.Count ?? 0),
-            new ScopeSideBreadth(secondDirectories.Count, secondFiles, secondCrossingDirectories?.Count ?? 0));
+            new BranchSideBreadth(firstDirectories.Count, firstFiles, firstCrossingDirectories?.Count ?? 0),
+            new BranchSideBreadth(secondDirectories.Count, secondFiles, secondCrossingDirectories?.Count ?? 0));
     }
 
-    private (FileSystemPath FirstRoot, FileSystemPath SecondRoot) OrientSubsidiary(ScopePair candidate, ScopePair parent)
+    private (FileSystemPath FirstRoot, FileSystemPath SecondRoot) OrientSubsidiary(BranchPair candidate, BranchPair parent)
     {
         if (IsInEffectiveSide(candidate.FirstRoot, parent.FirstRoot, parent.SecondRoot)
             && IsInEffectiveSide(candidate.SecondRoot, parent.SecondRoot, parent.FirstRoot))
@@ -222,7 +222,7 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
         return current is null ? 0 : depth;
     }
 
-    private bool SameUnorderedPair(ScopePair first, ScopePair second) =>
+    private bool SameUnorderedPair(BranchPair first, BranchPair second) =>
         (fileSystem.PathsEqual(first.FirstRoot, second.FirstRoot)
             && fileSystem.PathsEqual(first.SecondRoot, second.SecondRoot))
         || (fileSystem.PathsEqual(first.FirstRoot, second.SecondRoot)
@@ -231,7 +231,7 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
     private bool TryOrientAcrossEffectiveSides(
         FileSystemPath firstDirectory,
         FileSystemPath secondDirectory,
-        ScopePair pair,
+        BranchPair pair,
         out FileSystemPath firstSideDirectory,
         out FileSystemPath secondSideDirectory)
     {
@@ -289,7 +289,7 @@ public sealed class StructuralEvidenceAnalyzer(IFileSystem fileSystem)
         return result != 0 ? result : StringComparer.Ordinal.Compare(first.Second.Value, second.Second.Value);
     }
 
-    private static int CompareScopePairs(ScopePair first, ScopePair second)
+    private static int CompareBranchPairs(BranchPair first, BranchPair second)
     {
         var result = second.Leverage.CompareTo(first.Leverage);
         if (result != 0) return result;
