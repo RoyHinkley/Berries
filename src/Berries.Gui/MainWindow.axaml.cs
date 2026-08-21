@@ -1,3 +1,4 @@
+using System.Text;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -66,6 +67,23 @@ public partial class MainWindow : Window
             FileCountText.Text = duplicates.Portrait.Files.Count.ToString("N0");
             TotalBytesText.Text = duplicates.Portrait.Files.Sum(file => file.Length).ToString("N0");
 
+            StatusText.Text = "Screening distributed duplicate sets...";
+            var candidates = controller.FindSprinkledDuplicateCandidates();
+            IReadOnlyList<SprinkledDuplicateCandidate> accepted = [];
+            if (candidates.Count > 0)
+            {
+                var dialog = new SprinkledDuplicateDialog(candidates);
+                var selection = await dialog.ShowDialog<IReadOnlyList<SprinkledDuplicateCandidate>?>(this);
+                if (selection is null)
+                {
+                    StatusText.Text = "Analysis canceled during duplicate settlement review.";
+                    return;
+                }
+
+                accepted = selection;
+                controller.AcceptWholeDuplicateSets(accepted);
+            }
+
             StatusText.Text = "Analyzing directory relationships...";
             var directories = await controller.AnalyzeDirectoriesAsync();
             DirectoryCountText.Text = directories.Directories.Count.ToString("N0");
@@ -97,19 +115,13 @@ public partial class MainWindow : Window
                 scopes,
                 evidenceAnalyzer);
 
-            StatusText.Text = "Comparing a prospective whole-DuplicateSet settlement...";
-            var comparison = await controller.CompareProspectiveWholeSetSettlementAsync(25);
-            if (comparison is not null)
-                report += SettlementComparisonFormatter.Format(comparison);
-            else
-                report += "\nProspective whole-DuplicateSet settlement comparison\n  no same-name, one-instance-per-directory candidate with at least three instances was found.\n";
-
+            report += FormatEarlySettlementSummary(candidates, accepted);
             CasesReportText.Text = report;
 
             var evictionText = duplicates.Evictions.Count == 0
                 ? string.Empty
                 : $" {duplicates.Evictions.Count:N0} inaccessible file(s) removed from the portrait.";
-            StatusText.Text = $"Analysis complete: {cases.TotalCaseCount:N0} baseline cases; showing top {cases.TopCases.Count:N0}." + evictionText;
+            StatusText.Text = $"Analysis complete: {cases.TotalCaseCount:N0} cases after {accepted.Count:N0} accepted distributed DuplicateSet(s); showing top {cases.TopCases.Count:N0}." + evictionText;
         }
         catch (Exception ex)
         {
@@ -119,6 +131,22 @@ public partial class MainWindow : Window
         {
             SetControlsEnabled(true);
         }
+    }
+
+    private static string FormatEarlySettlementSummary(
+        IReadOnlyList<SprinkledDuplicateCandidate> candidates,
+        IReadOnlyList<SprinkledDuplicateCandidate> accepted)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine();
+        builder.AppendLine("Early distributed-DuplicateSet review");
+        builder.AppendLine($"  screened candidates: {candidates.Count:N0}");
+        builder.AppendLine($"  accepted retain-all settlements: {accepted.Count:N0}");
+
+        foreach (var candidate in accepted)
+            builder.AppendLine($"    {candidate.FileName}  ({candidate.DirectoryCount:N0} folders)");
+
+        return builder.ToString();
     }
 
     private void RefreshRoots()
