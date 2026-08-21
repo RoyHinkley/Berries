@@ -47,6 +47,24 @@ This subtraction occurs when physical duplicate equality is converted into struc
 
 Whole-DuplicateSet settlement is particularly important because one widely repeated Content can induce many DirectoryPairs and many higher-level ScopePairs. One user decision can therefore remove substantially more future decision work than the DuplicateSet Case alone suggests.
 
+## Early distributed-DuplicateSet review
+
+Before constructing DirectoryPairs, Berries may cheaply screen DuplicateSets for objective patterns likely to support a simple retain-all Resolution.
+
+The current exploratory phenotype is:
+
+    every instance has the same filename
+    exactly one instance occurs in each represented directory
+    at least three distinct directories are represented
+
+These conditions are inexpensive because they use only already-discovered DuplicateSet membership and paths. They do not establish a Situation. Instead, they identify Cases for which the user can answer one compact question: whether all copies are intentionally distributed and should be retained.
+
+The current GUI presents all such candidates in one checklist, ordered by descending directory count. Nothing is preselected. Checked candidates become whole-DuplicateSet settlements before DirectoryPair construction.
+
+This is deliberately a grouped question over multiple Cases. If several Cases can be settled through one short interaction, the resulting reduction in user effort is itself part of the program objective. Persistent filename-based or other user-approved rules may later preselect known cases, but no such rule system is currently implemented.
+
+The empirical purpose is to compare a settlement-aware run against a no-settlement baseline on the same physical corpus and measure the aggregate reduction in DirectoryPairs, ScopePairs, total Cases, graph complexity, and analysis cost.
+
 ## Build Directory records
 
 Include directories represented by unresolved duplicate relationships.
@@ -241,18 +259,9 @@ Useful objective dimensions already identified include:
 
 Case ordering is therefore an open empirical problem. Do not prematurely collapse these characteristics into an unexplained weighted scalar.
 
-## Prospective settlement experiments
+## Settlement-impact experiments
 
-A useful way to evaluate decision impact is to compare two analyses over identical physical data:
-
-    baseline
-        analyze the unresolved duplicate state normally
-
-    prospective settlement
-        accept one candidate DuplicateSet or relationship without changing the
-        Portrait, then rebuild downstream analysis
-
-Compare at least:
+A useful way to evaluate decision impact is to compare analyses over identical physical data before and after user-approved settlements. Compare at least:
 
     unresolved DuplicateSet Cases
     Single-directory Cases
@@ -263,9 +272,7 @@ Compare at least:
     top-Case membership/order
     phase timing
 
-The current exploratory GUI automatically selects a broad same-name, one-instance-per-directory DuplicateSet candidate, performs such a non-mutating A/B rerun, and reports the resulting deltas. This is diagnostic machinery, not a presentation heuristic or automatic settlement policy.
-
-One promising future phenotype is a same-name Content appearing once in many otherwise weakly related directories. `.gitignore`-type files and standard repository hook samples are examples, but production heuristics should be expressed in objective structural characteristics rather than hard-coded filenames.
+The early distributed-DuplicateSet review now provides a natural aggregate experiment: one run establishes the no-settlement baseline; the next run over the same corpus asks the user which cheaply recognized DuplicateSets should be retained everywhere, then constructs all structural analysis from the reduced unresolved evidence.
 
 User-approved rules may eventually generalize a Resolution across objectively identifiable similar Cases. A heuristic can suggest similarity; a rule would explicitly authorize applying the same Resolution to matching Cases.
 
