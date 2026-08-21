@@ -72,10 +72,10 @@ public sealed class BerriesEngine
 
     public Task<ScopeAnalysisResult> AnalyzeScopesAsync(
         Corpus corpus,
-        IReadOnlyList<DuplicateSet> duplicateSets,
+        IReadOnlyList<DirectoryPair> directoryPairs,
         CancellationToken cancellationToken = default) =>
         Task.Run(
-            () => AnalyzeScopes(corpus, duplicateSets, cancellationToken),
+            () => AnalyzeScopes(corpus, directoryPairs, cancellationToken),
             cancellationToken);
 
     private Portrait BuildInitialPortrait(
@@ -316,35 +316,12 @@ public sealed class BerriesEngine
 
     private ScopeAnalysisResult AnalyzeScopes(
         Corpus corpus,
-        IReadOnlyList<DuplicateSet> duplicateSets,
+        IReadOnlyList<DirectoryPair> directoryPairs,
         CancellationToken cancellationToken)
     {
         var totalTimer = Stopwatch.StartNew();
         var phaseTimer = Stopwatch.StartNew();
-
-        var evidence = new List<(FileSystemPath First, FileSystemPath Second)>();
-
-        foreach (var duplicateSet in duplicateSets)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var representedDirectories = duplicateSet.Files
-                .Select(file => file.ParentDirectory)
-                .Distinct()
-                .OrderBy(path => path.Value, StringComparer.Ordinal)
-                .ToArray();
-
-            for (var firstIndex = 0; firstIndex < representedDirectories.Length - 1; firstIndex++)
-            {
-                for (var secondIndex = firstIndex + 1; secondIndex < representedDirectories.Length; secondIndex++)
-                {
-                    evidence.Add((
-                        representedDirectories[firstIndex],
-                        representedDirectories[secondIndex]));
-                }
-            }
-        }
-
+        var evidence = directoryPairs.Where(pair => pair.Leverage > 0).ToArray();
         phaseTimer.Stop();
         var evidenceElapsed = phaseTimer.Elapsed;
 
@@ -377,8 +354,8 @@ public sealed class BerriesEngine
                         accumulators[roots] = accumulator;
                     }
 
-                    accumulator.Leverage++;
-                    accumulator.DirectoryPairs.Add(directPair);
+                    if (accumulator.DirectoryPairs.Add(directPair))
+                        accumulator.Leverage += edge.Leverage;
                 }
             }
         }
