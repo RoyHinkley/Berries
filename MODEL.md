@@ -67,17 +67,17 @@ For duplicate-analysis statistics, a Directory record describes Files directly c
 
 An unordered pair of distinct directories having one or more distinct unresolved duplicated Contents directly represented in both directories. DirectoryPair describes local/direct shared Content only.
 
-### Scope
+### Branch
 
-A directory and all of its descendants.
+A directory together with all of its descendants. `Branch` is the formal tree-structural term; `scope` remains available in ordinary discussion for any chosen analytical context or bounded region.
 
-### ScopePair
+### BranchPair
 
-An unordered pair of distinct directory-rooted Scopes for which descendant DirectoryPairs provide shared-content evidence. A ScopePair can exist even when its two root directories have no directly shared Files.
+An unordered pair of distinct directory-rooted Branches for which descendant DirectoryPairs provide shared-content evidence. A BranchPair can exist even when its two root directories have no directly shared Files.
 
-The two effective sides of a ScopePair are always disjoint. If one root is a descendant of the other, the descendant subtree is omitted from the ancestor side and becomes the other effective side. Canonical pair ordering has no semantic relationship to ancestry. Identical roots are invalid.
+The two effective sides of a BranchPair are always disjoint. If one root is a descendant of the other, the descendant subtree is omitted from the ancestor side and becomes the other effective side. Canonical pair ordering has no semantic relationship to ancestry. Identical roots are invalid.
 
-A nested ScopePair is best understood as a **cut through a containing tree**. Moving the descendant root moves the cut: material formerly on the descendant side can move to the ancestor side. Consequently, moving a root downward can increase or decrease leverage even though no duplicate relationship in the Portrait has changed.
+A nested BranchPair is best understood as a **cut through a containing tree**. Moving the descendant root moves the cut: material formerly on the descendant side can move to the ancestor side. Consequently, moving a root downward can increase or decrease leverage even though no duplicate relationship in the Portrait has changed.
 
 ### Bounded
 
@@ -94,6 +94,8 @@ A structural Case may include unique Files because those Files can matter to the
 Most importantly, **a Case need not resolve all duplication within its bounds; it should resolve the duplication that caused that Case to exist.** Internal or otherwise unrelated duplication can remain for other Cases.
 
 The defining unresolved duplication pattern is therefore part of the Case's meaning, even when the Case bounds contain additional Files.
+
+A useful analytical bias follows: settle duplication at the lowest structural level that supports a coherent semantic question. If a DuplicateSet can be naturally resolved on its own, promoting its evidence into DirectoryPair or BranchPair Cases can create weaker and less coherent questions.
 
 Contextual question:
 
@@ -207,13 +209,19 @@ By Case type:
         leverage = distinct unresolved duplicated Contents represented directly
                    in both directories
 
-    ScopePair Case
+    BranchPair Case
         current experimental leverage = weighted cut size: the sum of
                    DirectoryPair leverage crossing the effective-side cut
 
-The ScopePair measure intentionally allows one Content to contribute through several DirectoryPairs. Earlier code counted each crossing Content exactly once. Real-corpus testing showed that the two measures can produce materially different Case orderings; neither ordering has yet been established as generally preferable.
+The BranchPair measure intentionally allows one Content to contribute through several DirectoryPairs. Earlier code counted each crossing Content exactly once. Real-corpus testing showed that the two measures can produce materially different Case orderings; neither ordering has yet been established as generally preferable.
 
 The actual presentation objective is reduction of user decision work. Leverage, structural weight, specificity, settlement impact, and other objective characteristics are evidence toward that objective.
+
+### Deletion safety
+
+Duplicate identity alone does not imply that an instance is safe to remove. A File can occupy a required location in an application-managed, repository-managed, generated, cached, deployed, or otherwise externally maintained structure even when identical Content exists elsewhere.
+
+Such structures can still provide valuable evidence for understanding relationships among branches. The future safety model may therefore distinguish analytical visibility from destructive authority: Berries can observe duplicates in a region without automatically treating individual Files there as deletion candidates.
 
 ### Hidden
 
