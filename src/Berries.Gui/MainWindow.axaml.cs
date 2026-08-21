@@ -93,11 +93,11 @@ public partial class MainWindow : Window
                 .Select(pair => $"{pair.Leverage,6:N0}    {pair.First.Value}    ↔    {pair.Second.Value}")
                 .ToArray();
 
-            StatusText.Text = "Analyzing scope relationships...";
-            var scopes = await controller.AnalyzeScopesAsync();
-            ScopePairCountText.Text = scopes.ScopePairs.Count.ToString("N0");
-            ScopeAnalysisElapsedText.Text = FormatElapsed(scopes.Timing.Total);
-            ScopePairsList.ItemsSource = scopes.ScopePairs.Take(25)
+            StatusText.Text = "Analyzing branch relationships...";
+            var branches = await controller.AnalyzeBranchesAsync();
+            BranchPairCountText.Text = branches.BranchPairs.Count.ToString("N0");
+            BranchAnalysisElapsedText.Text = FormatElapsed(branches.Timing.Total);
+            BranchPairsList.ItemsSource = branches.BranchPairs.Take(25)
                 .Select(pair => $"{pair.Leverage,6:N0}  [{pair.DirectoryPairCount,5:N0}]    {pair.FirstRoot.Value}    ↔    {pair.SecondRoot.Value}")
                 .ToArray();
 
@@ -112,7 +112,7 @@ public partial class MainWindow : Window
                 controller.Portrait!.Files,
                 duplicateDiscovery.DuplicateSets,
                 directories,
-                scopes,
+                branches,
                 evidenceAnalyzer);
 
             report += FormatEarlySettlementSummary(candidates, accepted);
@@ -170,10 +170,10 @@ public partial class MainWindow : Window
         DirectoryCountText.Text = "—";
         DirectoryPairCountText.Text = "—";
         DirectoryAnalysisElapsedText.Text = "—";
-        ScopePairCountText.Text = "—";
-        ScopeAnalysisElapsedText.Text = "—";
+        BranchPairCountText.Text = "—";
+        BranchAnalysisElapsedText.Text = "—";
         DirectoryPairsList.ItemsSource = null;
-        ScopePairsList.ItemsSource = null;
+        BranchPairsList.ItemsSource = null;
         CasesReportText.Text = string.Empty;
     }
 
