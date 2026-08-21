@@ -18,7 +18,7 @@ public sealed record DirectoryPairCase(
     IReadOnlyList<FileInstance> BoundedFiles)
     : Case(BoundedFiles, Pair.SharedContentCount);
 
-public sealed record ScopePairCase(
-    ScopePair Pair,
+public sealed record BranchPairCase(
+    BranchPair Pair,
     IReadOnlyList<FileInstance> BoundedFiles)
     : Case(BoundedFiles, Pair.Leverage);
