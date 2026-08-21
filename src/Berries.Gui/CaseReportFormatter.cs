@@ -17,7 +17,7 @@ internal static class CaseReportFormatter
         IReadOnlyList<FileInstance> portraitFiles,
         IReadOnlyList<DuplicateSet> duplicateSets,
         DirectoryAnalysisResult directoryAnalysis,
-        ScopeAnalysisResult scopeAnalysis,
+        BranchAnalysisResult branchAnalysis,
         StructuralEvidenceAnalyzer evidenceAnalyzer)
     {
         var reportTimer = Stopwatch.StartNew();
@@ -25,7 +25,7 @@ internal static class CaseReportFormatter
         var records = directoryAnalysis.Directories.ToDictionary(record => record.Path);
         var nodes = directoryAnalysis.Graph.Nodes.ToDictionary(node => node.Directory);
 
-        AppendRunSummary(builder, scan, duplicateDiscovery, directoryAnalysis, scopeAnalysis, result);
+        AppendRunSummary(builder, scan, duplicateDiscovery, directoryAnalysis, branchAnalysis, result);
         builder.AppendLine();
         AppendGraphSummary(builder, directoryAnalysis.Graph);
         builder.AppendLine();
@@ -33,8 +33,8 @@ internal static class CaseReportFormatter
                            $"[duplicate sets {result.DuplicateSetCaseCount:N0}, " +
                            $"single directories {result.SingleDirectoryCaseCount:N0}, " +
                            $"directory pairs {result.DirectoryPairCaseCount:N0}, " +
-                           $"scope pairs {result.ScopePairCaseCount:N0}]");
-        AppendLeverageDistributions(builder, duplicateSets, directoryAnalysis, scopeAnalysis);
+                           $"branch pairs {result.BranchPairCaseCount:N0}]");
+        AppendLeverageDistributions(builder, duplicateSets, directoryAnalysis, branchAnalysis);
         builder.AppendLine($"Top {result.TopCases.Count:N0} by leverage");
         builder.AppendLine();
 
@@ -62,13 +62,13 @@ internal static class CaseReportFormatter
                 case DirectoryPairCase pair:
                     AppendDirectoryPair(builder, pair.Pair, records, nodes);
                     break;
-                case ScopePairCase pair:
-                    var timing = AppendScopePair(builder, pair, portraitFiles, duplicateSets,
-                        directoryAnalysis, scopeAnalysis, evidenceAnalyzer, records, nodes);
+                case BranchPairCase pair:
+                    var timing = AppendBranchPair(builder, pair, portraitFiles, duplicateSets,
+                        directoryAnalysis, branchAnalysis, evidenceAnalyzer, records, nodes);
                     evidenceCases++;
                     evidenceTotal += timing.Total;
                     contributingTotal += timing.ContributingDirectoryPairs;
-                    subsidiariesTotal += timing.SubsidiaryScopePairs;
+                    subsidiariesTotal += timing.SubsidiaryBranchPairs;
                     duplicateCountsTotal += timing.DuplicateContentCounts;
                     parentBreadthTotal += timing.ParentBreadth;
                     subsidiaryBreadthTotal += timing.SubsidiaryBreadth;
@@ -79,9 +79,9 @@ internal static class CaseReportFormatter
 
         reportTimer.Stop();
         builder.AppendLine("Report-generation timing");
-        builder.AppendLine($"  sampled ScopePair evidence: {FormatElapsed(evidenceTotal)} across {evidenceCases:N0} case(s)");
+        builder.AppendLine($"  sampled BranchPair evidence: {FormatElapsed(evidenceTotal)} across {evidenceCases:N0} case(s)");
         builder.AppendLine($"    contributing DirectoryPair scans: {FormatElapsed(contributingTotal)}");
-        builder.AppendLine($"    subsidiary ScopePair scans:       {FormatElapsed(subsidiariesTotal)}");
+        builder.AppendLine($"    subsidiary BranchPair scans:      {FormatElapsed(subsidiariesTotal)}");
         builder.AppendLine($"    duplicate-content counts:         {FormatElapsed(duplicateCountsTotal)}");
         builder.AppendLine($"    parent breadth:                    {FormatElapsed(parentBreadthTotal)}");
         builder.AppendLine($"    subsidiary breadth:                {FormatElapsed(subsidiaryBreadthTotal)}");
@@ -95,7 +95,7 @@ internal static class CaseReportFormatter
         ScanResult scan,
         DuplicateDiscoveryResult duplicateDiscovery,
         DirectoryAnalysisResult directoryAnalysis,
-        ScopeAnalysisResult scopeAnalysis,
+        BranchAnalysisResult branchAnalysis,
         CaseAnalysisResult caseAnalysis)
     {
         builder.AppendLine("Run summary");
@@ -107,14 +107,14 @@ internal static class CaseReportFormatter
                            $"{duplicateDiscovery.Portrait.Files.Sum(file => file.Length):N0} bytes; " +
                            $"evictions {duplicateDiscovery.Evictions.Count:N0}");
         builder.AppendLine($"  duplicate sets: {duplicateDiscovery.DuplicateSets.Count:N0}; duplicate files: {duplicateDiscovery.DuplicateFileCount:N0}");
-        builder.AppendLine($"  analyzed directories: {directoryAnalysis.Directories.Count:N0}; DirectoryPairs: {directoryAnalysis.DirectoryPairs.Count:N0}; ScopePairs: {scopeAnalysis.ScopePairs.Count:N0}");
+        builder.AppendLine($"  analyzed directories: {directoryAnalysis.Directories.Count:N0}; DirectoryPairs: {directoryAnalysis.DirectoryPairs.Count:N0}; BranchPairs: {branchAnalysis.BranchPairs.Count:N0}");
         builder.AppendLine("  measured phase times:");
         builder.AppendLine($"    scan total:              {FormatElapsed(scan.TotalElapsed)}  [normalize {FormatElapsed(scan.CorpusNormalizationElapsed)}, portrait {FormatElapsed(scan.PortraitAcquisitionElapsed)}]");
         builder.AppendLine($"    duplicate discovery:     {FormatElapsed(duplicateDiscovery.Timing.Total)}  [size grouping {FormatElapsed(duplicateDiscovery.Timing.SizeGrouping)}, hashing {FormatElapsed(duplicateDiscovery.Timing.ContentHashing)}, set construction {FormatElapsed(duplicateDiscovery.Timing.DuplicateSetConstruction)}]");
         builder.AppendLine($"    directory analysis:      {FormatElapsed(directoryAnalysis.Timing.Total)}  [records {FormatElapsed(directoryAnalysis.Timing.DirectoryRecords)}, pairs {FormatElapsed(directoryAnalysis.Timing.DirectoryPairs)}]");
-        builder.AppendLine($"    scope analysis:          {FormatElapsed(scopeAnalysis.Timing.Total)}  [evidence {FormatElapsed(scopeAnalysis.Timing.EvidenceConstruction)}, aggregation {FormatElapsed(scopeAnalysis.Timing.ScopeAggregation)}, results {FormatElapsed(scopeAnalysis.Timing.ResultConstruction)}]");
+        builder.AppendLine($"    branch analysis:         {FormatElapsed(branchAnalysis.Timing.Total)}  [evidence {FormatElapsed(branchAnalysis.Timing.EvidenceConstruction)}, aggregation {FormatElapsed(branchAnalysis.Timing.BranchAggregation)}, results {FormatElapsed(branchAnalysis.Timing.ResultConstruction)}]");
         builder.AppendLine($"    case analysis:           {FormatElapsed(caseAnalysis.Timing.Total)}  [candidates {FormatElapsed(caseAnalysis.Timing.CandidateConstruction)}, ranking {FormatElapsed(caseAnalysis.Timing.Ranking)}, materialization {FormatElapsed(caseAnalysis.Timing.Materialization)}]");
-        var subtotal = scan.TotalElapsed + duplicateDiscovery.Timing.Total + directoryAnalysis.Timing.Total + scopeAnalysis.Timing.Total + caseAnalysis.Timing.Total;
+        var subtotal = scan.TotalElapsed + duplicateDiscovery.Timing.Total + directoryAnalysis.Timing.Total + branchAnalysis.Timing.Total + caseAnalysis.Timing.Total;
         builder.AppendLine($"    measured pipeline subtotal (before report): {FormatElapsed(subtotal)}");
     }
 
@@ -122,13 +122,13 @@ internal static class CaseReportFormatter
         StringBuilder builder,
         IReadOnlyList<DuplicateSet> duplicateSets,
         DirectoryAnalysisResult directoryAnalysis,
-        ScopeAnalysisResult scopeAnalysis)
+        BranchAnalysisResult branchAnalysis)
     {
         builder.AppendLine("Leverage distributions (min / Q1 / median / Q3 / max):");
         AppendDistribution(builder, "DuplicateSet", Enumerable.Repeat(1, duplicateSets.Count));
         AppendDistribution(builder, "SingleDirectory", GetSingleDirectoryLeverages(duplicateSets));
         AppendDistribution(builder, "DirectoryPair", directoryAnalysis.DirectoryPairs.Select(item => item.Leverage));
-        AppendDistribution(builder, "ScopePair", scopeAnalysis.ScopePairs.Select(item => item.Leverage));
+        AppendDistribution(builder, "BranchPair", branchAnalysis.BranchPairs.Select(item => item.Leverage));
     }
 
     private static IEnumerable<int> GetSingleDirectoryLeverages(IReadOnlyList<DuplicateSet> duplicateSets)
@@ -202,16 +202,16 @@ internal static class CaseReportFormatter
         AppendDirectoryPairStats(builder, pair, records, nodes, "  ");
     }
 
-    private static ScopePairEvidenceTiming AppendScopePair(StringBuilder builder, ScopePairCase item,
+    private static BranchPairEvidenceTiming AppendBranchPair(StringBuilder builder, BranchPairCase item,
         IReadOnlyList<FileInstance> portraitFiles, IReadOnlyList<DuplicateSet> duplicateSets,
-        DirectoryAnalysisResult directoryAnalysis, ScopeAnalysisResult scopeAnalysis,
+        DirectoryAnalysisResult directoryAnalysis, BranchAnalysisResult branchAnalysis,
         StructuralEvidenceAnalyzer evidenceAnalyzer,
         IReadOnlyDictionary<FileSystemPath, DirectoryRecord> records,
         IReadOnlyDictionary<FileSystemPath, DirectoryGraphNode> nodes)
     {
         var pair = item.Pair;
-        var evidence = evidenceAnalyzer.AnalyzeScopePair(pair, portraitFiles, duplicateSets,
-            directoryAnalysis.DirectoryPairs, scopeAnalysis.ScopePairs, 10);
+        var evidence = evidenceAnalyzer.AnalyzeBranchPair(pair, portraitFiles, duplicateSets,
+            directoryAnalysis.DirectoryPairs, branchAnalysis.BranchPairs, 10);
         var minimumCoverage = Math.Min(Ratio(pair.Leverage, evidence.FirstSideDuplicateContentCount), Ratio(pair.Leverage, evidence.SecondSideDuplicateContentCount));
         var maximumCoverage = Math.Max(Ratio(pair.Leverage, evidence.FirstSideDuplicateContentCount), Ratio(pair.Leverage, evidence.SecondSideDuplicateContentCount));
 
@@ -222,14 +222,14 @@ internal static class CaseReportFormatter
                            $"second {evidence.SecondSideBreadth.DirectoryCount:N0} dirs / {evidence.SecondSideBreadth.FileCount:N0} files");
         builder.AppendLine($"  crossing-evidence directories: {evidence.FirstSideBreadth.CrossingDirectoryCount:N0} / {evidence.SecondSideBreadth.CrossingDirectoryCount:N0}; contributing directory pairs: {pair.DirectoryPairCount:N0}; weighted direct evidence {evidence.ContributingWeightedLeverage:N0}");
         builder.AppendLine($"  duplicated contents on effective sides: {evidence.FirstSideDuplicateContentCount:N0} / {evidence.SecondSideDuplicateContentCount:N0}");
-        builder.AppendLine($"  cross-side coverage: {Ratio(pair.Leverage, evidence.FirstSideDuplicateContentCount):P1} / {Ratio(pair.Leverage, evidence.SecondSideDuplicateContentCount):P1}; " +
+        builder.AppendLine($"  weighted-evidence/content ratios: {Ratio(pair.Leverage, evidence.FirstSideDuplicateContentCount):P1} / {Ratio(pair.Leverage, evidence.SecondSideDuplicateContentCount):P1}; " +
                            $"min {minimumCoverage:P1}; max {maximumCoverage:P1}; asymmetry {CoverageAsymmetry(minimumCoverage, maximumCoverage):P1}");
         builder.AppendLine($"  direct-evidence concentration: top 1 {evidence.StrongestDirectoryPairConcentration:P1}; top 5 {evidence.TopFiveDirectoryPairConcentration:P1}; top 10 {evidence.TopTenDirectoryPairConcentration:P1}");
-        builder.AppendLine($"  subsidiary ScopePairs: {evidence.SubsidiaryScopePairCount:N0}; leverage plateau ≥90% {evidence.SubsidiariesAtNinetyPercentLeverage:N0}, ≥95% {evidence.SubsidiariesAtNinetyFivePercentLeverage:N0}, ≥99% {evidence.SubsidiariesAtNinetyNinePercentLeverage:N0}");
-        if (evidence.StrongestSubsidiaryScopePairs.Count > 0)
+        builder.AppendLine($"  subsidiary BranchPairs: {evidence.SubsidiaryBranchPairCount:N0}; leverage plateau ≥90% {evidence.SubsidiariesAtNinetyPercentLeverage:N0}, ≥95% {evidence.SubsidiariesAtNinetyFivePercentLeverage:N0}, ≥99% {evidence.SubsidiariesAtNinetyNinePercentLeverage:N0}");
+        if (evidence.StrongestSubsidiaryBranchPairs.Count > 0)
         {
-            builder.AppendLine("  strongest subsidiary ScopePairs:");
-            foreach (var summary in evidence.StrongestSubsidiaryScopePairs)
+            builder.AppendLine("  strongest subsidiary BranchPairs:");
+            foreach (var summary in evidence.StrongestSubsidiaryBranchPairs)
             {
                 var subsidiary = summary.Pair;
                 var parentDirectories = evidence.FirstSideBreadth.DirectoryCount + evidence.SecondSideBreadth.DirectoryCount;
@@ -277,6 +277,6 @@ internal static class CaseReportFormatter
     private static double Ratio(long numerator, long denominator) => denominator == 0 ? 0 : (double)numerator / denominator;
     private static double Reduction(int child, int parent) => parent == 0 ? 0 : 1d - (double)child / parent;
     private static double CoverageAsymmetry(double minimum, double maximum) => maximum == 0 ? 0 : 1d - minimum / maximum;
-    private static string Kind(Case item) => item switch { DuplicateSetCase => "DuplicateSet", SingleDirectoryCase => "SingleDirectory", DirectoryPairCase => "DirectoryPair", ScopePairCase => "ScopePair", _ => item.GetType().Name };
+    private static string Kind(Case item) => item switch { DuplicateSetCase => "DuplicateSet", SingleDirectoryCase => "SingleDirectory", DirectoryPairCase => "DirectoryPair", BranchPairCase => "BranchPair", _ => item.GetType().Name };
     private static string FormatElapsed(TimeSpan elapsed) => elapsed.TotalSeconds >= 1 ? elapsed.TotalSeconds.ToString("N3") + " s" : elapsed.TotalMilliseconds.ToString("N1") + " ms";
 }
