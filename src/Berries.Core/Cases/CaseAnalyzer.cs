@@ -13,6 +13,21 @@ public sealed class CaseAnalyzer(IFileSystem fileSystem)
         IReadOnlyList<DuplicateSet> duplicateSets,
         IReadOnlyList<DirectoryPair> directoryPairs,
         IReadOnlyList<ScopePair> scopePairs,
+        int limit = 25) =>
+        AnalyzeTop(
+            portrait,
+            duplicateSets,
+            directoryPairs,
+            scopePairs,
+            new DuplicateSettlements(),
+            limit);
+
+    public CaseAnalysisResult AnalyzeTop(
+        Portrait portrait,
+        IReadOnlyList<DuplicateSet> duplicateSets,
+        IReadOnlyList<DirectoryPair> directoryPairs,
+        IReadOnlyList<ScopePair> scopePairs,
+        DuplicateSettlements settlements,
         int limit = 25)
     {
         if (limit < 0)
@@ -21,12 +36,18 @@ public sealed class CaseAnalyzer(IFileSystem fileSystem)
         var totalTimer = Stopwatch.StartNew();
         var phaseTimer = Stopwatch.StartNew();
 
+        var unresolvedDuplicateSets = duplicateSets
+            .Where(settlements.HasUnresolvedRelationship)
+            .ToArray();
+
         var internalDuplicateContents = new Dictionary<FileSystemPath, HashSet<ContentId>>();
-        foreach (var duplicateSet in duplicateSets)
+        foreach (var duplicateSet in unresolvedDuplicateSets)
         {
             foreach (var directoryGroup in duplicateSet.Files.GroupBy(file => file.ParentDirectory))
             {
-                if (directoryGroup.Count() < 2)
+                var files = directoryGroup.ToArray();
+                if (files.Length < 2
+                    || !settlements.HasUnresolvedRelationship(duplicateSet.Content, files))
                     continue;
 
                 if (!internalDuplicateContents.TryGetValue(directoryGroup.Key, out var contents))
@@ -40,9 +61,9 @@ public sealed class CaseAnalyzer(IFileSystem fileSystem)
         }
 
         var candidates = new List<CaseCandidate>(
-            duplicateSets.Count + internalDuplicateContents.Count + directoryPairs.Count + scopePairs.Count);
+            unresolvedDuplicateSets.Length + internalDuplicateContents.Count + directoryPairs.Count + scopePairs.Count);
 
-        candidates.AddRange(duplicateSets.Select(set =>
+        candidates.AddRange(unresolvedDuplicateSets.Select(set =>
             new CaseCandidate(1, "DuplicateSet", set.Content.Value, () => new DuplicateSetCase(set))));
 
         candidates.AddRange(internalDuplicateContents.Select(item =>
@@ -90,7 +111,7 @@ public sealed class CaseAnalyzer(IFileSystem fileSystem)
         return new CaseAnalysisResult(
             topCases,
             candidates.Count,
-            duplicateSets.Count,
+            unresolvedDuplicateSets.Length,
             internalDuplicateContents.Count,
             directoryPairs.Count,
             scopePairs.Count,
