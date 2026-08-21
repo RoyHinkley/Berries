@@ -43,6 +43,36 @@ public sealed class DuplicateSettlements
     public bool IsPairAccepted(ContentId content, FileSystemPath first, FileSystemPath second) =>
         acceptedContents.Contains(content) || acceptedPairs.Contains(CanonicalPair(content, first, second));
 
+    /// <summary>True when at least one duplicate relationship in the set still requires a decision.</summary>
+    public bool HasUnresolvedRelationship(DuplicateSet duplicateSet) =>
+        HasUnresolvedRelationship(duplicateSet.Content, duplicateSet.Files);
+
+    /// <summary>True when at least one pair among the supplied equal-Content Files is not accepted.</summary>
+    public bool HasUnresolvedRelationship(ContentId content, IReadOnlyList<FileInstance> files)
+    {
+        if (acceptedContents.Contains(content))
+            return false;
+
+        for (var firstIndex = 0; firstIndex < files.Count - 1; firstIndex++)
+        {
+            for (var secondIndex = firstIndex + 1; secondIndex < files.Count; secondIndex++)
+            {
+                if (!IsPairAccepted(content, files[firstIndex], files[secondIndex]))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    public DuplicateSettlements Copy()
+    {
+        var copy = new DuplicateSettlements();
+        copy.acceptedContents.UnionWith(acceptedContents);
+        copy.acceptedPairs.UnionWith(acceptedPairs);
+        return copy;
+    }
+
     public void Clear()
     {
         acceptedContents.Clear();
