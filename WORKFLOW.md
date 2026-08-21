@@ -11,7 +11,7 @@ A scrollable list of Case panels is the preferred presentation. Panels need not 
 The active panel body shows only Case data useful to establishing the Disposition, such as:
 
     concise Case description
-    relevant paths/scopes
+    relevant paths/branches
     defining duplicate relationships
     leverage, coverage, concentration, and other useful structural evidence
     Situation selector
@@ -19,6 +19,8 @@ The active panel body shows only Case data useful to establishing the Dispositio
     projected surviving arrangement
     directory mappings where applicable
     Accept / Apply controls
+
+Additional detail should be available on demand without cluttering the primary presentation. Tooltips, hover details, expandable evidence, and similar secondary surfaces are appropriate for paths, contributing instances, and other context needed only occasionally.
 
 Case information should emphasize the objective duplication pattern that caused the Case to exist rather than unrelated duplication merely lying within its bounds.
 
@@ -34,13 +36,12 @@ Every Resolution implies one Disposition and must supply or solicit every parame
 
 The UI presents the desired surviving arrangement whenever possible rather than asking the user to enumerate removals.
 
-A Disposition defines the exact intended state within Case authority. It does not imply that every File in the Case is modified.
+A Disposition defines the exact intended filesystem state within Case authority. It does not imply that every File in the Case is modified.
 
 Fundamental rule:
 
     A Case need not resolve all duplication within its bounds; its Resolution
-    and Disposition must address the duplication pattern that caused the Case
-    to exist.
+    must address the duplication pattern that caused the Case to exist.
 
 Other internal duplication can remain untouched for subsequent Cases.
 
@@ -48,17 +49,19 @@ Other internal duplication can remain untouched for subsequent Cases.
 
 Show retained File instances. Multiple instances may be retained. Omitted instances of the same Content are implied removable when the selected Resolution calls for deduplication.
 
+A retain-all Resolution can instead settle every relationship in the DuplicateSet while leaving the Portrait unchanged.
+
 ### Single-directory Case
 
-The Disposition addresses Content duplicated internally within that directory. Unique Files and unrelated duplicate relationships need not be changed unless the selected Resolution explicitly requires it.
+The Resolution addresses Content duplicated internally within that directory. Unique Files and unrelated duplicate relationships need not be changed unless the selected Resolution explicitly requires it.
 
 ### DirectoryPair Case
 
-The Disposition addresses the Content relationship directly shared by the two directories. Unique Files are handled according to the selected Situation/Resolution and explicit user choices rather than by a universal delete/retain default.
+The Resolution addresses the Content relationship directly shared by the two directories. Unique Files are handled according to the selected Situation/Resolution and explicit user choices rather than by a universal delete/retain default.
 
-### ScopePair Case
+### BranchPair Case
 
-The Disposition addresses duplicated Content crossing the two effective sides of the ScopePair cut. Duplication wholly internal to either side is not part of the Case's semantic obligation and can remain for later Cases.
+The Resolution addresses duplicated Content crossing the two effective sides of the BranchPair cut. Duplication wholly internal to either side is not part of the Case's semantic obligation and can remain for later Cases.
 
 Keep/destination relationships can be expressed through directory mappings, for example:
 
@@ -75,7 +78,7 @@ A Disposition is complete when every destination/retention decision required by 
 
 High-level structural Cases can contain useful subordinate directory correspondences.
 
-Derive proposed mappings on demand from DirectoryPair relationships within the selected source/destination scopes rather than storing them permanently in ScopePair.
+Derive proposed mappings on demand from DirectoryPair relationships within the selected source/destination branches rather than storing them permanently in BranchPair.
 
 Proposed mappings are fully user-editable. The user can accept, reject, or change mappings piecemeal.
 
@@ -93,13 +96,15 @@ without that mapping:
 
 ## Accept and Apply
 
-If the selected/approved Disposition produces no change to the Current Portrait, the command is:
+A Resolution can produce settlement state, filesystem-state change, or both.
+
+If the selected/approved Resolution produces no filesystem change to the Current Portrait, the command is:
 
     Accept
 
-Accept performs no filesystem Action and marks the Case Hidden.
+Accept records the Resolution's settlement semantics. It performs no filesystem Action. The accepted duplicate relationships cease to generate future Cases even though the physical Portrait is unchanged.
 
-If the Disposition changes the Current Portrait, the command is:
+If the Resolution changes the Current Portrait, the command is:
 
     Apply
 
@@ -109,7 +114,7 @@ Validation includes destination/path collisions. A required destination may be a
 
 If validation fails, no virtual change is made. Structured validation issues are returned to the Case panel with enough information to solicit only the additional Resolution data needed.
 
-If validation succeeds, the ActionPlan is executed only against the virtual Current Portrait.
+If validation succeeds, the ActionPlan is executed only against the virtual Current Portrait and any settlement consequences of the Resolution are recorded.
 
 The new Current Portrait reflects:
 
@@ -119,11 +124,11 @@ The new Current Portrait reflects:
     resulting DuplicateSet membership
     resulting directory structure
 
-Apply does not automatically hide the Case. The changed Portrait may still support useful work involving the same relationship.
+The new unresolved decision state also reflects settlements established by the Resolution.
 
-A Show Hidden facility allows accepted Cases to be revisited.
+After Accept or Apply, derived Cases are regenerated from the resulting Portrait plus unresolved duplicate state. The same Case need not be retained as a persistent object; if its defining evidence has been settled or changed, it simply no longer regenerates in the same form.
 
-Undo/redo can be implemented by changing the accepted virtual Action sequence and regenerating the Current Portrait.
+Undo/redo must therefore restore both the accepted virtual Action sequence and the corresponding settlement state.
 
 ## Compile the ActionPlan
 
@@ -144,15 +149,17 @@ For each Case instance explicitly excluded by the Disposition:
 
 Do **not** interpret every Case member omitted from an unrelated subdecision as removable. Removal follows from the selected Disposition, whose semantic scope is determined by the Resolution.
 
-The ActionPlan defines the logical transformation. Safety-dependent physical ordering, source protection, cross-filesystem behavior, and temporary storage belong to ExecutionPlan construction.
+The ActionPlan defines the logical filesystem transformation. Settlements are not Actions and are not compiled into it.
+
+Safety-dependent physical ordering, source protection, cross-filesystem behavior, and temporary storage belong to ExecutionPlan construction.
 
 Optimization of copy versus move, metadata preservation, and directory operations remain implementation details within these rules.
 
 No real filesystem modification occurs while compiling an ActionPlan.
 
-## Refresh after virtual Apply
+## Refresh after virtual Apply or settlement
 
-Derived analysis is recomputed from the new Current Portrait as described in `ANALYSIS.md`.
+Derived analysis is recomputed from the new Current Portrait and unresolved duplicate state as described in `ANALYSIS.md`.
 
 Known virtual operations preserve Content identity:
 
@@ -164,6 +171,8 @@ Known virtual operations preserve Content identity:
 
     copy
         adds another instance of known Content
+
+Settlement removes accepted duplicate relationships from future structural evidence without changing File instances.
 
 Re-reading or rehashing real filesystem Content is unnecessary unless external filesystem change invalidates the session model.
 
@@ -186,10 +195,11 @@ Possible future persistent user information includes:
     confirmed Situations
     selected Resolutions/Dispositions
     accepted/rejected mappings
+    accepted settlements
     user-defined rules
     previous choices in analogous Cases
 
-Such information may later influence Situation ordering, Resolution ordering, Case ordering, and keep/drop scoring. None is required for the initial implementation.
+Such information may later influence Situation ordering, Resolution ordering, Case ordering, keep/drop scoring, and preselection. None is required for the initial implementation.
 
 ## Execute
 
@@ -221,7 +231,9 @@ Execution safety invariant:
     a verified usable instance of that Content must already exist at a secured
     final destination or in the execution cache.
 
-Use the execution cache only when useful. Straightforward redundant-instance deletion need not incur cache I/O when a retained source can be validated immediately before deletion.
+Duplicate identity alone is not authority to delete. Files in application-managed, repository-managed, generated, cached, deployed, or otherwise structurally significant locations may require stronger validation or explicit authorization even when identical Content exists elsewhere.
+
+Use the execution cache only when useful. Straightforward redundant-instance deletion need not incur cache I/O when a retained source can be validated immediately before deletion and the instance is otherwise authorized for removal.
 
 For relocation, multiple destinations, pathname dependencies, or other fragile source relationships:
 
@@ -302,5 +314,6 @@ Deliberately deferred until experience demonstrates value:
     general-purpose filesystem reorganization beyond duplicate-motivated Resolutions
     aggressive incremental recomputation optimization
     formal/mathematically complete Situation or Resolution enumeration
+    generic recognition of application-managed / non-destructive regions
 
 The architecture should permit these additions without requiring them now.
