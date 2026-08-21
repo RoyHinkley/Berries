@@ -1,4 +1,5 @@
 using Berries.Core.Analysis;
+using Berries.Core.Domain;
 using Berries.FileSystem.Abstractions;
 using Xunit;
 
@@ -86,6 +87,49 @@ public sealed class ScopeAnalysisTests
         Assert.Equal(1, pair.Leverage);
         Assert.Equal(1, pair.DirectoryPairCount);
     }
+
+    [Fact]
+    public async Task SettledWholeDuplicateSet_DoesNotPropagateIntoScopePairs()
+    {
+        var root = Path(@"X:\Corpus");
+        var a = Path(@"X:\Corpus\A");
+        var b = Path(@"X:\Corpus\B");
+        var c = Path(@"X:\Corpus\C");
+
+        var accepted = new DuplicateSet(
+            new ContentId("accepted"),
+            new[] { File(a, "accepted-a"), File(b, "accepted-b") });
+        var unresolved = new DuplicateSet(
+            new ContentId("unresolved"),
+            new[] { File(a, "unresolved-a"), File(c, "unresolved-c") });
+        var duplicateSets = new[] { accepted, unresolved };
+        var portrait = new Portrait(duplicateSets.SelectMany(set => set.Files).ToArray());
+        var settlements = new DuplicateSettlements();
+        settlements.Accept(accepted);
+
+        var engine = new BerriesEngine(new TestFileSystem());
+        var directoryAnalysis = await engine.AnalyzeDirectoriesAsync(
+            portrait,
+            duplicateSets,
+            settlements);
+
+        Assert.DoesNotContain(directoryAnalysis.DirectoryPairs,
+            pair => pair.First == a && pair.Second == b);
+        Assert.Contains(directoryAnalysis.DirectoryPairs,
+            pair => pair.First == a && pair.Second == c);
+
+        var scopeAnalysis = await engine.AnalyzeScopesAsync(
+            new Corpus(new[] { new CorpusRoot(root) }),
+            directoryAnalysis.DirectoryPairs);
+
+        Assert.DoesNotContain(scopeAnalysis.ScopePairs,
+            pair => pair.FirstRoot == a && pair.SecondRoot == b);
+        Assert.Contains(scopeAnalysis.ScopePairs,
+            pair => pair.FirstRoot == a && pair.SecondRoot == c);
+    }
+
+    private static FileInstance File(FileSystemPath directory, string name) =>
+        new(Path(directory.Value + "\\" + name), 10, directory);
 
     private static FileSystemPath Path(string value) => new(value);
 
