@@ -1,92 +1,118 @@
 # Development
 
-The governing design is split across `PROJECT.md`, `MODEL.md`, `ANALYSIS.md`, `SITUATIONS.md`, and `WORKFLOW.md`. `PROJECT.md` is the short architectural overview and index; the other documents contain the focused design detail.
+The governing design is split across `PROJECT.md`, `MODEL.md`, `ANALYSIS.md`, `SITUATIONS.md`, and `WORKFLOW.md`. `PROJECT.md` is the short architectural overview and index. This file records the current implementation state and immediate empirical work.
 
-The solution follows the decomposition in `PROJECT.md`:
+The solution contains:
 
-- `Berries.Core` — platform/UI-independent domain, analysis, Cases, decisions, logical planning, and execution-plan contracts.
+- `Berries.Core` — platform/UI-independent domain, analysis, Cases, settlement state, planning contracts, and execution-plan contracts.
 - `Berries.FileSystem.Abstractions` — the deliberately small platform-neutral filesystem boundary.
 - `Berries.FileSystem.Windows` — Windows filesystem adapter.
-- `Berries.Gui` — Avalonia desktop front end and GUI-specific controller/state.
+- `Berries.Gui` — Avalonia desktop front end and GUI-specific orchestration/diagnostics.
 - `Berries.Core.Tests` — synthetic, platform-independent tests of Core behavior and boundaries.
 
-There is deliberately no console front end. Independence of Core is an architectural requirement, not a requirement to maintain a second front end. `Berries.Core.Tests` serves as the executable architectural test: Core can be exercised without Avalonia or a platform filesystem implementation.
+There is deliberately no console front end. Target framework is .NET 10. The GUI references Avalonia 12.1.0 and is built as `WinExe`.
 
-Target framework is .NET 10. The GUI references Avalonia 12.1.0 and is built as `WinExe` so the Windows GUI does not create a console window.
+## Current analysis pipeline
 
-## Current implementation
+The GUI maintains a list of Corpus roots. Root normalization removes exact duplicates and descendants of already selected roots.
 
-The working vertical slices now cover Corpus construction, Initial Portrait acquisition, duplicate discovery, direct-directory structural analysis, ScopePair analysis, unified Case ranking/sampling, and exploratory structural diagnostics.
+The `Scan` button now runs the complete exploratory pipeline in sequence:
 
-1. The GUI maintains a persistent list of Corpus roots. `Add` uses a single-directory picker; `Remove` removes the selected root.
-2. `BerriesEngine.CreateCorpus` normalizes selected paths before enumeration: paths are canonicalized, exact duplicates are removed, and roots contained by another selected root are discarded. The stored `Corpus` therefore contains the minimal disjoint root set.
-3. `GuiController` awaits `BerriesEngine.BuildInitialPortraitAsync` to acquire filesystem state and construct the Initial Portrait.
-4. `BerriesEngine` owns worker-thread boundaries for potentially long-running operations and supports cancellation; filesystem enumeration itself remains synchronous because that is what the platform exposes.
-5. Core obtains filesystem state only through `IFileSystem`; the abstraction describes required filesystem capabilities without prescribing platform implementation strategy.
-6. `WindowsFileSystem` recursively enumerates regular Files while avoiding reparse-point traversal.
-7. Portrait construction from acquired file records remains synchronous and deterministic.
-8. Duplicate discovery first groups Portrait Files by length. Only Files in non-singleton length groups are opened and hashed.
-9. Candidate Files are hashed with SHA-256. Files sharing a hash are partitioned into `DuplicateSet` instances; singleton hashes are discarded.
-10. Directory analysis derives `DirectoryRecord`s only for directories directly containing duplicated Content. Each record contains direct File count, duplicated-File count, and distinct duplicated-Content count; descendants are not folded into these statistics.
-11. For each `DuplicateSet`, every unordered pair of distinct directories directly representing that Content contributes one unit of leverage to a `DirectoryPair`. Multiple instances of the same Content within one directory do not increase pair leverage.
-12. `DirectoryPair`s are ordered by descending leverage. The temporary GUI displays counts, phase timing, and the 25 strongest pairs.
-13. Scope analysis walks directory ancestry only through the filesystem abstraction; Core does not parse platform path syntax. `IFileSystem.GetParentDirectory` supplies the hierarchy operation required.
-14. Each direct duplicated-Content relationship contributes evidence to containing pairs of directory-rooted Scopes. ScopePair leverage is the exact number of distinct duplicated Contents crossing the two effective sides; `DirectoryPairCount` records the number of distinct direct DirectoryPairs supplying evidence.
-15. ScopePair sides are always effectively disjoint. If one root is a descendant of the other, the descendant subtree is omitted from the ancestor side before evidence is counted. Identical roots are never a ScopePair.
-16. ScopePairs are ordered by descending leverage, then descending contributing DirectoryPair count. The temporary GUI displays counts, phase timing, and the 25 strongest pairs alongside the strongest direct DirectoryPairs.
-17. `CaseAnalyzer` forms one objective population from DuplicateSet, internally duplicated single-directory, DirectoryPair, and ScopePair Cases. All four use the common `Case.Leverage` metric.
-18. Case ranking is deliberately lightweight: candidates are currently ranked by leverage before bounded File sets are materialized. Only the requested sample (currently the top 25) is materialized. Candidate construction, ranking, and materialization are now timed separately because very large real corpora exposed substantial end-to-end delay.
-19. Structural Case bounds include unique Files as defined in `MODEL.md` and `ANALYSIS.md`: a single-directory Case contains all direct Files in that directory; a DirectoryPair Case contains all direct Files in both directories; a ScopePair Case contains all Files on its two effective disjoint sides.
-20. Directory analysis also treats the DirectoryPair population as a simple weighted undirected graph for exploratory diagnostics. It records total directories, duplicate-bearing directories, internally duplicated directories, pair-participating directories, connected components, largest component, pair density, and per-directory degree, weighted degree, maximum incident-pair leverage, mean incident-pair leverage, and strongest-pair concentration.
-21. Pair overlap characteristics are derived cheaply from existing statistics. For a DirectoryPair the report shows directional shared-Content coverage, Jaccard overlap, endpoint degrees, and the fraction of each endpoint's weighted degree represented by that edge.
-22. `StructuralEvidenceAnalyzer` derives evidence only for sampled ScopePairs rather than materializing another large persistent graph. It now records effective-side directory/File breadth separately for each side, the number of directories on each side participating in crossing DirectoryPairs, directional coverage and asymmetry, direct-evidence concentration, root-depth movement for strong hierarchical relatives, and counts of related ScopePairs retaining at least 90%, 95%, and 99% of the reference leverage.
-23. The current exploratory code calls a hierarchically related ScopePair "subsidiary" when its roots lie within corresponding effective-side hierarchy positions. Real-data study has shown that this is **not** a strict refinement/subset relation for nested ScopePairs: moving a descendant root moves the effective-side cut and can increase or decrease leverage. The report's leverage ratio should therefore be interpreted as a relationship metric, not guaranteed monotonic retention.
-24. The temporary top-Case report is a single selectable text view. It now begins with full run context: Corpus roots, scan/current Portrait sizes, duplicate counts/evictions, DirectoryPair and ScopePair populations, complete phase timings, leverage distributions for all four Case types, and graph summary. DuplicateSet Cases still show their instances; structural Cases emphasize structural statistics and relationships rather than long duplicated-file samples.
-25. Report-time structural analysis is instrumented separately. For sampled ScopePairs it records time spent scanning contributing DirectoryPairs, scanning related ScopePairs, counting duplicated Content on effective sides, computing parent breadth, and computing breadth for the displayed related ScopePairs, plus total report-generation time.
-26. The structural-evidence implementation retains only the strongest requested related ScopePairs while scanning rather than sorting/materializing the entire related population. This removes an obvious large-corpus cost without changing the reported result.
+1. construct the Initial Portrait;
+2. discover DuplicateSets by size grouping and SHA-256 hashing;
+3. analyze unresolved direct-directory relationships;
+4. construct ScopePairs from the resulting DirectoryPair graph;
+5. rank/materialize the top Case sample;
+6. build the structural report;
+7. perform one prospective whole-DuplicateSet settlement A/B rerun and append its deltas to the report.
 
-Phase timing is development instrumentation. Portrait acquisition reports scan time. Duplicate discovery separately measures size grouping, Content hashing, DuplicateSet construction, and total elapsed time. Directory analysis separately measures DirectoryRecord construction, DirectoryPair construction, and total elapsed time; graph metrics are intentionally inexpensive and included within that analysis. Scope analysis separately measures direct evidence construction, scope aggregation, result construction, and total elapsed time. Case analysis now separates candidate construction, ranking, and materialization. The report prints a measured pipeline subtotal before report generation and then reports its own timing breakdown.
+The old individual `Find duplicates`, `Analyze directories`, `Analyze scopes`, and `Top cases` GUI buttons have been removed. Their controller operations remain separate so analysis stages stay testable and reusable.
 
-The filesystem abstraction may eventually warrant performance-oriented refinement. Platform adapters should remain free to obtain metadata efficiently in bulk or during enumeration, and Core should not require metadata it does not use. Optimization remains evidence-driven; the current timing expansion is intended to identify the actual cost centers before broader changes are made.
+## Duplicate discovery and accessibility
 
-## File accessibility policy
+Duplicate discovery first groups Files by length and hashes only non-singleton length groups. Equal hashes form physical `DuplicateSet`s. A DuplicateSet remains a fact about the Portrait even when some or all of its duplicate relationships are later accepted.
 
-Every File in the Current Portrait is a File Berries still considers safely actionable.
+When access to a particular File fails with `IOException`, `UnauthorizedAccessException`, or `SecurityException`, that File is evicted from the Current Portrait for the session. Programming failures propagate normally. Windows Content reads request permissive sharing (`FileShare.ReadWrite | FileShare.Delete`).
 
-When a filesystem operation on a particular File fails because it is unavailable or inaccessible (`IOException`, `UnauthorizedAccessException`, or `SecurityException`), that File is evicted from the Current Portrait for the remainder of the session. Subsequent analysis acts as though it no longer exists. The failed operation and reason are retained as a `FileEviction` diagnostic record.
+## Duplicate settlements
 
-Programming and other non-filesystem failures are not converted into file evictions; they continue to propagate normally so defects are not hidden.
+`DuplicateSettlements` records duplicate relationships that have been semantically accepted and therefore no longer require a user decision. It supports:
 
-On Windows, Content reads request permissive sharing (`FileShare.ReadWrite | FileShare.Delete`) so Berries can coexist with other processes when Windows permits it. If an existing handle still prevents access, the File is evicted rather than causing analysis to fail.
+- whole-Content/DuplicateSet acceptance;
+- acceptance of one specific equal-Content File pair;
+- copying settlement state for non-mutating experiments;
+- querying whether any relationship in a DuplicateSet or subset of its Files remains unresolved.
 
-Portraits remain immutable snapshots. An operation that evicts Files returns a replacement Current Portrait rather than modifying the input Portrait in place.
+Settlements do not change physical DuplicateSets or the Portrait. They change the unresolved evidence from which structural Cases are derived.
+
+Directory analysis is settlement-aware. A whole accepted DuplicateSet contributes no unresolved directory evidence. A selectively accepted File pair contributes no evidence for that pair while other mates of the same Content remain available.
+
+Case analysis is also settlement-aware: fully accepted DuplicateSets and fully accepted internal relationships no longer generate Cases.
+
+## Directory analysis
+
+Directory records describe direct Files only. `FileCount` remains physical; duplicate-file and duplicate-Content counts describe unresolved duplicate evidence.
+
+Each unresolved Content contributes once to a `DirectoryPair` when at least one unresolved File-instance relationship crosses the two directories. The DirectoryPair graph supplies degree, weighted degree, strongest-edge concentration, connected components, density, and related diagnostics.
+
+## Scope analysis
+
+Scope analysis now consumes the already constructed `DirectoryPair` graph instead of reconstructing pair evidence independently from DuplicateSets.
+
+Each DirectoryPair edge is propagated through ancestor-or-self Scope combinations. Its leverage is added once to each effective ScopePair cut it crosses. The current ScopePair measure is therefore weighted cut size, and `DirectoryPairCount` records the number of distinct direct DirectoryPairs contributing to the cut.
+
+Nested ScopePairs remain effective disjoint cuts: if one root is inside the other, the descendant subtree is excluded from the ancestor side. Moving a nested boundary can legitimately increase or decrease crossing evidence.
+
+This change eliminates duplicated DuplicateSet-to-directory-pair expansion and makes settlement effects flow naturally from DirectoryPairs into ScopePairs.
+
+## Cases and ordering
+
+`CaseAnalyzer` forms one population from unresolved DuplicateSet, Single-directory, DirectoryPair, and ScopePair Cases. It ranks lightweight candidates before materializing bounded File sets for the requested sample.
+
+Descending leverage remains the temporary sampling order only. Real-corpus work has established that leverage is not the program objective and is not known to be the best general Case ordering. Exact distinct-Content ScopePair leverage and weighted structural leverage produce materially different rankings. Specificity, coverage, concentration, boundary position, and settlement impact remain active empirical characteristics.
+
+The actual objective is reduction of the user's remaining decision work. A Resolution can accomplish this through filesystem changes, acceptance settlements, or both.
+
+## Prospective settlement comparison
+
+After the baseline report, the GUI performs a non-mutating A/B experiment on identical physical data.
+
+The exploratory selector considers unresolved DuplicateSets having at least three instances, the same filename for every instance, and exactly one instance per represented directory. It selects the candidate with the largest induced DirectoryPair count, breaking ties toward less other shared Content between those directories. This is diagnostic candidate selection, not a production heuristic.
+
+The second analysis accepts that whole DuplicateSet in copied settlement state and recomputes directory analysis, ScopePairs, and top Cases. The appended report compares:
+
+- DuplicateSet Case count;
+- Single-directory Case count;
+- DirectoryPair count;
+- ScopePair count;
+- total Case count;
+- graph component count and largest component;
+- top-Case overlap and same-rank count;
+- rerun phase timing.
+
+The candidate report also shows filename, instance/directory count, induced DirectoryPairs, other shared-Content statistics, and sample paths.
+
+This experiment is intended to measure whether apparently routine widespread duplicate sets such as `.gitignore`-type files or standard repository hook samples actually collapse enough downstream structure to justify early presentation.
+
+## Structural diagnostics
+
+The top-Case report retains full run context and timing. `StructuralEvidenceAnalyzer` derives sampled ScopePair evidence on demand, including per-side breadth, crossing-evidence directories, contributing DirectoryPairs, hierarchical relatives, boundary movement, and direct-evidence concentration.
+
+Report-time structural analysis is separately instrumented because large corpora exposed expensive repeated scans. These diagnostics remain exploratory and are not part of the intended final interactive cost model.
 
 ## Tests
 
-`Berries.Core.Tests` currently contains thirteen tests.
+`Berries.Core.Tests` currently contains sixteen tests.
 
-The tests exercise Core against synthetic filesystem data, including asynchronous Portrait construction, Corpus-root normalization, duplicate discovery, file eviction on I/O failure, propagation of programming failures, direct directory analysis, ScopePair analysis, Case ranking/bounding, graph metrics, and structural evidence.
+Coverage includes Corpus normalization, Portrait construction, duplicate discovery, file eviction, propagation of programming failures, settlement-aware directory analysis, graph metrics, DirectoryPair-driven ScopePair analysis including weighted evidence and nested cuts, Case ranking/bounding, and structural evidence.
 
-Directory-analysis coverage verifies graph counts, connectivity, density, degree, weighted degree, maximum incident leverage, mean incident leverage, and strongest-pair concentration. Structural-evidence coverage verifies contributing DirectoryPair selection, hierarchical ScopePair detection, root nesting, per-side duplicated-Content counts, per-side breadth, crossing-evidence directories, root-depth movement, evidence concentration, and the effective-side exclusion rule for nested ScopePairs.
+The settlement tests cover both whole-DuplicateSet acceptance and selective pairwise acceptance with other mates remaining unresolved.
 
-## Current empirical-development step
+## Immediate empirical work
 
-No Situation inference or characteristic classifier has been implemented. The present goal is to inspect structurally informative samples from real corpora and discover which objective characteristics actually separate recognizable filesystem Situations.
+The next real-data runs should quantify two things before further ranking design:
 
-Real-data inspection has established several important points now recorded in `MODEL.md` and `ANALYSIS.md`:
+1. how much ScopePair construction improves when driven directly by DirectoryPairs;
+2. how much the automatic prospective whole-DuplicateSet settlement reduces DirectoryPairs, ScopePairs, total Cases, and top-Case stability.
 
-- Leverage is the payoff represented by the Case's defining duplication pattern, not all duplication enclosed by its bounds.
-- A Case need not resolve unrelated internal duplication.
-- ScopePair leverage is duplicated-Content connectivity crossing the effective-side cut.
-- Moving a nested ScopePair boundary can legitimately increase or decrease leverage because it repartitions the tree.
-- Leverage alone is not presentation priority; coverage, concentration, specificity/breadth, directional containment, and structural position are useful objective dimensions.
-- Total ScopePair breadth is insufficient along nested cuts because moving the cut can repartition the same containing scope without changing the union of the effective sides. Side-specific and crossing-evidence breadth are therefore now collected.
-- Hierarchical ScopePair ancestry is useful evidence but is not automatically a monotonic refinement ordering.
-
-The working heuristic remains: ask the smallest comprehensible question with the greatest downstream simplifying effect. Multi-objective/Pareto-style comparison remains the preferred next ranking experiment rather than an arbitrary weighted scalar. Current empirical work is intended to determine which objective measures genuinely express specificity before any deterministic priority relation is adopted.
-
-A Case being structurally characterized does not mean its Situation has been determined. Eventually, characteristic predicates may mark regions of the Case population as empirically covered so subsequent samples expose new structural phenotypes. If objective structure does not narrow a Case semantically, that is acceptable: the user supplies the Situation.
-
-## Not yet implemented
-
-Multi-objective Case ordering, empirical characteristic coverage, Situation/Resolution mapping, Dispositions, virtual ActionPlans/Portrait transformation, execution planning, and physical filesystem execution remain future work described by the governing design documents.
+Case ordering remains an open research question. No Situation inference, Resolution rules, generalization rules, Dispositions, virtual ActionPlans, or physical execution have yet been implemented.
