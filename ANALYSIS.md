@@ -45,7 +45,7 @@ Downstream structural analysis operates on unresolved duplicate relationships on
 
 This subtraction occurs when physical duplicate equality is converted into structural evidence. Hashing and DuplicateSet construction remain unaffected.
 
-Whole-DuplicateSet settlement is particularly important because one widely repeated Content can induce many DirectoryPairs and many higher-level ScopePairs. One user decision can therefore remove substantially more future decision work than the DuplicateSet Case alone suggests.
+Whole-DuplicateSet settlement is particularly important because one widely repeated Content can induce many DirectoryPairs and many higher-level BranchPairs. One user decision can therefore remove substantially more future decision work than the DuplicateSet Case alone suggests.
 
 ## Early distributed-DuplicateSet review
 
@@ -59,11 +59,15 @@ The current exploratory phenotype is:
 
 These conditions are inexpensive because they use only already-discovered DuplicateSet membership and paths. They do not establish a Situation. Instead, they identify Cases for which the user can answer one compact question: whether all copies are intentionally distributed and should be retained.
 
-The current GUI presents all such candidates in one checklist, ordered by descending directory count. Nothing is preselected. Checked candidates become whole-DuplicateSet settlements before DirectoryPair construction.
+The current GUI presents all such candidates in one checklist, ordered by descending directory count. Nothing is preselected. Hovering an item shows all instance paths. Checked candidates become whole-DuplicateSet settlements before DirectoryPair construction.
 
-This is deliberately a grouped question over multiple Cases. If several Cases can be settled through one short interaction, the resulting reduction in user effort is itself part of the program objective. Persistent filename-based or other user-approved rules may later preselect known cases, but no such rule system is currently implemented.
+This step is not merely a performance optimization. It is a semantic normalization pass: if a duplication can be coherently understood and resolved at the DuplicateSet level, allowing it to generate DirectoryPairs and BranchPairs can create weaker relational Cases whose apparent structure is only an artifact of that unresolved low-level evidence.
 
-The empirical purpose is to compare a settlement-aware run against a no-settlement baseline on the same physical corpus and measure the aggregate reduction in DirectoryPairs, ScopePairs, total Cases, graph complexity, and analysis cost.
+The current review also demonstrates that multiple Cases can sometimes be resolved through one grouped user interaction. If several Cases share an intelligible resolution context, combining them into one question directly advances the program objective of minimizing decision work.
+
+Repeated candidates can themselves reveal a better structural level. For example, many related files that repeatedly co-occur under the same directories may be more coherently presented as one directory- or branch-level Case than as many independent DuplicateSet questions. The correct presentation level is therefore empirical; 'lowest level first' is a bias toward semantic coherence, not an invariant.
+
+Persistent filename-based or other user-approved rules may later preselect known cases, but no such rule system is currently implemented.
 
 ## Build Directory records
 
@@ -133,25 +137,25 @@ These are objective evidence, not semantic classification.
 
 Empirically, high coverage plus high concentration identifies a very different relationship from high coverage embedded in a large diffuse hub. For example, standardized generated/template directories can form exact-content cliques with very low edge concentration.
 
-## Build ScopePairs
+## Build BranchPairs
 
-A Scope rooted at A contains A and all descendants.
+A Branch rooted at A contains A and all descendants.
 
-Scope analysis consumes the already-constructed DirectoryPair graph. It does not independently reconstruct directory-pair evidence from DuplicateSets.
+Branch analysis consumes the already-constructed DirectoryPair graph. It does not independently reconstruct directory-pair evidence from DuplicateSets.
 
-Each DirectoryPair contributes its weight to containing pairs of ancestor-or-self scopes.
+Each DirectoryPair contributes its weight to containing pairs of ancestor-or-self Branches.
 
-A ScopePair has two effective sides. For non-overlapping roots these are the ordinary recursive scopes. For nested roots, the descendant subtree is omitted from the ancestor side and constitutes the other side. The two effective sides are always disjoint.
+A BranchPair has two effective sides. For non-overlapping roots these are the ordinary recursive branches. For nested roots, the descendant subtree is omitted from the ancestor side and constitutes the other side. The two effective sides are always disjoint.
 
-Only DirectoryPair evidence crossing both effective sides contributes ScopePair leverage.
+Only DirectoryPair evidence crossing both effective sides contributes BranchPair leverage.
 
-Current experimental ScopePair leverage is the **weighted cut size**: sum the DirectoryPair leverage crossing the effective-side cut. Equivalently, a duplicated Content contributes once for each contributing DirectoryPair through which it crosses the cut. The same Content may therefore contribute more than once to a ScopePair.
+Current experimental BranchPair leverage is the **weighted cut size**: sum the DirectoryPair leverage crossing the effective-side cut. Equivalently, a duplicated Content contributes once for each contributing DirectoryPair through which it crosses the cut. The same Content may therefore contribute more than once to a BranchPair.
 
-This is intentionally treated as a structural payoff measure rather than an approximation that must eventually be corrected to an exact distinct-Content count. Real-corpus testing showed that exact and weighted ScopePair leverage can produce materially different Case orders; which ordering is more useful remains an empirical question because the actual objective is reduction of user decision work, not preservation of a particular leverage definition.
+This is intentionally treated as a structural payoff measure rather than an approximation that must eventually be corrected to an exact distinct-Content count. Real-corpus testing showed that exact and weighted BranchPair leverage can produce materially different Case orders; which ordering is more useful remains an empirical question because the actual objective is reduction of user decision work, not preservation of a particular leverage definition.
 
-DirectoryPairCount records the number of distinct direct DirectoryPairs contributing evidence to the ScopePair.
+DirectoryPairCount records the number of distinct direct DirectoryPairs contributing evidence to the BranchPair.
 
-A ScopePair can exist even when its root directories share no direct Files.
+A BranchPair can exist even when its root directories share no direct Files.
 
 Example:
 
@@ -160,13 +164,13 @@ Example:
 
 can induce:
 
-    ScopePair(A,B)
+    BranchPair(A,B)
 
 without DirectoryPair(A,B).
 
-### Nested ScopePairs as cuts
+### Nested BranchPairs as cuts
 
-A nested ScopePair is a partition of a containing tree, not merely a large bounding box around a smaller one.
+A nested BranchPair is a partition of a containing tree, not merely a large bounding box around a smaller one.
 
 For:
 
@@ -182,9 +186,9 @@ If the descendant root moves downward from B to B\C, the effective sides become:
 
 The part of B outside B\C moves from the descendant side to the ancestor side. Duplicate relationships formerly internal to B can therefore become cross-cut relationships, while other relationships can cease crossing the cut.
 
-Consequently, leverage can increase or decrease as a ScopePair boundary moves downward. This reflects real repartitioning of the same objective duplication graph.
+Consequently, leverage can increase or decrease as a BranchPair boundary moves downward. This reflects real repartitioning of the same objective duplication graph.
 
-This makes boundary movement itself useful structural evidence. Related ScopePairs reached by moving roots through the directory hierarchy should not automatically be treated as strict subset/refinement relationships.
+This makes boundary movement itself useful structural evidence. Related BranchPairs reached by moving roots through the directory hierarchy should not automatically be treated as strict subset/refinement relationships.
 
 ## Construct candidate Cases
 
@@ -203,8 +207,8 @@ Candidate Case types and bounds:
     DirectoryPair Case
         all Files directly contained by either directory in the unresolved pair
 
-    ScopePair Case
-        all Files on the two effective disjoint ScopePair sides
+    BranchPair Case
+        all Files on the two effective disjoint BranchPair sides
 
 Structural Cases include unique Files as defined by their bounds because those Files may matter to a Disposition.
 
@@ -218,13 +222,13 @@ To avoid unnecessary memory expansion, lightweight Case candidates can be ranked
 
 Leverage remains one objective structural measurement. It is not the program objective and is not presumed to define the best Case order.
 
-For DuplicateSet, Single-directory, and DirectoryPair Cases it remains an exact distinct-unresolved-Content count. For ScopePairs the current experiment uses weighted crossing evidence as described above.
+For DuplicateSet, Single-directory, and DirectoryPair Cases it remains an exact distinct-unresolved-Content count. For BranchPairs the current experiment uses weighted crossing evidence as described above.
 
 The actual objective is to reduce the user's remaining decision work. A useful Resolution can accomplish that by removing duplicate Files, by restructuring them, or simply by establishing that some duplication is acceptable. Therefore a Case can have high decision impact even when its Disposition leaves the Portrait unchanged.
 
-Early implementation ranked Cases only by descending leverage. Real-corpus testing showed that this is insufficient. Exact distinct-Content ScopePair leverage and weighted structural leverage produce materially different orderings, and neither has yet been established as generally superior.
+Early implementation ranked Cases only by descending leverage. Real-corpus testing showed that this is insufficient. Exact distinct-Content BranchPair leverage and weighted structural leverage produce materially different orderings, and neither has yet been established as generally superior.
 
-Broad ancestor ScopePairs can also have the highest leverage while substantially narrower or differently placed cuts present much clearer questions. Maximum information gain can therefore occur below the leverage maximum.
+Broad ancestor BranchPairs can also have the highest leverage while substantially narrower or differently placed cuts present much clearer questions. Maximum information gain can therefore occur below the leverage maximum.
 
 The governing presentation heuristic remains:
 
@@ -259,6 +263,14 @@ Useful objective dimensions already identified include:
 
 Case ordering is therefore an open empirical problem. Do not prematurely collapse these characteristics into an unexplained weighted scalar.
 
+## Deletion safety and analytical visibility
+
+A DuplicateSet proves Content equality but does not prove that one instance can safely substitute for another. Files inside repositories, package caches, generated outputs, application data, deployment trees, or other externally maintained structures may be required at their exact locations.
+
+Berries should therefore treat 'duplicate' and 'safe deletion candidate' as separate properties. A region can remain analytically visible because its duplicates are valuable evidence for understanding directory or branch relationships while destructive Dispositions within that region are restricted or discouraged.
+
+A future implementation may allow users or rules to mark folders or recognizable structural regions as externally managed / non-destructive. The correct scope and detection mechanism remain open research questions.
+
 ## Settlement-impact experiments
 
 A useful way to evaluate decision impact is to compare analyses over identical physical data before and after user-approved settlements. Compare at least:
@@ -266,7 +278,7 @@ A useful way to evaluate decision impact is to compare analyses over identical p
     unresolved DuplicateSet Cases
     Single-directory Cases
     DirectoryPairs
-    ScopePairs
+    BranchPairs
     total Cases
     graph components and largest component
     top-Case membership/order
@@ -278,20 +290,20 @@ User-approved rules may eventually generalize a Resolution across objectively id
 
 ## Exploratory structural diagnostics
 
-For sampled ScopePairs, derive on demand rather than materializing a second enormous graph:
+For sampled BranchPairs, derive on demand rather than materializing a second enormous graph:
 
     whether roots are nested
     duplicated Content count on each effective side
-    cross-side coverage
+    weighted evidence relative to distinct Content on each side
     contributing DirectoryPair count
     strongest contributing DirectoryPairs
-    related/subordinate ScopePairs from hierarchy movement
-    leverage ratio relative to the reference ScopePair
-    DirectoryPair evidence ratio relative to the reference ScopePair
+    related/subordinate BranchPairs from hierarchy movement
+    leverage ratio relative to the reference BranchPair
+    DirectoryPair evidence ratio relative to the reference BranchPair
 
 Contributing DirectoryPairs are often more explanatory than duplicated-file samples because they show where the cross-cut relationship actually occurs.
 
-The related ScopePair population is also informative, but ancestry alone must not be interpreted as strict set refinement for nested cuts.
+The related BranchPair population is also informative, but ancestry alone must not be interpreted as strict set refinement for nested cuts.
 
 ## Empirical development method
 
@@ -312,7 +324,7 @@ After a virtual Apply or a new settlement, invalidate/recompute affected portion
     unresolved DuplicateSet evidence
     Directory records
     DirectoryPair relationships and graph metrics
-    ScopePair relationships
+    BranchPair relationships
     candidate Cases
     presentation ordering
 
