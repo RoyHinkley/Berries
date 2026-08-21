@@ -44,98 +44,120 @@ public partial class MainWindow : Window
     private async void ScanButton_Click(object? sender, RoutedEventArgs e)
     {
         if (roots.Count == 0) return;
-        SetControlsEnabled(false); StatusText.Text = "Scanning...";
-        try
-        {
-            var result = await controller.ScanAsync(roots);
-            FileCountText.Text = result.FileCount.ToString("N0"); TotalBytesText.Text = result.TotalBytes.ToString("N0");
-            NormalizationElapsedText.Text = FormatElapsed(result.CorpusNormalizationElapsed); PortraitElapsedText.Text = FormatElapsed(result.PortraitAcquisitionElapsed);
-            ClearDuplicateSummary(); StatusText.Text = $"Portrait constructed in {FormatElapsed(result.TotalElapsed)}.";
-        }
-        catch (Exception ex) { StatusText.Text = ex.Message; }
-        finally { SetControlsEnabled(true); }
-    }
 
-    private async void FindDuplicatesButton_Click(object? sender, RoutedEventArgs e)
-    {
-        SetControlsEnabled(false); StatusText.Text = "Finding duplicates...";
-        try
-        {
-            var result = await controller.DiscoverDuplicatesAsync();
-            DuplicateFileCountText.Text = result.DuplicateFileCount.ToString("N0"); DuplicateSetCountText.Text = result.DuplicateSets.Count.ToString("N0");
-            SizeGroupingElapsedText.Text = FormatElapsed(result.Timing.SizeGrouping); HashingElapsedText.Text = FormatElapsed(result.Timing.ContentHashing);
-            FileCountText.Text = result.Portrait.Files.Count.ToString("N0"); TotalBytesText.Text = result.Portrait.Files.Sum(file => file.Length).ToString("N0"); ClearDirectorySummary();
-            var evictionText = result.Evictions.Count == 0 ? string.Empty : $" {result.Evictions.Count:N0} inaccessible file(s) removed from the portrait.";
-            StatusText.Text = $"Duplicate discovery completed in {FormatElapsed(result.Timing.Total)}; set construction {FormatElapsed(result.Timing.DuplicateSetConstruction)}." + evictionText;
-        }
-        catch (Exception ex) { StatusText.Text = ex.Message; }
-        finally { SetControlsEnabled(true); }
-    }
+        SetControlsEnabled(false);
+        ClearPortraitSummary();
 
-    private async void AnalyzeDirectoriesButton_Click(object? sender, RoutedEventArgs e)
-    {
-        SetControlsEnabled(false); StatusText.Text = "Analyzing directory relationships...";
         try
         {
-            var result = await controller.AnalyzeDirectoriesAsync();
-            DirectoryCountText.Text = result.Directories.Count.ToString("N0"); DirectoryPairCountText.Text = result.DirectoryPairs.Count.ToString("N0"); DirectoryAnalysisElapsedText.Text = FormatElapsed(result.Timing.Total);
-            DirectoryPairsList.ItemsSource = result.DirectoryPairs.Take(25).Select(pair => $"{pair.Leverage,6:N0}    {pair.First.Value}    ↔    {pair.Second.Value}").ToArray(); ClearScopeSummary();
-            StatusText.Text = $"Directory analysis completed in {FormatElapsed(result.Timing.Total)}; records {FormatElapsed(result.Timing.DirectoryRecords)}, pairs {FormatElapsed(result.Timing.DirectoryPairs)}.";
-        }
-        catch (Exception ex) { StatusText.Text = ex.Message; }
-        finally { SetControlsEnabled(true); }
-    }
+            StatusText.Text = "Scanning corpus...";
+            var scan = await controller.ScanAsync(roots);
+            FileCountText.Text = scan.FileCount.ToString("N0");
+            TotalBytesText.Text = scan.TotalBytes.ToString("N0");
+            NormalizationElapsedText.Text = FormatElapsed(scan.CorpusNormalizationElapsed);
+            PortraitElapsedText.Text = FormatElapsed(scan.PortraitAcquisitionElapsed);
 
-    private async void AnalyzeScopesButton_Click(object? sender, RoutedEventArgs e)
-    {
-        SetControlsEnabled(false); StatusText.Text = "Analyzing scope relationships...";
-        try
-        {
-            var result = await controller.AnalyzeScopesAsync();
-            ScopePairCountText.Text = result.ScopePairs.Count.ToString("N0"); ScopeAnalysisElapsedText.Text = FormatElapsed(result.Timing.Total);
-            ScopePairsList.ItemsSource = result.ScopePairs.Take(25).Select(pair => $"{pair.Leverage,6:N0}  [{pair.DirectoryPairCount,5:N0}]    {pair.FirstRoot.Value}    ↔    {pair.SecondRoot.Value}").ToArray(); ClearCaseSummary();
-            StatusText.Text = $"Scope analysis completed in {FormatElapsed(result.Timing.Total)}; evidence {FormatElapsed(result.Timing.EvidenceConstruction)}, aggregation {FormatElapsed(result.Timing.ScopeAggregation)}, results {FormatElapsed(result.Timing.ResultConstruction)}.";
-        }
-        catch (Exception ex) { StatusText.Text = ex.Message; }
-        finally { SetControlsEnabled(true); }
-    }
+            StatusText.Text = "Finding duplicates...";
+            var duplicates = await controller.DiscoverDuplicatesAsync();
+            DuplicateFileCountText.Text = duplicates.DuplicateFileCount.ToString("N0");
+            DuplicateSetCountText.Text = duplicates.DuplicateSets.Count.ToString("N0");
+            SizeGroupingElapsedText.Text = FormatElapsed(duplicates.Timing.SizeGrouping);
+            HashingElapsedText.Text = FormatElapsed(duplicates.Timing.ContentHashing);
+            FileCountText.Text = duplicates.Portrait.Files.Count.ToString("N0");
+            TotalBytesText.Text = duplicates.Portrait.Files.Sum(file => file.Length).ToString("N0");
 
-    private void AnalyzeCasesButton_Click(object? sender, RoutedEventArgs e)
-    {
-        SetControlsEnabled(false); StatusText.Text = "Ranking cases...";
-        try
-        {
-            var result = controller.AnalyzeTopCases(25);
+            StatusText.Text = "Analyzing directory relationships...";
+            var directories = await controller.AnalyzeDirectoriesAsync();
+            DirectoryCountText.Text = directories.Directories.Count.ToString("N0");
+            DirectoryPairCountText.Text = directories.DirectoryPairs.Count.ToString("N0");
+            DirectoryAnalysisElapsedText.Text = FormatElapsed(directories.Timing.Total);
+            DirectoryPairsList.ItemsSource = directories.DirectoryPairs.Take(25)
+                .Select(pair => $"{pair.Leverage,6:N0}    {pair.First.Value}    ↔    {pair.Second.Value}")
+                .ToArray();
+
+            StatusText.Text = "Analyzing scope relationships...";
+            var scopes = await controller.AnalyzeScopesAsync();
+            ScopePairCountText.Text = scopes.ScopePairs.Count.ToString("N0");
+            ScopeAnalysisElapsedText.Text = FormatElapsed(scopes.Timing.Total);
+            ScopePairsList.ItemsSource = scopes.ScopePairs.Take(25)
+                .Select(pair => $"{pair.Leverage,6:N0}  [{pair.DirectoryPairCount,5:N0}]    {pair.FirstRoot.Value}    ↔    {pair.SecondRoot.Value}")
+                .ToArray();
+
+            StatusText.Text = "Ranking cases...";
+            var cases = controller.AnalyzeTopCases(25);
             var duplicateDiscovery = controller.DuplicateDiscovery
                 ?? throw new InvalidOperationException("Duplicate discovery has not completed.");
-            CasesReportText.Text = CaseReportFormatter.Format(
-                controller.Scan!,
+            var report = CaseReportFormatter.Format(
+                scan,
                 duplicateDiscovery,
-                result,
+                cases,
                 controller.Portrait!.Files,
                 duplicateDiscovery.DuplicateSets,
-                controller.DirectoryAnalysis!,
-                controller.ScopeAnalysis!,
+                directories,
+                scopes,
                 evidenceAnalyzer);
-            StatusText.Text = $"Ranked {result.TotalCaseCount:N0} cases; showing top {result.TopCases.Count:N0}.";
+
+            StatusText.Text = "Comparing a prospective whole-DuplicateSet settlement...";
+            var comparison = await controller.CompareProspectiveWholeSetSettlementAsync(25);
+            if (comparison is not null)
+                report += SettlementComparisonFormatter.Format(comparison);
+            else
+                report += "\nProspective whole-DuplicateSet settlement comparison\n  no same-name, one-instance-per-directory candidate with at least three instances was found.\n";
+
+            CasesReportText.Text = report;
+
+            var evictionText = duplicates.Evictions.Count == 0
+                ? string.Empty
+                : $" {duplicates.Evictions.Count:N0} inaccessible file(s) removed from the portrait.";
+            StatusText.Text = $"Analysis complete: {cases.TotalCaseCount:N0} baseline cases; showing top {cases.TopCases.Count:N0}." + evictionText;
         }
-        catch (Exception ex) { StatusText.Text = ex.Message; }
-        finally { SetControlsEnabled(true); }
+        catch (Exception ex)
+        {
+            StatusText.Text = ex.Message;
+        }
+        finally
+        {
+            SetControlsEnabled(true);
+        }
     }
 
     private void RefreshRoots()
     {
-        RootsList.ItemsSource = null; RootsList.ItemsSource = roots.ToArray();
-        ScanButton.IsEnabled = roots.Count > 0; RemoveRootButton.IsEnabled = roots.Count > 0;
-        FindDuplicatesButton.IsEnabled = controller.Portrait is not null; AnalyzeDirectoriesButton.IsEnabled = controller.DuplicateDiscovery is not null;
-        AnalyzeScopesButton.IsEnabled = controller.DirectoryAnalysis is not null; AnalyzeCasesButton.IsEnabled = controller.ScopeAnalysis is not null;
+        RootsList.ItemsSource = null;
+        RootsList.ItemsSource = roots.ToArray();
+        ScanButton.IsEnabled = roots.Count > 0;
+        RemoveRootButton.IsEnabled = roots.Count > 0;
     }
 
-    private void ClearPortraitSummary() { FileCountText.Text = "—"; TotalBytesText.Text = "—"; NormalizationElapsedText.Text = "—"; PortraitElapsedText.Text = "—"; ClearDuplicateSummary(); FindDuplicatesButton.IsEnabled = false; AnalyzeDirectoriesButton.IsEnabled = false; AnalyzeScopesButton.IsEnabled = false; AnalyzeCasesButton.IsEnabled = false; }
-    private void ClearDuplicateSummary() { DuplicateFileCountText.Text = "—"; DuplicateSetCountText.Text = "—"; SizeGroupingElapsedText.Text = "—"; HashingElapsedText.Text = "—"; ClearDirectorySummary(); }
-    private void ClearDirectorySummary() { DirectoryCountText.Text = "—"; DirectoryPairCountText.Text = "—"; DirectoryAnalysisElapsedText.Text = "—"; DirectoryPairsList.ItemsSource = null; ClearScopeSummary(); }
-    private void ClearScopeSummary() { ScopePairCountText.Text = "—"; ScopeAnalysisElapsedText.Text = "—"; ScopePairsList.ItemsSource = null; ClearCaseSummary(); }
-    private void ClearCaseSummary() { CasesReportText.Text = string.Empty; }
-    private void SetControlsEnabled(bool enabled) { AddRootButton.IsEnabled = enabled; RemoveRootButton.IsEnabled = enabled && roots.Count > 0; ScanButton.IsEnabled = enabled && roots.Count > 0; FindDuplicatesButton.IsEnabled = enabled && controller.Portrait is not null; AnalyzeDirectoriesButton.IsEnabled = enabled && controller.DuplicateDiscovery is not null; AnalyzeScopesButton.IsEnabled = enabled && controller.DirectoryAnalysis is not null; AnalyzeCasesButton.IsEnabled = enabled && controller.ScopeAnalysis is not null; }
-    private static string FormatElapsed(TimeSpan elapsed) => elapsed.TotalSeconds >= 1 ? elapsed.TotalSeconds.ToString("N3") + " s" : elapsed.TotalMilliseconds.ToString("N1") + " ms";
+    private void ClearPortraitSummary()
+    {
+        FileCountText.Text = "—";
+        TotalBytesText.Text = "—";
+        NormalizationElapsedText.Text = "—";
+        PortraitElapsedText.Text = "—";
+        DuplicateFileCountText.Text = "—";
+        DuplicateSetCountText.Text = "—";
+        SizeGroupingElapsedText.Text = "—";
+        HashingElapsedText.Text = "—";
+        DirectoryCountText.Text = "—";
+        DirectoryPairCountText.Text = "—";
+        DirectoryAnalysisElapsedText.Text = "—";
+        ScopePairCountText.Text = "—";
+        ScopeAnalysisElapsedText.Text = "—";
+        DirectoryPairsList.ItemsSource = null;
+        ScopePairsList.ItemsSource = null;
+        CasesReportText.Text = string.Empty;
+    }
+
+    private void SetControlsEnabled(bool enabled)
+    {
+        AddRootButton.IsEnabled = enabled;
+        RemoveRootButton.IsEnabled = enabled && roots.Count > 0;
+        ScanButton.IsEnabled = enabled && roots.Count > 0;
+    }
+
+    private static string FormatElapsed(TimeSpan elapsed) =>
+        elapsed.TotalSeconds >= 1
+            ? elapsed.TotalSeconds.ToString("N3") + " s"
+            : elapsed.TotalMilliseconds.ToString("N1") + " ms";
 }
