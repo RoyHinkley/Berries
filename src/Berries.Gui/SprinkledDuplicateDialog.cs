@@ -36,7 +36,8 @@ internal sealed class SprinkledDuplicateDialog : Window
             Margin = new Thickness(0, 8, 0, 12),
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
             Text = "Check each file whose copies are intentionally distributed and should all be retained. " +
-                   "Checked duplicate sets will be treated as settled before directory and scope analysis."
+                   "Hover over an item to see every instance path. Checked duplicate sets will be treated as " +
+                   "settled before directory and branch analysis."
         };
         Grid.SetRow(explanation, 1);
         root.Children.Add(explanation);
@@ -49,6 +50,14 @@ internal sealed class SprinkledDuplicateDialog : Window
                 Content = $"{candidate.FileName}    ({candidate.DirectoryCount:N0} folders)",
                 Tag = candidate
             };
+
+            var details = string.Join(
+                Environment.NewLine,
+                candidate.DuplicateSet.Files
+                    .Select(file => file.Path.Value)
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
+            ToolTip.SetTip(checkBox, details);
+
             checkBoxes.Add(checkBox);
             list.Children.Add(checkBox);
         }
