@@ -59,12 +59,12 @@ Situation text:
 
 Meaning:
 
-Material formerly located under one scope now belongs under another, but duplicate instances remain at the former location.
+Material formerly located under one branch now belongs under another, but duplicate instances remain at the former location.
 
 Applicable Case types:
 
     DirectoryPair
-    ScopePair
+    BranchPair
 
 Semantic roles:
 
@@ -90,11 +90,11 @@ or:
 
 Meaning:
 
-Two scopes represent substantially overlapping Content, but their internal directory organizations differ.
+Two branches represent substantially overlapping Content, but their internal directory organizations differ.
 
 Applicable Case types:
 
-    Primarily ScopePair
+    Primarily BranchPair
     A simple DirectoryPair may reduce to Move residue
 
 Semantic roles:
@@ -130,7 +130,7 @@ E intentionally duplicates material in D for recovery or preservation.
 Applicable Case types:
 
     DirectoryPair
-    ScopePair
+    BranchPair
 
 Semantic roles:
 
@@ -159,7 +159,7 @@ Content is being transferred from an old location or organization to a new one, 
 Applicable Case types:
 
     DirectoryPair
-    ScopePair
+    BranchPair
 
 Semantic roles:
 
@@ -188,7 +188,7 @@ E is an intentionally retained copy of D, or of some prior state of D, created f
 Applicable Case types:
 
     DirectoryPair
-    ScopePair
+    BranchPair
 
 Semantic roles:
 
@@ -223,7 +223,7 @@ E is an intentionally retained historical or preservation-oriented collection re
 Applicable Case types:
 
     DirectoryPair
-    ScopePair
+    BranchPair
 
 Semantic roles:
 
@@ -266,7 +266,7 @@ E is a temporary collection whose contents may have been copied or incorporated 
 Applicable Case types:
 
     DirectoryPair
-    ScopePair
+    BranchPair
 
 Semantic roles:
 
@@ -300,7 +300,7 @@ E contains downloaded Files, some of which are already represented elsewhere and
 Applicable Case types:
 
     DirectoryPair
-    ScopePair
+    BranchPair
 
 Semantic roles:
 
@@ -335,7 +335,7 @@ D and E are intended to contain corresponding Content. Differences between them 
 Applicable Case types:
 
     DirectoryPair
-    ScopePair
+    BranchPair
 
 Semantic roles:
 
@@ -386,7 +386,7 @@ These scenarios are retained so useful reasoning is not lost.
 
 **Intentional mirror** — developed into Mirror.
 
-**Aggregation residue** — a real scenario, but not currently a distinct Situation. Pairwise exposure may reduce it naturally to Move residue or Reorganization; a sufficiently broad ScopePair may encompass several original source locations.
+**Aggregation residue** — a real scenario, but not currently a distinct Situation. Pairwise exposure may reduce it naturally to Move residue or Reorganization; a sufficiently broad BranchPair may encompass several original source locations.
 
 ## Empirical refinement
 
