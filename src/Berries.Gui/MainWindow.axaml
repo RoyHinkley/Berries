@@ -18,10 +18,6 @@
         <Button x:Name="AddRootButton" Content="Add..." Click="AddRootButton_Click" />
         <Button x:Name="RemoveRootButton" Content="Remove" Click="RemoveRootButton_Click" />
         <Button x:Name="ScanButton" Content="Scan" Click="ScanButton_Click" />
-        <Button x:Name="FindDuplicatesButton" Content="Find duplicates" Click="FindDuplicatesButton_Click" IsEnabled="False" />
-        <Button x:Name="AnalyzeDirectoriesButton" Content="Analyze directories" Click="AnalyzeDirectoriesButton_Click" IsEnabled="False" />
-        <Button x:Name="AnalyzeScopesButton" Content="Analyze scopes" Click="AnalyzeScopesButton_Click" IsEnabled="False" />
-        <Button x:Name="AnalyzeCasesButton" Content="Top cases" Click="AnalyzeCasesButton_Click" IsEnabled="False" />
       </StackPanel>
     </Grid>
 
@@ -85,7 +81,7 @@
         <ListBox x:Name="ScopePairsList" Grid.Row="1" Margin="0,8,0,0" />
       </Grid>
       <Grid Grid.Column="2" RowDefinitions="Auto,*">
-        <TextBlock Text="Top cases — Ctrl+A, Ctrl+C to copy" FontWeight="SemiBold" />
+        <TextBlock Text="Top cases and settlement comparison — Ctrl+A, Ctrl+C to copy" FontWeight="SemiBold" />
         <TextBox x:Name="CasesReportText"
                  Grid.Row="1"
                  Margin="0,8,0,0"
