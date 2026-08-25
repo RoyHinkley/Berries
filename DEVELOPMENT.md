@@ -1,6 +1,6 @@
 # Development
 
-The governing design is split across `PROJECT.md`, `MODEL.md`, `ANALYSIS.md`, `SITUATIONS.md`, and `WORKFLOW.md`. `PROJECT.md` is the short architectural overview and index. This file records the current implementation state and immediate empirical work.
+The governing design is split across `PROJECT.md`, `MODEL.md`, `ANALYSIS.md`, `SITUATIONS.md`, `WORKFLOW.md`, and the empirical working document `BOUNDARY.md`. `PROJECT.md` is the short architectural overview and index. This file records the current implementation state and immediate empirical work.
 
 The solution contains:
 
@@ -18,7 +18,7 @@ The GUI maintains a list of Corpus roots. Root normalization removes exact dupli
 
 The `Scan` button now runs the exploratory pipeline in sequence:
 
-1. construct the Initial Portrait;
+1. load `Berries.config` and apply `[ignore]` rules while constructing the Initial Portrait;
 2. discover DuplicateSets by size grouping and SHA-256 hashing;
 3. cheaply screen for same-name DuplicateSets occurring once each in at least three distinct directories;
 4. present those candidates as a checklist asking which should be accepted with the retain-all resolution;
@@ -26,13 +26,34 @@ The `Scan` button now runs the exploratory pipeline in sequence:
 6. analyze unresolved direct-directory relationships;
 7. construct BranchPairs from the resulting DirectoryPair graph;
 8. rank/materialize the top Case sample;
-9. build the structural report and append the early-settlement selection summary.
+9. build the structural report and append the early-settlement and configuration summaries.
 
 The old individual `Find duplicates`, `Analyze directories`, `Analyze scopes`, and `Top cases` GUI buttons have been removed. Their controller operations remain separate so analysis stages stay testable and reusable.
 
 The checklist is deliberately an exploratory pre-structural decision pass. Nothing is preselected. Canceling the dialog aborts the remainder of the run. Checked items are settlements for the current run only; persistent filename rules have not yet been implemented.
 
-Each checklist item now exposes all instance paths through a hover tooltip so the user can inspect context without expanding the main UI.
+Each checklist item exposes all instance paths through a hover tooltip so the user can inspect context without expanding the main UI.
+
+## Berries.config ignore filtering
+
+`src/Berries.Gui/Berries.config` is copied beside the GUI executable and loaded from `AppContext.BaseDirectory` at the start of every scan.
+
+The current format is deliberately simple:
+
+    [ignore]
+    .git
+    bin
+    obj
+    *.tmp
+    .git/objects
+
+Blank lines and lines beginning with `#` or `;` are ignored. Matching is case-insensitive. `*` and `?` wildcards are supported.
+
+A pattern without a path separator is matched against every path component, so a directory-name match excludes all Files beneath that directory and an exact or wildcard filename can exclude that File wherever it occurs. A pattern containing `/` or `\` is matched against a contiguous portion of the full path.
+
+Ignored Files never enter the Initial Portrait and therefore never participate in hashing, DuplicateSets, DirectoryPairs, BranchPairs, or Cases. The filesystem adapter may still enumerate ignored directories internally; traversal pruning is not implemented because the present purpose is corpus control for empirical testing rather than scan optimization.
+
+The structural report records the loaded configuration path and active ignore patterns so runs remain interpretable.
 
 ## Duplicate discovery and accessibility
 
@@ -106,14 +127,14 @@ Report-time structural analysis is separately instrumented because large corpora
 
 ## Tests
 
-`Berries.Core.Tests` currently contains seventeen tests.
+`Berries.Core.Tests` currently contains eighteen tests.
 
-Coverage includes Corpus normalization, Portrait construction, duplicate discovery, file eviction, propagation of programming failures, settlement-aware directory analysis, graph metrics, DirectoryPair-driven BranchPair analysis including weighted evidence and nested cuts, settlement propagation through DirectoryPairs into BranchPairs, Case ranking/bounding, and structural evidence.
+Coverage includes Corpus normalization, Portrait construction and ignore filtering, duplicate discovery, file eviction, propagation of programming failures, settlement-aware directory analysis, graph metrics, DirectoryPair-driven BranchPair analysis including weighted evidence and nested cuts, settlement propagation through DirectoryPairs into BranchPairs, Case ranking/bounding, and structural evidence.
 
 The settlement tests cover both whole-DuplicateSet acceptance and selective pairwise acceptance with other mates remaining unresolved.
 
 ## Immediate empirical work
 
-The next structural study should examine whether objective co-occurrence or path context identifies repeated candidate families whose coherent question belongs above the DuplicateSet level—for example the Git hook `.sample` family—and whether repository/application-managed regions can be recognized generically enough to inform deletion safety without accumulating application-specific special cases.
+The next phase should use non-source-code real corpora and `Berries.config` to control the tested domain without manufacturing synthetic data. Record whether ordinary user-data Cases converge on the existing Situation catalogue, how often retain-all distributed DuplicateSets have exact filename matches, and which regions still appear opaque or unsafe to modify.
 
 Case ordering remains an open research question. No Situation inference, persistent Resolution rules, generalization rules, Dispositions, virtual ActionPlans, or physical execution have yet been implemented.
