@@ -89,6 +89,20 @@ Defines the user-decision and execution path:
     filesystem abstraction requirements
     deferred implementation refinements
 
+### [BOUNDARY.md](BOUNDARY.md)
+
+Records the empirical investigation of Berries' practical problem boundary:
+
+    what real-corpus experiments have established
+    semantic normalization before structural analysis
+    user-managed versus application-managed material
+    analytical participation versus destructive authority
+    possible ignore/protection mechanisms
+    open boundary questions
+    the next non-source-code empirical phase
+
+This is intentionally a working research document rather than a design commitment.
+
 ### [DEVELOPMENT.md](DEVELOPMENT.md)
 
 Records the current implementation state, vertical slices, tests, performance instrumentation, and short-term empirical-development work. It is descriptive of the current code, not the governing design.
@@ -181,4 +195,4 @@ In particular:
 - application-managed structures such as repositories and generated/build trees are valuable analytical evidence but may be poor targets for file-level deletion; identifying safely actionable user-content regions is therefore an important future research question;
 - the next ranking work should remain multi-objective and empirical rather than introducing an arbitrary weighted priority score prematurely.
 
-These are design context, not yet fully solved ranking rules. `ANALYSIS.md` records the current formulation.
+These are design context, not yet fully solved ranking rules. `ANALYSIS.md` records the current formulation, while `BOUNDARY.md` records the empirical investigation of where the problem itself should be bounded.
