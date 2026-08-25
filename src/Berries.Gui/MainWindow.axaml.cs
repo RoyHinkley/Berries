@@ -51,8 +51,13 @@ public partial class MainWindow : Window
 
         try
         {
-            StatusText.Text = "Scanning corpus...";
-            var scan = await controller.ScanAsync(roots);
+            var configPath = Path.Combine(AppContext.BaseDirectory, "Berries.config");
+            var config = BerriesConfig.Load(configPath);
+
+            StatusText.Text = config.IgnorePatterns.Count == 0
+                ? "Scanning corpus..."
+                : $"Scanning corpus with {config.IgnorePatterns.Count:N0} ignore rule(s)...";
+            var scan = await controller.ScanAsync(roots, config.IsIgnored);
             FileCountText.Text = scan.FileCount.ToString("N0");
             TotalBytesText.Text = scan.TotalBytes.ToString("N0");
             NormalizationElapsedText.Text = FormatElapsed(scan.CorpusNormalizationElapsed);
@@ -116,6 +121,7 @@ public partial class MainWindow : Window
                 evidenceAnalyzer);
 
             report += FormatEarlySettlementSummary(candidates, accepted);
+            report += FormatConfigSummary(config);
             CasesReportText.Text = report;
 
             var evictionText = duplicates.Evictions.Count == 0
@@ -146,6 +152,18 @@ public partial class MainWindow : Window
         foreach (var candidate in accepted)
             builder.AppendLine($"    {candidate.FileName}  ({candidate.DirectoryCount:N0} folders)");
 
+        return builder.ToString();
+    }
+
+    private static string FormatConfigSummary(BerriesConfig config)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine();
+        builder.AppendLine("Berries.config");
+        builder.AppendLine($"  path: {config.Path}");
+        builder.AppendLine($"  ignore rules: {config.IgnorePatterns.Count:N0}");
+        foreach (var pattern in config.IgnorePatterns)
+            builder.AppendLine($"    {pattern}");
         return builder.ToString();
     }
 
