@@ -39,8 +39,15 @@ public sealed class BerriesEngine
         Corpus corpus,
         IProgress<ScanProgress>? progress = null,
         CancellationToken cancellationToken = default) =>
+        BuildInitialPortraitAsync(corpus, null, progress, cancellationToken);
+
+    public Task<Portrait> BuildInitialPortraitAsync(
+        Corpus corpus,
+        Func<FileSystemPath, bool>? ignorePath,
+        IProgress<ScanProgress>? progress = null,
+        CancellationToken cancellationToken = default) =>
         Task.Run(
-            () => BuildInitialPortrait(corpus, progress, cancellationToken),
+            () => BuildInitialPortrait(corpus, ignorePath, progress, cancellationToken),
             cancellationToken);
 
     public Task<DuplicateDiscoveryResult> DiscoverDuplicatesAsync(
@@ -80,6 +87,7 @@ public sealed class BerriesEngine
 
     private Portrait BuildInitialPortrait(
         Corpus corpus,
+        Func<FileSystemPath, bool>? ignorePath,
         IProgress<ScanProgress>? progress,
         CancellationToken cancellationToken)
     {
@@ -92,6 +100,9 @@ public sealed class BerriesEngine
             foreach (var file in fileSystem.EnumerateFiles(root.Path))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                if (ignorePath?.Invoke(file.Path) == true)
+                    continue;
 
                 files.Add(new FileInstance(
                     file.Path,
