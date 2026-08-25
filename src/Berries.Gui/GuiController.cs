@@ -35,6 +35,7 @@ public sealed class GuiController
 
     public async Task<ScanResult> ScanAsync(
         IEnumerable<string> rootPaths,
+        Func<FileSystemPath, bool>? ignorePath = null,
         IProgress<ScanProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -46,7 +47,11 @@ public sealed class GuiController
         var normalizationElapsed = phaseTimer.Elapsed;
 
         phaseTimer.Restart();
-        Portrait = await engine.BuildInitialPortraitAsync(Corpus, progress, cancellationToken);
+        Portrait = await engine.BuildInitialPortraitAsync(
+            Corpus,
+            ignorePath,
+            progress,
+            cancellationToken);
         phaseTimer.Stop();
         var portraitElapsed = phaseTimer.Elapsed;
 
