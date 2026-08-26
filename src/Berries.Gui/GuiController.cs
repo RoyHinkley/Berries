@@ -11,11 +11,16 @@ public sealed class GuiController
 {
     private readonly BerriesEngine engine;
     private readonly CaseAnalyzer caseAnalyzer;
+    private readonly BranchStatisticsAnalyzer branchStatisticsAnalyzer;
 
-    public GuiController(BerriesEngine engine, CaseAnalyzer caseAnalyzer)
+    public GuiController(
+        BerriesEngine engine,
+        CaseAnalyzer caseAnalyzer,
+        BranchStatisticsAnalyzer branchStatisticsAnalyzer)
     {
         this.engine = engine;
         this.caseAnalyzer = caseAnalyzer;
+        this.branchStatisticsAnalyzer = branchStatisticsAnalyzer;
     }
 
     public Corpus? Corpus { get; private set; }
@@ -23,6 +28,7 @@ public sealed class GuiController
     public ScanResult? Scan { get; private set; }
     public DuplicateDiscoveryResult? DuplicateDiscovery { get; private set; }
     public DirectoryAnalysisResult? DirectoryAnalysis { get; private set; }
+    public BranchStatisticsResult? BranchStatistics { get; private set; }
     public BranchAnalysisResult? BranchAnalysis { get; private set; }
     public CaseAnalysisResult? CaseAnalysis { get; private set; }
     public DuplicateSettlements DuplicateSettlements { get; } = new();
@@ -58,6 +64,7 @@ public sealed class GuiController
         DuplicateSettlements.Clear();
         DuplicateDiscovery = null;
         DirectoryAnalysis = null;
+        BranchStatistics = null;
         BranchAnalysis = null;
         CaseAnalysis = null;
         totalTimer.Stop();
@@ -82,6 +89,7 @@ public sealed class GuiController
         DuplicateDiscovery = await engine.DiscoverDuplicatesAsync(Portrait, progress, cancellationToken);
         Portrait = DuplicateDiscovery.Portrait;
         DirectoryAnalysis = null;
+        BranchStatistics = null;
         BranchAnalysis = null;
         CaseAnalysis = null;
         return DuplicateDiscovery;
@@ -134,6 +142,7 @@ public sealed class GuiController
             DuplicateSettlements.Accept(candidate.DuplicateSet);
 
         DirectoryAnalysis = null;
+        BranchStatistics = null;
         BranchAnalysis = null;
         CaseAnalysis = null;
     }
@@ -141,7 +150,7 @@ public sealed class GuiController
     public async Task<DirectoryAnalysisResult> AnalyzeDirectoriesAsync(
         CancellationToken cancellationToken = default)
     {
-        if (Portrait is null || DuplicateDiscovery is null)
+        if (Corpus is null || Portrait is null || DuplicateDiscovery is null)
             throw new InvalidOperationException("Duplicate discovery must complete before directory analysis.");
 
         DirectoryAnalysis = await engine.AnalyzeDirectoriesAsync(
@@ -149,6 +158,15 @@ public sealed class GuiController
             DuplicateDiscovery.DuplicateSets,
             DuplicateSettlements,
             cancellationToken);
+
+        BranchStatistics = branchStatisticsAnalyzer.Analyze(
+            Corpus,
+            Portrait,
+            DuplicateDiscovery.DuplicateSets,
+            DuplicateSettlements,
+            DirectoryAnalysis.Directories,
+            cancellationToken);
+
         BranchAnalysis = null;
         CaseAnalysis = null;
         return DirectoryAnalysis;
