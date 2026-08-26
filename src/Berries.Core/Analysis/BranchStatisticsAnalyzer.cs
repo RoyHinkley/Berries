@@ -68,13 +68,21 @@ public sealed class BranchStatisticsAnalyzer(IFileSystem fileSystem)
 
         var branches = accumulators
             .Where(item => item.Value.DuplicateContentCount > 0)
-            .Select(item => new BranchRecord(
-                item.Key,
-                item.Value.FileCount,
-                item.Value.DirectoryCount,
-                item.Value.DuplicateFileCount,
-                item.Value.DuplicateContentCount,
-                item.Value.DuplicateDirectoryCount))
+            .Select(item =>
+            {
+                var parent = fileSystem.GetParentDirectory(item.Key);
+                if (parent is not null && !accumulators.ContainsKey(parent.Value))
+                    parent = null;
+
+                return new BranchRecord(
+                    item.Key,
+                    parent,
+                    item.Value.FileCount,
+                    item.Value.DirectoryCount,
+                    item.Value.DuplicateFileCount,
+                    item.Value.DuplicateContentCount,
+                    item.Value.DuplicateDirectoryCount);
+            })
             .OrderByDescending(branch => branch.DuplicateContentCount)
             .ThenByDescending(branch => branch.DuplicateFileCount)
             .ThenBy(branch => branch.Path.Value, StringComparer.Ordinal)
