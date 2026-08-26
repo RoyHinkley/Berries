@@ -9,7 +9,8 @@ public sealed record BranchCounterpart(
     int SharedDuplicateContentCount,
     double SeedCoverage,
     double CounterpartCoverage,
-    double Jaccard);
+    double Jaccard,
+    double Score);
 
 public sealed record BranchCounterpartSeed(
     BranchPriorityMetric Seed,
@@ -89,9 +90,17 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
                     var counterpartCoverage = (double)shared / candidate.DuplicateContentCount;
                     var union = seed.Branch.DuplicateContentCount + candidate.DuplicateContentCount - shared;
                     var jaccard = union == 0 ? 0 : (double)shared / union;
-                    return new BranchCounterpart(candidate, shared, seedCoverage, counterpartCoverage, jaccard);
+                    var score = shared * jaccard;
+                    return new BranchCounterpart(
+                        candidate,
+                        shared,
+                        seedCoverage,
+                        counterpartCoverage,
+                        jaccard,
+                        score);
                 })
-                .OrderByDescending(item => item.SharedDuplicateContentCount)
+                .OrderByDescending(item => item.Score)
+                .ThenByDescending(item => item.SharedDuplicateContentCount)
                 .ThenByDescending(item => item.Jaccard)
                 .ThenBy(item => item.Branch.Path.Value, StringComparer.Ordinal);
 
