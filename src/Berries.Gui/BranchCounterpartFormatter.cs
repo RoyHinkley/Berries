@@ -11,7 +11,8 @@ internal static class BranchCounterpartFormatter
         builder.AppendLine();
         builder.AppendLine("Experimental targeted branch counterpart search");
         builder.AppendLine($"  seeds: {result.Seeds.Count:N0}; analysis time: {FormatElapsed(result.Elapsed)}");
-        builder.AppendLine("  seeds ranked by D * (1 - 1/C); nested branches are excluded as counterparts");
+        builder.AppendLine("  seeds ranked by D * (1 - 1/C); counterparts ranked by shared Content * Jaccard");
+        builder.AppendLine("  nested branches are excluded after each counterpart is selected");
 
         for (var index = 0; index < result.Seeds.Count; index++)
         {
@@ -31,7 +32,7 @@ internal static class BranchCounterpartFormatter
             foreach (var counterpart in item.Counterparts)
             {
                 builder.AppendLine(
-                    $"      shared {counterpart.SharedDuplicateContentCount,6:N0}; " +
+                    $"      score {counterpart.Score,9:N2}; shared {counterpart.SharedDuplicateContentCount,6:N0}; " +
                     $"coverage {counterpart.SeedCoverage,6:P1}/{counterpart.CounterpartCoverage,6:P1}; " +
                     $"Jaccard {counterpart.Jaccard,6:P1}  {counterpart.Branch.Path.Value}");
             }
