@@ -122,10 +122,10 @@ public partial class MainWindow : Window
                 controller.Portrait!.Files,
                 duplicateDiscovery.DuplicateSets,
                 directories,
-                branchStatistics,
                 branches,
                 evidenceAnalyzer);
 
+            report += BranchStatisticsFormatter.Format(branchStatistics);
             report += FormatEarlySettlementSummary(candidates, accepted);
             report += FormatConfigSummary(config);
             CasesReportText.Text = report;
