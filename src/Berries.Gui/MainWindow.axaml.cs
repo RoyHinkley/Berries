@@ -19,7 +19,10 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         var fileSystem = new WindowsFileSystem();
-        controller = new GuiController(new BerriesEngine(fileSystem), new CaseAnalyzer(fileSystem));
+        controller = new GuiController(
+            new BerriesEngine(fileSystem),
+            new CaseAnalyzer(fileSystem),
+            new BranchStatisticsAnalyzer(fileSystem));
         evidenceAnalyzer = new StructuralEvidenceAnalyzer(fileSystem);
         RefreshRoots();
     }
@@ -89,8 +92,10 @@ public partial class MainWindow : Window
                 controller.AcceptWholeDuplicateSets(accepted);
             }
 
-            StatusText.Text = "Analyzing directory relationships...";
+            StatusText.Text = "Analyzing directory and branch statistics...";
             var directories = await controller.AnalyzeDirectoriesAsync();
+            var branchStatistics = controller.BranchStatistics
+                ?? throw new InvalidOperationException("Branch statistics have not completed.");
             DirectoryCountText.Text = directories.Directories.Count.ToString("N0");
             DirectoryPairCountText.Text = directories.DirectoryPairs.Count.ToString("N0");
             DirectoryAnalysisElapsedText.Text = FormatElapsed(directories.Timing.Total);
@@ -117,6 +122,7 @@ public partial class MainWindow : Window
                 controller.Portrait!.Files,
                 duplicateDiscovery.DuplicateSets,
                 directories,
+                branchStatistics,
                 branches,
                 evidenceAnalyzer);
 
