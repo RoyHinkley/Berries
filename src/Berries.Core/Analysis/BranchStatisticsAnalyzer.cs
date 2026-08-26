@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Berries.Core.Domain;
 using Berries.FileSystem.Abstractions;
 
@@ -9,7 +10,7 @@ namespace Berries.Core.Analysis;
 /// </summary>
 public sealed class BranchStatisticsAnalyzer(IFileSystem fileSystem)
 {
-    public IReadOnlyList<BranchRecord> Analyze(
+    public BranchStatisticsResult Analyze(
         Corpus corpus,
         Portrait portrait,
         IReadOnlyList<DuplicateSet> duplicateSets,
@@ -17,6 +18,7 @@ public sealed class BranchStatisticsAnalyzer(IFileSystem fileSystem)
         IReadOnlyList<DirectoryRecord> duplicateDirectories,
         CancellationToken cancellationToken = default)
     {
+        var timer = Stopwatch.StartNew();
         var ancestorsByDirectory = new Dictionary<FileSystemPath, IReadOnlyList<FileSystemPath>>();
         var accumulators = new Dictionary<FileSystemPath, Accumulator>();
 
@@ -64,7 +66,7 @@ public sealed class BranchStatisticsAnalyzer(IFileSystem fileSystem)
                 GetAccumulator(accumulators, branch).DuplicateContentCount++;
         }
 
-        return accumulators
+        var branches = accumulators
             .Where(item => item.Value.DuplicateContentCount > 0)
             .Select(item => new BranchRecord(
                 item.Key,
@@ -77,6 +79,9 @@ public sealed class BranchStatisticsAnalyzer(IFileSystem fileSystem)
             .ThenByDescending(branch => branch.DuplicateFileCount)
             .ThenBy(branch => branch.Path.Value, StringComparer.Ordinal)
             .ToArray();
+
+        timer.Stop();
+        return new BranchStatisticsResult(branches, timer.Elapsed);
     }
 
     private static IReadOnlyCollection<FileSystemPath> GetUnresolvedParticipatingDirectories(
