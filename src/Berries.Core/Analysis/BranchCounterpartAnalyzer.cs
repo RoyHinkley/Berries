@@ -79,7 +79,7 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
 
         var results = seeds.Select(seed =>
         {
-            var counterparts = overlaps[seed.Branch.Path]
+            var rankedCandidates = overlaps[seed.Branch.Path]
                 .Where(item => byPath.ContainsKey(item.Key))
                 .Select(item =>
                 {
@@ -93,9 +93,22 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
                 })
                 .OrderByDescending(item => item.SharedDuplicateContentCount)
                 .ThenByDescending(item => item.Jaccard)
-                .ThenBy(item => item.Branch.Path.Value, StringComparer.Ordinal)
-                .Take(counterpartLimit)
-                .ToArray();
+                .ThenBy(item => item.Branch.Path.Value, StringComparer.Ordinal);
+
+            // Keep independently located counterpart regions. Once a counterpart is
+            // selected, its ancestors and descendants describe the same relationship
+            // at different boundaries and are suppressed for this seed.
+            var counterparts = new List<BranchCounterpart>(counterpartLimit);
+            foreach (var candidate in rankedCandidates)
+            {
+                if (counterparts.Any(selected => AreNested(selected.Branch.Path, candidate.Branch.Path)))
+                    continue;
+
+                counterparts.Add(candidate);
+                if (counterparts.Count == counterpartLimit)
+                    break;
+            }
+
             return new BranchCounterpartSeed(seed, counterparts);
         }).ToArray();
 
