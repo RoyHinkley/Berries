@@ -21,9 +21,10 @@ public sealed record BranchCounterpartResult(
     TimeSpan Elapsed);
 
 /// <summary>
-/// Experimental targeted counterpart search. Starts with intrinsically interesting
-/// branches and asks which disjoint branches share their duplicated Content. It does
-/// not enumerate BranchPairs.
+/// Experimental targeted counterpart search. Seeds are considered in branch-priority
+/// order. After a seed and its best counterpart are selected, both branches and all
+/// their descendants are excluded from later selections. This approximates the effect
+/// of completely resolving each selected BranchPair without modifying the portrait.
 /// </summary>
 public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
 {
@@ -32,23 +33,21 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
         IReadOnlyList<BranchRecord> branches,
         IReadOnlyList<DuplicateSet> duplicateSets,
         DuplicateSettlements settlements,
-        int seedLimit = 25,
-        int counterpartLimit = 10,
+        int seedLimit = int.MaxValue,
+        int counterpartLimit = 1,
         CancellationToken cancellationToken = default)
     {
         var timer = Stopwatch.StartNew();
         var byPath = branches.ToDictionary(branch => branch.Path);
-        var seeds = BranchPriorityMetrics.Calculate(branches)
+        var rankedSeeds = BranchPriorityMetrics.Calculate(branches)
             .Where(metric => metric.ExcessConcentratedContent > 0)
             .OrderByDescending(metric => metric.ExcessConcentratedContent)
             .ThenByDescending(metric => metric.Branch.DuplicateContentCount)
             .Take(seedLimit)
             .ToArray();
-        var seedPaths = seeds.Select(seed => seed.Branch.Path).ToHashSet();
-        var overlaps = seeds.ToDictionary(
-            seed => seed.Branch.Path,
-            _ => new Dictionary<FileSystemPath, int>());
+
         var ancestorCache = new Dictionary<FileSystemPath, IReadOnlyList<FileSystemPath>>();
+        var touchedByDuplicateSet = new List<IReadOnlySet<FileSystemPath>>();
 
         foreach (var duplicateSet in duplicateSets)
         {
@@ -66,51 +65,48 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
                 }
             }
 
-            foreach (var seedPath in touchedBranches.Where(seedPaths.Contains))
-            {
-                var counts = overlaps[seedPath];
-                foreach (var candidatePath in touchedBranches)
-                {
-                    if (candidatePath == seedPath || AreNested(seedPath, candidatePath))
-                        continue;
-                    counts[candidatePath] = counts.GetValueOrDefault(candidatePath) + 1;
-                }
-            }
+            touchedByDuplicateSet.Add(touchedBranches);
         }
 
-        var results = seeds.Select(seed =>
+        var selected = new List<BranchCounterpartSeed>();
+        var blockedRoots = new List<FileSystemPath>();
+
+        foreach (var seed in rankedSeeds)
         {
-            var rankedCandidates = overlaps[seed.Branch.Path]
-                .Where(item => byPath.ContainsKey(item.Key))
-                .Select(item =>
+            cancellationToken.ThrowIfCancellationRequested();
+            if (IsBlocked(seed.Branch.Path, blockedRoots))
+                continue;
+
+            var overlaps = new Dictionary<FileSystemPath, int>();
+            foreach (var touchedBranches in touchedByDuplicateSet)
+            {
+                if (!touchedBranches.Contains(seed.Branch.Path))
+                    continue;
+
+                foreach (var candidatePath in touchedBranches)
                 {
-                    var candidate = byPath[item.Key];
-                    var shared = item.Value;
-                    var seedCoverage = (double)shared / seed.Branch.DuplicateContentCount;
-                    var counterpartCoverage = (double)shared / candidate.DuplicateContentCount;
-                    var union = seed.Branch.DuplicateContentCount + candidate.DuplicateContentCount - shared;
-                    var jaccard = union == 0 ? 0 : (double)shared / union;
-                    var score = shared * jaccard;
-                    return new BranchCounterpart(
-                        candidate,
-                        shared,
-                        seedCoverage,
-                        counterpartCoverage,
-                        jaccard,
-                        score);
-                })
+                    if (candidatePath == seed.Branch.Path ||
+                        AreNested(seed.Branch.Path, candidatePath) ||
+                        IsBlocked(candidatePath, blockedRoots))
+                        continue;
+
+                    overlaps[candidatePath] = overlaps.GetValueOrDefault(candidatePath) + 1;
+                }
+            }
+
+            var rankedCandidates = overlaps
+                .Where(item => byPath.ContainsKey(item.Key))
+                .Select(item => CreateCounterpart(seed, byPath[item.Key], item.Value))
                 .OrderByDescending(item => item.Score)
                 .ThenByDescending(item => item.SharedDuplicateContentCount)
                 .ThenByDescending(item => item.Jaccard)
-                .ThenBy(item => item.Branch.Path.Value, StringComparer.Ordinal);
+                .ThenBy(item => item.Branch.Path.Value, StringComparer.Ordinal)
+                .ToArray();
 
-            // Keep independently located counterpart regions. Once a counterpart is
-            // selected, its ancestors and descendants describe the same relationship
-            // at different boundaries and are suppressed for this seed.
             var counterparts = new List<BranchCounterpart>(counterpartLimit);
             foreach (var candidate in rankedCandidates)
             {
-                if (counterparts.Any(selected => AreNested(selected.Branch.Path, candidate.Branch.Path)))
+                if (counterparts.Any(existing => AreNested(existing.Branch.Path, candidate.Branch.Path)))
                     continue;
 
                 counterparts.Add(candidate);
@@ -118,12 +114,40 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
                     break;
             }
 
-            return new BranchCounterpartSeed(seed, counterparts);
-        }).ToArray();
+            if (counterparts.Count == 0)
+                continue;
+
+            selected.Add(new BranchCounterpartSeed(seed, counterparts));
+
+            blockedRoots.Add(seed.Branch.Path);
+            blockedRoots.Add(counterparts[0].Branch.Path);
+        }
 
         timer.Stop();
-        return new BranchCounterpartResult(results, timer.Elapsed);
+        return new BranchCounterpartResult(selected, timer.Elapsed);
     }
+
+    private static BranchCounterpart CreateCounterpart(
+        BranchPriorityMetric seed,
+        BranchRecord candidate,
+        int shared)
+    {
+        var seedCoverage = (double)shared / seed.Branch.DuplicateContentCount;
+        var counterpartCoverage = (double)shared / candidate.DuplicateContentCount;
+        var union = seed.Branch.DuplicateContentCount + candidate.DuplicateContentCount - shared;
+        var jaccard = union == 0 ? 0 : (double)shared / union;
+        var score = shared * jaccard;
+        return new BranchCounterpart(
+            candidate,
+            shared,
+            seedCoverage,
+            counterpartCoverage,
+            jaccard,
+            score);
+    }
+
+    private bool IsBlocked(FileSystemPath path, IReadOnlyList<FileSystemPath> blockedRoots) =>
+        blockedRoots.Any(root => path == root || fileSystem.IsDescendant(path, root));
 
     private bool AreNested(FileSystemPath first, FileSystemPath second) =>
         fileSystem.IsDescendant(first, second) || fileSystem.IsDescendant(second, first);
