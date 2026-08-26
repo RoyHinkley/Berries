@@ -43,7 +43,6 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
             .Where(metric => metric.ExcessConcentratedContent > 0)
             .OrderByDescending(metric => metric.ExcessConcentratedContent)
             .ThenByDescending(metric => metric.Branch.DuplicateContentCount)
-            .Take(seedLimit)
             .ToArray();
 
         var ancestorCache = new Dictionary<FileSystemPath, IReadOnlyList<FileSystemPath>>();
@@ -74,6 +73,8 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
         foreach (var seed in rankedSeeds)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (selected.Count >= seedLimit)
+                break;
             if (IsBlocked(seed.Branch.Path, blockedRoots))
                 continue;
 
