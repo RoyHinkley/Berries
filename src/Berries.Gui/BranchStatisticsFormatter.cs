@@ -8,6 +8,8 @@ internal static class BranchStatisticsFormatter
     public static string Format(BranchStatisticsResult result, int limit = 25)
     {
         var builder = new StringBuilder();
+        var byPath = result.Branches.ToDictionary(branch => branch.Path);
+
         builder.AppendLine();
         builder.AppendLine("Branch statistics");
         builder.AppendLine($"  duplicate-bearing branches: {result.Branches.Count:N0}");
@@ -28,6 +30,23 @@ internal static class BranchStatisticsFormatter
                 $"dup-files {branch.DuplicateFileCount,7:N0}/{branch.FileCount,-7:N0} ({duplicateFileFraction,6:P1})  " +
                 $"dup-dirs {branch.DuplicateDirectoryCount,5:N0}/{branch.DirectoryCount,-5:N0} ({duplicateDirectoryFraction,6:P1})  " +
                 branch.Path.Value);
+
+            if (branch.ParentPath is { } parentPath && byPath.TryGetValue(parentPath, out var parent))
+            {
+                var contentRetention = parent.DuplicateContentCount == 0
+                    ? 0
+                    : (double)branch.DuplicateContentCount / parent.DuplicateContentCount;
+                var fileRetention = parent.FileCount == 0
+                    ? 0
+                    : (double)branch.FileCount / parent.FileCount;
+                var directoryRetention = parent.DirectoryCount == 0
+                    ? 0
+                    : (double)branch.DirectoryCount / parent.DirectoryCount;
+
+                builder.AppendLine(
+                    $"      from parent: duplicated Content {contentRetention,6:P1}; " +
+                    $"files {fileRetention,6:P1}; directories {directoryRetention,6:P1}");
+            }
         }
 
         return builder.ToString();
