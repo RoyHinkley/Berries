@@ -12,7 +12,7 @@ namespace Berries.Gui;
 public partial class MainWindow : Window
 {
     private readonly GuiController controller;
-    private readonly StructuralEvidenceAnalyzer evidenceAnalyzer;
+    private readonly BranchCounterpartAnalyzer counterpartAnalyzer;
     private readonly List<string> roots = [];
 
     public MainWindow()
@@ -23,7 +23,7 @@ public partial class MainWindow : Window
             new BerriesEngine(fileSystem),
             new CaseAnalyzer(fileSystem),
             new BranchStatisticsAnalyzer(fileSystem));
-        evidenceAnalyzer = new StructuralEvidenceAnalyzer(fileSystem);
+        counterpartAnalyzer = new BranchCounterpartAnalyzer(fileSystem);
         RefreshRoots();
     }
 
@@ -103,37 +103,47 @@ public partial class MainWindow : Window
                 .Select(pair => $"{pair.Leverage,6:N0}    {pair.First.Value}    ↔    {pair.Second.Value}")
                 .ToArray();
 
-            StatusText.Text = "Analyzing branch relationships...";
-            var branches = await controller.AnalyzeBranchesAsync();
-            BranchPairCountText.Text = branches.BranchPairs.Count.ToString("N0");
-            BranchAnalysisElapsedText.Text = FormatElapsed(branches.Timing.Total);
-            BranchPairsList.ItemsSource = branches.BranchPairs.Take(25)
-                .Select(pair => $"{pair.Leverage,6:N0}  [{pair.DirectoryPairCount,5:N0}]    {pair.FirstRoot.Value}    ↔    {pair.SecondRoot.Value}")
-                .ToArray();
+            // Experimental path: deliberately do not enumerate BranchPairs or rank the old
+            // comprehensive Case set. Start from intrinsically interesting branches instead.
+            BranchPairCountText.Text = "suspended";
+            BranchAnalysisElapsedText.Text = "—";
+            BranchPairsList.ItemsSource = null;
 
-            StatusText.Text = "Ranking cases...";
-            var cases = controller.AnalyzeTopCases(25);
-            var duplicateDiscovery = controller.DuplicateDiscovery
-                ?? throw new InvalidOperationException("Duplicate discovery has not completed.");
-            var report = CaseReportFormatter.Format(
-                scan,
-                duplicateDiscovery,
-                cases,
-                controller.Portrait!.Files,
-                duplicateDiscovery.DuplicateSets,
-                directories,
-                branches,
-                evidenceAnalyzer);
+            StatusText.Text = "Searching targeted branch counterparts...";
+            var corpus = controller.Corpus
+                ?? throw new InvalidOperationException("Corpus is unavailable.");
+            var counterpartResult = counterpartAnalyzer.Analyze(
+                corpus,
+                branchStatistics.Branches,
+                duplicates.DuplicateSets,
+                controller.DuplicateSettlements,
+                seedLimit: 25,
+                counterpartLimit: 10);
 
-            report += BranchStatisticsFormatter.Format(branchStatistics);
-            report += FormatEarlySettlementSummary(candidates, accepted);
-            report += FormatConfigSummary(config);
-            CasesReportText.Text = report;
+            var report = new StringBuilder();
+            report.AppendLine("Experimental run: comprehensive BranchPair generation suspended");
+            report.AppendLine($"  corpus roots: {scan.Roots.Count:N0}");
+            foreach (var root in scan.Roots)
+                report.AppendLine($"    {root}");
+            report.AppendLine($"  current portrait: {duplicates.Portrait.Files.Count:N0} files; {duplicates.Portrait.Files.Sum(file => file.Length):N0} bytes");
+            report.AppendLine($"  duplicate sets: {duplicates.DuplicateSets.Count:N0}; duplicate files: {duplicates.DuplicateFileCount:N0}");
+            report.AppendLine($"  analyzed directories: {directories.Directories.Count:N0}; DirectoryPairs: {directories.DirectoryPairs.Count:N0}; BranchPairs: not generated");
+            report.AppendLine("  measured phase times:");
+            report.AppendLine($"    scan total:              {FormatElapsed(scan.TotalElapsed)}");
+            report.AppendLine($"    duplicate discovery:     {FormatElapsed(duplicates.Timing.Total)}");
+            report.AppendLine($"    directory analysis:      {FormatElapsed(directories.Timing.Total)}");
+            report.AppendLine($"    branch statistics:       {FormatElapsed(branchStatistics.Elapsed)}");
+            report.AppendLine($"    targeted counterparts:   {FormatElapsed(counterpartResult.Elapsed)}");
+            report.Append(BranchStatisticsFormatter.Format(branchStatistics));
+            report.Append(BranchCounterpartFormatter.Format(counterpartResult));
+            report.Append(FormatEarlySettlementSummary(candidates, accepted));
+            report.Append(FormatConfigSummary(config));
+            CasesReportText.Text = report.ToString();
 
             var evictionText = duplicates.Evictions.Count == 0
                 ? string.Empty
                 : $" {duplicates.Evictions.Count:N0} inaccessible file(s) removed from the portrait.";
-            StatusText.Text = $"Analysis complete: {cases.TotalCaseCount:N0} cases after {accepted.Count:N0} accepted distributed DuplicateSet(s); showing top {cases.TopCases.Count:N0}." + evictionText;
+            StatusText.Text = $"Experimental analysis complete: {counterpartResult.Seeds.Count:N0} branch seeds examined after {accepted.Count:N0} accepted distributed DuplicateSet(s)." + evictionText;
         }
         catch (Exception ex)
         {
