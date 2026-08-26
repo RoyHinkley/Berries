@@ -23,10 +23,10 @@ The `Scan` button now runs the exploratory pipeline in sequence:
 3. cheaply screen for same-name DuplicateSets occurring once each in at least three distinct directories;
 4. present those candidates as a checklist asking which should be accepted with the retain-all resolution;
 5. apply the checked whole-DuplicateSet settlements;
-6. analyze unresolved direct-directory relationships;
+6. analyze unresolved direct-directory relationships and derive first-class statistics for every duplicate-bearing Branch;
 7. construct BranchPairs from the resulting DirectoryPair graph;
 8. rank/materialize the top Case sample;
-9. build the structural report and append the early-settlement and configuration summaries.
+9. build the structural report and append branch-statistics, early-settlement, and configuration summaries.
 
 The old individual `Find duplicates`, `Analyze directories`, `Analyze scopes`, and `Top cases` GUI buttons have been removed. Their controller operations remain separate so analysis stages stay testable and reusable.
 
@@ -101,9 +101,22 @@ Directory records describe direct Files only. `FileCount` remains physical; dupl
 
 Each unresolved Content contributes once to a `DirectoryPair` when at least one unresolved File-instance relationship crosses the two directories. The DirectoryPair graph supplies degree, weighted degree, strongest-edge concentration, connected components, density, and related diagnostics.
 
-## Branch analysis
+## Branch statistics and analysis
 
-Branch analysis consumes the already constructed `DirectoryPair` graph instead of reconstructing pair evidence independently from DuplicateSets.
+`BranchStatisticsAnalyzer` now derives settlement-aware local statistics for every duplicate-bearing Branch independently of BranchPair enumeration. Each `BranchRecord` contains:
+
+    Path
+    FileCount
+    DirectoryCount
+    DuplicateFileCount
+    DuplicateContentCount
+    DuplicateDirectoryCount
+
+`DuplicateContentCount` is a distinct-Content count across the whole branch, not the sum of descendant directory counts. These are intended as fundamental exploratory values from which concentration and hierarchy gradients can later be derived without first enumerating BranchPairs.
+
+The report currently lists the top 25 Branches by distinct duplicated Content and shows duplicate-file and duplicate-directory fractions. Branch-statistics analysis is timed separately.
+
+BranchPair analysis remains separate and consumes the already constructed `DirectoryPair` graph instead of reconstructing pair evidence independently from DuplicateSets.
 
 Each DirectoryPair edge is propagated through ancestor-or-self Branch combinations. Its leverage is added once to each effective BranchPair cut it crosses. The current BranchPair measure is therefore weighted cut size, and `DirectoryPairCount` records the number of distinct direct DirectoryPairs contributing to the cut.
 
@@ -117,6 +130,13 @@ This eliminates duplicated DuplicateSet-to-directory-pair expansion and makes se
 
 Descending leverage remains the temporary sampling order only. Real-corpus work has established that leverage is not the program objective and is not known to be the best general Case ordering. Exact distinct-Content BranchPair leverage and weighted structural leverage produce materially different rankings. Specificity, coverage, concentration, boundary position, and settlement impact remain active empirical characteristics.
 
+The current research framing distinguishes two broad viewpoints:
+
+- file-centric: why is this Content duplicated broadly or repeatedly?
+- container-centric: why does this directory or Branch contain so much duplicated Content?
+
+The working hypothesis is that cheap local statistics can generate promising Cases directly and reduce dependence on exhaustive pair enumeration. File-centric grouped settlement has already shown large downstream benefit; the next question is whether related container-centric Cases can be identified and resolved similarly en masse.
+
 The actual objective is reduction of the user's remaining decision work. A Resolution can accomplish this through filesystem changes, acceptance settlements, or both. Resolving several objectively similar Cases with one compact user interaction is therefore directly aligned with the program objective.
 
 ## Structural diagnostics
@@ -127,14 +147,16 @@ Report-time structural analysis is separately instrumented because large corpora
 
 ## Tests
 
-`Berries.Core.Tests` currently contains eighteen tests.
+`Berries.Core.Tests` currently contains nineteen tests.
 
-Coverage includes Corpus normalization, Portrait construction and ignore filtering, duplicate discovery, file eviction, propagation of programming failures, settlement-aware directory analysis, graph metrics, DirectoryPair-driven BranchPair analysis including weighted evidence and nested cuts, settlement propagation through DirectoryPairs into BranchPairs, Case ranking/bounding, and structural evidence.
+Coverage includes Corpus normalization, Portrait construction and ignore filtering, duplicate discovery, file eviction, propagation of programming failures, settlement-aware directory analysis, first-class Branch statistics, graph metrics, DirectoryPair-driven BranchPair analysis including weighted evidence and nested cuts, settlement propagation through DirectoryPairs into BranchPairs, Case ranking/bounding, and structural evidence.
 
 The settlement tests cover both whole-DuplicateSet acceptance and selective pairwise acceptance with other mates remaining unresolved.
 
 ## Immediate empirical work
 
-The next phase should use non-source-code real corpora and `Berries.config` to control the tested domain without manufacturing synthetic data. Record whether ordinary user-data Cases converge on the existing Situation catalogue, how often retain-all distributed DuplicateSets have exact filename matches, and which regions still appear opaque or unsafe to modify.
+Run the current non-source-code corpus with the existing ignore configuration and inspect the new Branch statistics. In particular, look for hierarchy transitions where a child Branch retains a large fraction of its parent's duplicated Content while shedding much of the parent's ordinary breadth, and for branches whose duplicate-file or duplicate-directory concentration is unusually high.
+
+The purpose is to determine whether promising container-centric Cases can be found by local/tree search before generating the full BranchPair population, and whether counterpart search can then be limited to branches sharing substantial duplicated Content.
 
 Case ordering remains an open research question. No Situation inference, persistent Resolution rules, generalization rules, Dispositions, virtual ActionPlans, or physical execution have yet been implemented.
