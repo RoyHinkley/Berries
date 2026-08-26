@@ -137,11 +137,31 @@ These are objective evidence, not semantic classification.
 
 Empirically, high coverage plus high concentration identifies a very different relationship from high coverage embedded in a large diffuse hub. For example, standardized generated/template directories can form exact-content cliques with very low edge concentration.
 
+## Build Branch records
+
+A Branch is useful as an objective unit even before it is paired with another Branch.
+
+For every duplicate-bearing Branch, derive settlement-aware local statistics independently of BranchPair enumeration:
+
+    Path
+    ParentPath
+    FileCount
+    DirectoryCount
+    DuplicateFileCount
+    DuplicateContentCount
+    DuplicateDirectoryCount
+
+`DuplicateContentCount` is the number of distinct unresolved duplicated Contents represented anywhere in the Branch. It must not be obtained by summing descendant Directory `DuplicateContentCount` values because the same Content can occur in several descendant directories.
+
+These values support local hierarchy analysis. In particular, compare a child with its parent to observe how much duplicated Content is retained while ordinary structural breadth is discarded. A child retaining most duplicated Content while containing far fewer Files or directories is a natural candidate focus for a container-centric Case.
+
+Branch records are deliberately independent of BranchPair construction. The working hypothesis is that promising BranchPair Cases may often be found by first locating an objectively interesting Branch and then searching only for plausible counterparts, rather than enumerating every BranchPair combination.
+
 ## Build BranchPairs
 
 A Branch rooted at A contains A and all descendants.
 
-Branch analysis consumes the already-constructed DirectoryPair graph. It does not independently reconstruct directory-pair evidence from DuplicateSets.
+BranchPair analysis consumes the already-constructed DirectoryPair graph. It does not independently reconstruct directory-pair evidence from DuplicateSets.
 
 Each DirectoryPair contributes its weight to containing pairs of ancestor-or-self Branches.
 
@@ -194,7 +214,7 @@ This makes boundary movement itself useful structural evidence. Related BranchPa
 
 Cases are objective, program-discovered bounded sets of Files derived from the Current Portrait plus the current unresolved-duplication state. Situations are not needed for discovery.
 
-Candidate Case types and bounds:
+Candidate Case types and bounds currently include:
 
     DuplicateSet Case
         all File instances in one DuplicateSet having at least one unresolved
@@ -209,6 +229,16 @@ Candidate Case types and bounds:
 
     BranchPair Case
         all Files on the two effective disjoint BranchPair sides
+
+The Case catalogue is not presumed complete. Real-corpus work suggests two broad discovery viewpoints:
+
+    file-centric
+        Why is this Content duplicated broadly or repeatedly?
+
+    container-centric
+        Why does this directory or Branch contain so much duplicated Content?
+
+A useful candidate need not originate from exhaustive pair enumeration. Distinctive local conditions may generate Cases directly. Examples under active study include widely distributed same-name Content, directories with dense internal duplication, branches with high duplicated-Content concentration, and branches whose duplicate relationships are unusually diffuse.
 
 Structural Cases include unique Files as defined by their bounds because those Files may matter to a Disposition.
 
@@ -324,6 +354,7 @@ After a virtual Apply or a new settlement, invalidate/recompute affected portion
     unresolved DuplicateSet evidence
     Directory records
     DirectoryPair relationships and graph metrics
+    Branch records
     BranchPair relationships
     candidate Cases
     presentation ordering
