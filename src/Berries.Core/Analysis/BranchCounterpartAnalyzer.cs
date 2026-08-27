@@ -14,20 +14,23 @@ public sealed record BranchCounterpart(
 
 public sealed record BranchCounterpartSeed(
     BranchPriorityMetric Seed,
-    IReadOnlyList<BranchCounterpart> Counterparts);
+    IReadOnlyList<BranchCounterpart> Counterparts,
+    int CandidateSeedRank = 0);
 
 public sealed record BranchCounterpartResult(
     IReadOnlyList<BranchCounterpartSeed> Seeds,
     TimeSpan Elapsed);
 
 /// <summary>
-/// Experimental targeted counterpart search. Seeds are considered in branch-priority
-/// order. After a seed and its best counterpart are selected, both branches and all
-/// their descendants are excluded from later selections. This approximates the effect
-/// of completely resolving each selected BranchPair without modifying the portrait.
+/// Experimental targeted counterpart search. At each round, the top eligible seed
+/// candidates are paired with their best counterparts; the strongest resulting pair
+/// is selected. Both selected branches and all descendants are then excluded. This
+/// approximates complete resolution while avoiding comprehensive BranchPair generation.
 /// </summary>
 public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
 {
+    private const int CandidateSeedLimit = 10;
+
     public BranchCounterpartResult Analyze(
         Corpus corpus,
         IReadOnlyList<BranchRecord> branches,
@@ -70,62 +73,79 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
         var selected = new List<BranchCounterpartSeed>();
         var blockedRoots = new List<FileSystemPath>();
 
-        foreach (var seed in rankedSeeds)
+        while (selected.Count < seedLimit)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (selected.Count >= seedLimit)
-                break;
-            if (IsBlocked(seed.Branch.Path, blockedRoots))
-                continue;
 
-            var overlaps = new Dictionary<FileSystemPath, int>();
-            foreach (var touchedBranches in touchedByDuplicateSet)
-            {
-                if (!touchedBranches.Contains(seed.Branch.Path))
-                    continue;
-
-                foreach (var candidatePath in touchedBranches)
-                {
-                    if (candidatePath == seed.Branch.Path ||
-                        AreNested(seed.Branch.Path, candidatePath) ||
-                        IsBlocked(candidatePath, blockedRoots))
-                        continue;
-
-                    overlaps[candidatePath] = overlaps.GetValueOrDefault(candidatePath) + 1;
-                }
-            }
-
-            var rankedCandidates = overlaps
-                .Where(item => byPath.ContainsKey(item.Key))
-                .Select(item => CreateCounterpart(seed, byPath[item.Key], item.Value))
-                .OrderByDescending(item => item.Score)
-                .ThenByDescending(item => item.SharedDuplicateContentCount)
-                .ThenByDescending(item => item.Jaccard)
-                .ThenBy(item => item.Branch.Path.Value, StringComparer.Ordinal)
+            var candidateSeeds = rankedSeeds
+                .Where(seed => !IsBlocked(seed.Branch.Path, blockedRoots))
+                .Take(CandidateSeedLimit)
                 .ToArray();
+            if (candidateSeeds.Length == 0)
+                break;
 
-            var counterparts = new List<BranchCounterpart>(counterpartLimit);
-            foreach (var candidate in rankedCandidates)
+            var pairedCandidates = new List<BranchCounterpartSeed>();
+            for (var rank = 0; rank < candidateSeeds.Length; rank++)
             {
-                if (counterparts.Any(existing => AreNested(existing.Branch.Path, candidate.Branch.Path)))
-                    continue;
-
-                counterparts.Add(candidate);
-                if (counterparts.Count == counterpartLimit)
-                    break;
+                var seed = candidateSeeds[rank];
+                var counterpart = FindBestCounterpart(
+                    seed,
+                    byPath,
+                    touchedByDuplicateSet,
+                    blockedRoots);
+                if (counterpart is not null)
+                    pairedCandidates.Add(new BranchCounterpartSeed(seed, [counterpart], rank + 1));
             }
 
-            if (counterparts.Count == 0)
-                continue;
+            if (pairedCandidates.Count == 0)
+                break;
 
-            selected.Add(new BranchCounterpartSeed(seed, counterparts));
+            var winner = pairedCandidates
+                .OrderByDescending(item => item.Counterparts[0].Score)
+                .ThenByDescending(item => item.Seed.ExcessConcentratedContent)
+                .ThenBy(item => item.CandidateSeedRank)
+                .First();
 
-            blockedRoots.Add(seed.Branch.Path);
-            blockedRoots.Add(counterparts[0].Branch.Path);
+            selected.Add(winner);
+            blockedRoots.Add(winner.Seed.Branch.Path);
+            blockedRoots.Add(winner.Counterparts[0].Branch.Path);
         }
 
         timer.Stop();
         return new BranchCounterpartResult(selected, timer.Elapsed);
+    }
+
+    private BranchCounterpart? FindBestCounterpart(
+        BranchPriorityMetric seed,
+        IReadOnlyDictionary<FileSystemPath, BranchRecord> byPath,
+        IReadOnlyList<IReadOnlySet<FileSystemPath>> touchedByDuplicateSet,
+        IReadOnlyList<FileSystemPath> blockedRoots)
+    {
+        var overlaps = new Dictionary<FileSystemPath, int>();
+        foreach (var touchedBranches in touchedByDuplicateSet)
+        {
+            if (!touchedBranches.Contains(seed.Branch.Path))
+                continue;
+
+            foreach (var candidatePath in touchedBranches)
+            {
+                if (candidatePath == seed.Branch.Path ||
+                    AreNested(seed.Branch.Path, candidatePath) ||
+                    IsBlocked(candidatePath, blockedRoots))
+                    continue;
+
+                overlaps[candidatePath] = overlaps.GetValueOrDefault(candidatePath) + 1;
+            }
+        }
+
+        return overlaps
+            .Where(item => byPath.ContainsKey(item.Key))
+            .Select(item => CreateCounterpart(seed, byPath[item.Key], item.Value))
+            .OrderByDescending(item => item.Score)
+            .ThenByDescending(item => item.SharedDuplicateContentCount)
+            .ThenByDescending(item => item.Jaccard)
+            .ThenBy(item => item.Branch.Path.Value, StringComparer.Ordinal)
+            .FirstOrDefault();
     }
 
     private static BranchCounterpart CreateCounterpart(
