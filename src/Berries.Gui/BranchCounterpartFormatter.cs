@@ -11,7 +11,8 @@ internal static class BranchCounterpartFormatter
         builder.AppendLine();
         builder.AppendLine("Experimental culled BranchPair shortlist");
         builder.AppendLine($"  selected pairs: {result.Seeds.Count:N0}; analysis time: {FormatElapsed(result.Elapsed)}");
-        builder.AppendLine("  each round: top 10 eligible seeds by D * (1 - 1/C); best counterpart by shared Content * Jaccard; strongest pair wins");
+        builder.AppendLine("  each round: top 10 eligible seeds by D * (1 - 1/C); counterparts ranked by shared Content * Jaccard; strongest pair wins");
+        builder.AppendLine("  DirectoryPair coverage is the fraction of each branch's duplicate-bearing directories participating across the pair");
         builder.AppendLine("  after each pair, both selected branches and all descendants are excluded");
 
         for (var index = 0; index < result.Seeds.Count; index++)
@@ -20,17 +21,25 @@ internal static class BranchCounterpartFormatter
             if (item.Counterparts.Count == 0)
                 continue;
 
-            var counterpart = item.Counterparts[0];
             builder.AppendLine();
             builder.AppendLine(
                 $"  #{index + 1:N0} candidate-seed rank {item.CandidateSeedRank:N0}; " +
                 $"seed score {item.Seed.ExcessConcentratedContent:N2}; " +
                 $"D {item.Seed.Branch.DuplicateContentCount:N0}; C {item.Seed.Concentration:N2}  " +
                 item.Seed.Branch.Path.Value);
-            builder.AppendLine(
-                $"      pair score {counterpart.Score,9:N2}; shared {counterpart.SharedDuplicateContentCount,6:N0}; " +
-                $"coverage {counterpart.SeedCoverage,6:P1}/{counterpart.CounterpartCoverage,6:P1}; " +
-                $"Jaccard {counterpart.Jaccard,6:P1}  {counterpart.Branch.Path.Value}");
+
+            for (var candidateIndex = 0; candidateIndex < item.Counterparts.Count; candidateIndex++)
+            {
+                var counterpart = item.Counterparts[candidateIndex];
+                builder.AppendLine(
+                    $"      candidate {candidateIndex + 1:N0}: pair score {counterpart.Score,9:N2}; " +
+                    $"shared {counterpart.SharedDuplicateContentCount,6:N0}; " +
+                    $"coverage {counterpart.SeedCoverage,6:P1}/{counterpart.CounterpartCoverage,6:P1}; " +
+                    $"Jaccard {counterpart.Jaccard,6:P1}; " +
+                    $"DP {counterpart.ContributingDirectoryPairCount,6:N0}; " +
+                    $"DP coverage {counterpart.SeedDirectoryPairCoverage,6:P1}/{counterpart.CounterpartDirectoryPairCoverage,6:P1}  " +
+                    counterpart.Branch.Path.Value);
+            }
         }
 
         return builder.ToString();
