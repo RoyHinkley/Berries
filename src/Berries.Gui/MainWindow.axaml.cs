@@ -103,8 +103,6 @@ public partial class MainWindow : Window
                 .Select(pair => $"{pair.Leverage,6:N0}    {pair.First.Value}    ↔    {pair.Second.Value}")
                 .ToArray();
 
-            // Experimental path: deliberately do not enumerate BranchPairs or rank the old
-            // comprehensive Case set. Start from intrinsically interesting branches instead.
             BranchPairCountText.Text = "suspended";
             BranchAnalysisElapsedText.Text = "—";
             BranchPairsList.ItemsSource = null;
@@ -116,6 +114,7 @@ public partial class MainWindow : Window
                 corpus,
                 branchStatistics.Branches,
                 duplicates.DuplicateSets,
+                directories.DirectoryPairs,
                 controller.DuplicateSettlements,
                 seedLimit: 25,
                 counterpartLimit: 10);
