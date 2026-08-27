@@ -11,9 +11,9 @@ public sealed record BranchCounterpart(
     double CounterpartCoverage,
     double Jaccard,
     double Score,
-    int ContributingDirectoryPairCount,
-    double SeedDirectoryPairCoverage,
-    double CounterpartDirectoryPairCoverage);
+    int ContributingDirectoryPairCount = 0,
+    double SeedDirectoryPairCoverage = 0,
+    double CounterpartDirectoryPairCoverage = 0);
 
 public sealed record BranchCounterpartSeed(
     BranchPriorityMetric Seed,
@@ -24,12 +24,6 @@ public sealed record BranchCounterpartResult(
     IReadOnlyList<BranchCounterpartSeed> Seeds,
     TimeSpan Elapsed);
 
-/// <summary>
-/// Experimental targeted counterpart search. At each round, the top eligible seed
-/// candidates are paired with their best counterparts; the strongest resulting pair
-/// is selected. Both selected branches and all descendants are then excluded. This
-/// approximates complete resolution while avoiding comprehensive BranchPair generation.
-/// </summary>
 public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
 {
     private const int CandidateSeedLimit = 10;
@@ -38,6 +32,7 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
         Corpus corpus,
         IReadOnlyList<BranchRecord> branches,
         IReadOnlyList<DuplicateSet> duplicateSets,
+        IReadOnlyList<DirectoryPair> directoryPairs,
         DuplicateSettlements settlements,
         int seedLimit = int.MaxValue,
         int counterpartLimit = 5,
@@ -93,7 +88,6 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
                     seed,
                     byPath,
                     touchedByDuplicateSet,
-                    unresolvedSets,
                     blockedRoots,
                     counterpartLimit);
                 if (counterparts.Count > 0)
@@ -109,6 +103,16 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
                 .ThenBy(item => item.CandidateSeedRank)
                 .First();
 
+            // DirectoryPair coverage is diagnostic only. Compute it after the winning
+            // seed has been chosen, and only for the few counterpart candidates printed.
+            var diagnosedCounterparts = winner.Counterparts
+                .Select(counterpart => AddDirectoryPairDiagnostics(
+                    winner.Seed.Branch,
+                    counterpart,
+                    directoryPairs))
+                .ToArray();
+            winner = winner with { Counterparts = diagnosedCounterparts };
+
             selected.Add(winner);
             blockedRoots.Add(winner.Seed.Branch.Path);
             blockedRoots.Add(winner.Counterparts[0].Branch.Path);
@@ -122,7 +126,6 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
         BranchPriorityMetric seed,
         IReadOnlyDictionary<FileSystemPath, BranchRecord> byPath,
         IReadOnlyList<IReadOnlySet<FileSystemPath>> touchedByDuplicateSet,
-        IReadOnlyList<DuplicateSet> unresolvedSets,
         IReadOnlyList<FileSystemPath> blockedRoots,
         int limit)
     {
@@ -144,7 +147,7 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
 
         return overlaps
             .Where(item => byPath.ContainsKey(item.Key))
-            .Select(item => CreateCounterpart(seed, byPath[item.Key], item.Value, unresolvedSets))
+            .Select(item => CreateCounterpart(seed, byPath[item.Key], item.Value))
             .OrderByDescending(item => item.Score)
             .ThenByDescending(item => item.SharedDuplicateContentCount)
             .ThenByDescending(item => item.Jaccard)
@@ -153,66 +156,57 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
             .ToArray();
     }
 
-    private BranchCounterpart CreateCounterpart(
+    private static BranchCounterpart CreateCounterpart(
         BranchPriorityMetric seed,
         BranchRecord candidate,
-        int shared,
-        IReadOnlyList<DuplicateSet> duplicateSets)
+        int shared)
     {
         var seedCoverage = (double)shared / seed.Branch.DuplicateContentCount;
         var counterpartCoverage = (double)shared / candidate.DuplicateContentCount;
         var union = seed.Branch.DuplicateContentCount + candidate.DuplicateContentCount - shared;
         var jaccard = union == 0 ? 0 : (double)shared / union;
         var score = shared * jaccard;
+        return new BranchCounterpart(candidate, shared, seedCoverage, counterpartCoverage, jaccard, score);
+    }
 
+    private BranchCounterpart AddDirectoryPairDiagnostics(
+        BranchRecord seed,
+        BranchCounterpart counterpart,
+        IReadOnlyList<DirectoryPair> directoryPairs)
+    {
         var seedCrossingDirectories = new HashSet<FileSystemPath>();
         var counterpartCrossingDirectories = new HashSet<FileSystemPath>();
-        var directoryPairs = new HashSet<(FileSystemPath Seed, FileSystemPath Counterpart)>();
+        var contributingPairCount = 0;
 
-        foreach (var set in duplicateSets)
+        foreach (var pair in directoryPairs)
         {
-            var seedDirectories = set.Files
-                .Select(file => file.ParentDirectory)
-                .Where(path => Contains(seed.Branch.Path, path))
-                .Distinct()
-                .ToArray();
-            if (seedDirectories.Length == 0)
-                continue;
-
-            var counterpartDirectories = set.Files
-                .Select(file => file.ParentDirectory)
-                .Where(path => Contains(candidate.Path, path))
-                .Distinct()
-                .ToArray();
-            if (counterpartDirectories.Length == 0)
-                continue;
-
-            foreach (var seedDirectory in seedDirectories)
-            foreach (var counterpartDirectory in counterpartDirectories)
+            if (Contains(seed.Path, pair.First) && Contains(counterpart.Branch.Path, pair.Second))
             {
-                directoryPairs.Add((seedDirectory, counterpartDirectory));
-                seedCrossingDirectories.Add(seedDirectory);
-                counterpartCrossingDirectories.Add(counterpartDirectory);
+                contributingPairCount++;
+                seedCrossingDirectories.Add(pair.First);
+                counterpartCrossingDirectories.Add(pair.Second);
+            }
+            else if (Contains(seed.Path, pair.Second) && Contains(counterpart.Branch.Path, pair.First))
+            {
+                contributingPairCount++;
+                seedCrossingDirectories.Add(pair.Second);
+                counterpartCrossingDirectories.Add(pair.First);
             }
         }
 
-        var seedDirectoryCoverage = seed.Branch.DuplicateDirectoryCount == 0
+        var seedCoverage = seed.DuplicateDirectoryCount == 0
             ? 0
-            : (double)seedCrossingDirectories.Count / seed.Branch.DuplicateDirectoryCount;
-        var counterpartDirectoryCoverage = candidate.DuplicateDirectoryCount == 0
+            : (double)seedCrossingDirectories.Count / seed.DuplicateDirectoryCount;
+        var counterpartCoverage = counterpart.Branch.DuplicateDirectoryCount == 0
             ? 0
-            : (double)counterpartCrossingDirectories.Count / candidate.DuplicateDirectoryCount;
+            : (double)counterpartCrossingDirectories.Count / counterpart.Branch.DuplicateDirectoryCount;
 
-        return new BranchCounterpart(
-            candidate,
-            shared,
-            seedCoverage,
-            counterpartCoverage,
-            jaccard,
-            score,
-            directoryPairs.Count,
-            seedDirectoryCoverage,
-            counterpartDirectoryCoverage);
+        return counterpart with
+        {
+            ContributingDirectoryPairCount = contributingPairCount,
+            SeedDirectoryPairCoverage = seedCoverage,
+            CounterpartDirectoryPairCoverage = counterpartCoverage
+        };
     }
 
     private bool Contains(FileSystemPath root, FileSystemPath path) =>
