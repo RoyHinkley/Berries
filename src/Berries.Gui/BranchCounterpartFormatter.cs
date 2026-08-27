@@ -11,7 +11,7 @@ internal static class BranchCounterpartFormatter
         builder.AppendLine();
         builder.AppendLine("Experimental culled BranchPair shortlist");
         builder.AppendLine($"  selected pairs: {result.Seeds.Count:N0}; analysis time: {FormatElapsed(result.Elapsed)}");
-        builder.AppendLine("  seeds ranked by D * (1 - 1/C); counterparts ranked by shared Content * Jaccard");
+        builder.AppendLine("  each round: top 10 eligible seeds by D * (1 - 1/C); best counterpart by shared Content * Jaccard; strongest pair wins");
         builder.AppendLine("  after each pair, both selected branches and all descendants are excluded");
 
         for (var index = 0; index < result.Seeds.Count; index++)
@@ -23,11 +23,12 @@ internal static class BranchCounterpartFormatter
             var counterpart = item.Counterparts[0];
             builder.AppendLine();
             builder.AppendLine(
-                $"  #{index + 1:N0} seed score {item.Seed.ExcessConcentratedContent:N2}; " +
+                $"  #{index + 1:N0} candidate-seed rank {item.CandidateSeedRank:N0}; " +
+                $"seed score {item.Seed.ExcessConcentratedContent:N2}; " +
                 $"D {item.Seed.Branch.DuplicateContentCount:N0}; C {item.Seed.Concentration:N2}  " +
                 item.Seed.Branch.Path.Value);
             builder.AppendLine(
-                $"      score {counterpart.Score,9:N2}; shared {counterpart.SharedDuplicateContentCount,6:N0}; " +
+                $"      pair score {counterpart.Score,9:N2}; shared {counterpart.SharedDuplicateContentCount,6:N0}; " +
                 $"coverage {counterpart.SeedCoverage,6:P1}/{counterpart.CounterpartCoverage,6:P1}; " +
                 $"Jaccard {counterpart.Jaccard,6:P1}  {counterpart.Branch.Path.Value}");
         }
