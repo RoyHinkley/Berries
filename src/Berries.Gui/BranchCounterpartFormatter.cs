@@ -12,7 +12,7 @@ internal static class BranchCounterpartFormatter
         builder.AppendLine("Experimental culled BranchPair shortlist");
         builder.AppendLine($"  selected pairs: {result.Seeds.Count:N0}; analysis time: {FormatElapsed(result.Elapsed)}");
         builder.AppendLine("  each round: top 10 eligible seeds by D * (1 - 1/C); counterparts ranked by shared Content * Jaccard; strongest pair wins");
-        builder.AppendLine("  DirectoryPair coverage is the fraction of each branch's duplicate-bearing directories participating across the pair");
+        builder.AppendLine("  direct DP shared is the shared Content count for the exact two branch-root directories");
         builder.AppendLine("  after each pair, both selected branches and all descendants are excluded");
 
         for (var index = 0; index < result.Seeds.Count; index++)
@@ -36,8 +36,7 @@ internal static class BranchCounterpartFormatter
                     $"shared {counterpart.SharedDuplicateContentCount,6:N0}; " +
                     $"coverage {counterpart.SeedCoverage,6:P1}/{counterpart.CounterpartCoverage,6:P1}; " +
                     $"Jaccard {counterpart.Jaccard,6:P1}; " +
-                    $"DP {counterpart.ContributingDirectoryPairCount,6:N0}; " +
-                    $"DP coverage {counterpart.SeedDirectoryPairCoverage,6:P1}/{counterpart.CounterpartDirectoryPairCoverage,6:P1}  " +
+                    $"direct DP shared {counterpart.DirectDirectoryPairSharedContentCount,5:N0}  " +
                     counterpart.Branch.Path.Value);
             }
         }
