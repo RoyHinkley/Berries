@@ -11,9 +11,7 @@ public sealed record BranchCounterpart(
     double CounterpartCoverage,
     double Jaccard,
     double Score,
-    int ContributingDirectoryPairCount = 0,
-    double SeedDirectoryPairCoverage = 0,
-    double CounterpartDirectoryPairCoverage = 0);
+    int DirectDirectoryPairSharedContentCount = 0);
 
 public sealed record BranchCounterpartSeed(
     BranchPriorityMetric Seed,
@@ -67,6 +65,13 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
             touchedByDuplicateSet.Add(touchedBranches);
         }
 
+        var directDirectoryPairSharedContent = new Dictionary<(FileSystemPath, FileSystemPath), int>();
+        foreach (var pair in directoryPairs)
+        {
+            directDirectoryPairSharedContent[(pair.First, pair.Second)] = pair.SharedContentCount;
+            directDirectoryPairSharedContent[(pair.Second, pair.First)] = pair.SharedContentCount;
+        }
+
         var selected = new List<BranchCounterpartSeed>();
         var blockedRoots = new List<FileSystemPath>();
 
@@ -103,13 +108,12 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
                 .ThenBy(item => item.CandidateSeedRank)
                 .First();
 
-            // DirectoryPair coverage is diagnostic only. Compute it after the winning
-            // seed has been chosen, and only for the few counterpart candidates printed.
             var diagnosedCounterparts = winner.Counterparts
-                .Select(counterpart => AddDirectoryPairDiagnostics(
-                    winner.Seed.Branch,
-                    counterpart,
-                    directoryPairs))
+                .Select(counterpart => counterpart with
+                {
+                    DirectDirectoryPairSharedContentCount = directDirectoryPairSharedContent.GetValueOrDefault(
+                        (winner.Seed.Branch.Path, counterpart.Branch.Path))
+                })
                 .ToArray();
             winner = winner with { Counterparts = diagnosedCounterparts };
 
@@ -168,49 +172,6 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
         var score = shared * jaccard;
         return new BranchCounterpart(candidate, shared, seedCoverage, counterpartCoverage, jaccard, score);
     }
-
-    private BranchCounterpart AddDirectoryPairDiagnostics(
-        BranchRecord seed,
-        BranchCounterpart counterpart,
-        IReadOnlyList<DirectoryPair> directoryPairs)
-    {
-        var seedCrossingDirectories = new HashSet<FileSystemPath>();
-        var counterpartCrossingDirectories = new HashSet<FileSystemPath>();
-        var contributingPairCount = 0;
-
-        foreach (var pair in directoryPairs)
-        {
-            if (Contains(seed.Path, pair.First) && Contains(counterpart.Branch.Path, pair.Second))
-            {
-                contributingPairCount++;
-                seedCrossingDirectories.Add(pair.First);
-                counterpartCrossingDirectories.Add(pair.Second);
-            }
-            else if (Contains(seed.Path, pair.Second) && Contains(counterpart.Branch.Path, pair.First))
-            {
-                contributingPairCount++;
-                seedCrossingDirectories.Add(pair.Second);
-                counterpartCrossingDirectories.Add(pair.First);
-            }
-        }
-
-        var seedCoverage = seed.DuplicateDirectoryCount == 0
-            ? 0
-            : (double)seedCrossingDirectories.Count / seed.DuplicateDirectoryCount;
-        var counterpartCoverage = counterpart.Branch.DuplicateDirectoryCount == 0
-            ? 0
-            : (double)counterpartCrossingDirectories.Count / counterpart.Branch.DuplicateDirectoryCount;
-
-        return counterpart with
-        {
-            ContributingDirectoryPairCount = contributingPairCount,
-            SeedDirectoryPairCoverage = seedCoverage,
-            CounterpartDirectoryPairCoverage = counterpartCoverage
-        };
-    }
-
-    private bool Contains(FileSystemPath root, FileSystemPath path) =>
-        fileSystem.PathsEqual(root, path) || fileSystem.IsDescendant(path, root);
 
     private bool IsBlocked(FileSystemPath path, IReadOnlyList<FileSystemPath> blockedRoots) =>
         blockedRoots.Any(root => path == root || fileSystem.IsDescendant(path, root));
