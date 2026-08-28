@@ -38,12 +38,13 @@ public partial class MainWindow
 
     private void ExplorerSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
+        // Keep ordinary tree navigation cheap. A directory node can represent thousands
+        // of descendant files; resolving those descendants here makes expansion appear
+        // to hang. Expensive selection interpretation belongs in commands that need it.
         var hasSelection = sender is TreeView tree && tree.SelectedItems is { Count: > 0 };
         InvertButton.IsEnabled = hasSelection;
         ExcludeButton.IsEnabled = hasSelection;
         DeleteButton.IsEnabled = hasSelection;
-        UpdatePivotCapabilities();
-        UpdateSelectionStatus();
     }
 
     private void UpdatePivotCapabilities()
