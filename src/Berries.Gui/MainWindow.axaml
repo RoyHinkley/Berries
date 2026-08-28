@@ -40,10 +40,12 @@
           <Grid ColumnDefinitions="Auto,Auto,Auto,20,Auto,Auto,Auto,20,Auto,*" ColumnSpacing="7">
             <Button Content="Back" IsEnabled="False" />
             <Button Grid.Column="1" Content="Forward" IsEnabled="False" />
-            <Button Grid.Column="2" Content="Pivot">
+            <Button x:Name="PivotButton" Grid.Column="2" Content="Pivot">
               <Button.Flyout>
                 <MenuFlyout>
-                  <MenuItem Header="Content" Click="PivotContent_Click" />
+                  <MenuItem x:Name="PivotContentMenu" Header="Content" Click="PivotContent_Click" IsEnabled="False" />
+                  <MenuItem x:Name="PivotDirectoryMenu" Header="Containing Directory" Click="PivotDirectory_Click" IsEnabled="False" />
+                  <MenuItem x:Name="PivotBranchMenu" Header="Branch" Click="PivotBranch_Click" IsEnabled="False" />
                   <MenuItem x:Name="PivotBranchPairMenu" Header="Current Branch Pair" Click="PivotBranchPair_Click" IsEnabled="False" />
                 </MenuFlyout>
               </Button.Flyout>
