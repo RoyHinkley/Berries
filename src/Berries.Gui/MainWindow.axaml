@@ -43,7 +43,7 @@
             <Button x:Name="PivotButton" Grid.Column="2" Content="Pivot">
               <Button.Flyout>
                 <MenuFlyout>
-                  <MenuItem x:Name="PivotContentMenu" Header="Content" Click="PivotContent_Click" IsEnabled="False" />
+                  <MenuItem x:Name="PivotContentMenu" Header="Content" Click="PivotSelectedContent_Click" IsEnabled="False" />
                   <MenuItem x:Name="PivotDirectoryMenu" Header="Containing Directory" Click="PivotDirectory_Click" IsEnabled="False" />
                   <MenuItem x:Name="PivotBranchMenu" Header="Branch" Click="PivotBranch_Click" IsEnabled="False" />
                   <MenuItem x:Name="PivotBranchPairMenu" Header="Current Branch Pair" Click="PivotBranchPair_Click" IsEnabled="False" />
