@@ -173,7 +173,7 @@ public partial class MainWindow
         rightScope = null;
         PairExplorer.IsVisible = false;
         SingleExplorer.IsVisible = true;
-        ProjectionTitle.Text = $"{title} — {scope.Value}";
+        ProjectionTitle.Text = $"{title} — {FormatCorpusBreadcrumb(scope)}";
 
         if (includeDescendants)
         {
@@ -192,6 +192,27 @@ public partial class MainWindow
         }
 
         UpdateCapabilities();
+    }
+
+    private string FormatCorpusBreadcrumb(FileSystemPath path)
+    {
+        var corpusRoot = roots
+            .Select(root => fileSystem.NormalizePath(new FileSystemPath(root)))
+            .Where(root => fileSystem.PathsEqual(path, root) || fileSystem.IsDescendant(path, root))
+            .OrderByDescending(root => root.Value.Length)
+            .FirstOrDefault();
+
+        if (string.IsNullOrEmpty(corpusRoot.Value))
+            return path.Value;
+
+        var relative = fileSystem.GetRelativePath(corpusRoot, path).Value;
+        if (relative == "." || string.IsNullOrEmpty(relative))
+            return corpusRoot.Value;
+
+        var parts = relative.Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries);
+        return corpusRoot.Value + "  ›  " + string.Join("  ›  ", parts);
     }
 
     private void UpdateRootsCancelCapability() =>
