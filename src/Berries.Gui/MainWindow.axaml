@@ -28,6 +28,7 @@
         </StackPanel>
         <ListBox x:Name="RootsList" Grid.Row="1" Margin="0,20,0,20" />
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+          <Button x:Name="CancelRootsButton" Content="Cancel" Click="CancelRootsButton_Click" IsEnabled="False" />
           <Button x:Name="AddRootButton" Content="Add..." Click="AddRootButton_Click" />
           <Button x:Name="RemoveRootButton" Content="Remove" Click="RemoveRootButton_Click" />
           <Button x:Name="ScanButton" Content="Scan" Click="ScanButton_Click" />
@@ -48,9 +49,9 @@
               </Button.Flyout>
             </Button>
 
-            <Button x:Name="InvertButton" Grid.Column="4" Content="Invert Selection" Click="InvertButton_Click" />
-            <Button x:Name="ExcludeButton" Grid.Column="5" Content="Exclude" Click="ExcludeButton_Click" />
-            <Button x:Name="DeleteButton" Grid.Column="6" Content="Delete" Click="DeleteButton_Click" />
+            <Button x:Name="InvertButton" Grid.Column="4" Content="Invert Selection" Click="InvertButton_Click" IsEnabled="False" />
+            <Button x:Name="ExcludeButton" Grid.Column="5" Content="Exclude" Click="ExcludeButton_Click" IsEnabled="False" />
+            <Button x:Name="DeleteButton" Grid.Column="6" Content="Delete" Click="DeleteButton_Click" IsEnabled="False" />
 
             <StackPanel Grid.Column="8" Orientation="Horizontal" Spacing="7">
               <Button x:Name="MoveRightButton" Content="Move →" Click="MoveRightButton_Click" IsEnabled="False" />
@@ -66,17 +67,17 @@
           <TextBlock x:Name="ProjectionTitle" FontSize="18" FontWeight="SemiBold" Text="Corpus" Margin="2,0,0,10" />
 
           <Grid x:Name="SingleExplorer" Grid.Row="1">
-            <TreeView x:Name="ExplorerTree" SelectionMode="Multiple" />
+            <TreeView x:Name="ExplorerTree" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged" />
           </Grid>
 
           <Grid x:Name="PairExplorer" Grid.Row="1" IsVisible="False" ColumnDefinitions="*,*" ColumnSpacing="14">
             <Grid RowDefinitions="Auto,*">
               <TextBlock x:Name="LeftScopeText" FontWeight="SemiBold" TextWrapping="Wrap" Margin="2,0,0,8" />
-              <TreeView x:Name="LeftTree" Grid.Row="1" SelectionMode="Multiple" />
+              <TreeView x:Name="LeftTree" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged" />
             </Grid>
             <Grid Grid.Column="1" RowDefinitions="Auto,*">
               <TextBlock x:Name="RightScopeText" FontWeight="SemiBold" TextWrapping="Wrap" Margin="2,0,0,8" />
-              <TreeView x:Name="RightTree" Grid.Row="1" SelectionMode="Multiple" />
+              <TreeView x:Name="RightTree" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged" />
             </Grid>
           </Grid>
         </Grid>
