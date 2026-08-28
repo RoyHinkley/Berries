@@ -1,4 +1,4 @@
-<Window xmlns="https://github.com/avaloniauI"
+<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Berries.Gui.MainWindow"
         Title="Berries"
@@ -39,7 +39,7 @@
         <Border Padding="10,8" BorderThickness="0,0,0,1">
           <Grid ColumnDefinitions="Auto,20,Auto,Auto,Auto,20,Auto,*" ColumnSpacing="7">
             <StackPanel Orientation="Horizontal" Spacing="7">
-              <Button x:Name="BackButton" Content="Back" Click="BackButton_Click" IsEnabled="False" />
+              <Button x:Name="BackButton" Content="Back" IsEnabled="False" />
               <Button x:Name="PivotButton" Content="Pivot ▾" Click="PivotButton_Click">
                 <Button.Flyout>
                   <MenuFlyout>
@@ -52,7 +52,7 @@
                   </MenuFlyout>
                 </Button.Flyout>
               </Button>
-              <Button x:Name="ForwardButton" Content="Forward" Click="ForwardButton_Click" IsEnabled="False" />
+              <Button x:Name="ForwardButton" Content="Forward" IsEnabled="False" />
               <Button x:Name="SuggestCaseButton" Content="Suggest" Click="SuggestCaseButton_Click" IsEnabled="False" />
             </StackPanel>
 
