@@ -17,8 +17,11 @@ public partial class MainWindow
 
     private void ExplorerSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        var selectedCount = SelectedFilesFromActiveProjection().Count;
-        var hasSelection = selectedCount > 0;
+        // SelectionChanged is a UI capability check only. Do not expand a selected
+        // directory node into all of its descendant FileInstances here: a large branch
+        // can contain thousands of files, and doing that synchronously on every click
+        // makes ordinary tree navigation appear to hang.
+        var hasSelection = sender is TreeView tree && tree.SelectedItems is { Count: > 0 };
 
         InvertButton.IsEnabled = hasSelection;
         ExcludeButton.IsEnabled = hasSelection;
