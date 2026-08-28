@@ -5,7 +5,8 @@
         Width="1300"
         Height="850"
         MinWidth="900"
-        MinHeight="600">
+        MinHeight="600"
+        KeyDown="MainWindow_KeyDown">
   <Grid RowDefinitions="Auto,*,Auto">
     <Menu Grid.Row="0">
       <MenuItem Header="_File">
@@ -39,10 +40,10 @@
           <Grid ColumnDefinitions="Auto,Auto,Auto,20,Auto,Auto,Auto,20,Auto,*" ColumnSpacing="7">
             <Button Content="Back" IsEnabled="False" />
             <Button Grid.Column="1" Content="Forward" IsEnabled="False" />
-            <Button x:Name="PivotButton" Grid.Column="2" Content="Pivot">
+            <Button x:Name="PivotButton" Grid.Column="2" Content="Pivot" Click="PivotButton_Click">
               <Button.Flyout>
                 <MenuFlyout>
-                  <MenuItem x:Name="PivotContentMenu" Header="Content" Click="PivotSelectedContent_Click" IsEnabled="False" />
+                  <MenuItem x:Name="PivotContentMenu" Header="Content" Click="PivotContentOrAll_Click" IsEnabled="False" />
                   <MenuItem x:Name="PivotDirectoryMenu" Header="Containing Directory" Click="PivotDirectory_Click" IsEnabled="False" />
                   <MenuItem x:Name="PivotBranchMenu" Header="Branch" Click="PivotBranch_Click" IsEnabled="False" />
                   <MenuItem x:Name="PivotBestDirectoryPairMenu" Header="Best Directory Pair" Click="PivotBestDirectoryPair_Click" IsEnabled="False" />
