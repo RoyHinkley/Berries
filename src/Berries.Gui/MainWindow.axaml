@@ -28,7 +28,7 @@
         </StackPanel>
         <ListBox x:Name="RootsList" Grid.Row="1" Margin="0,20,0,20" />
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-          <Button x:Name="CancelRootsButton" Content="Cancel" Click="CancelRootsButton_Click" IsEnabled="False" />
+          <Button x:Name="CancelRootsButton" Content="Cancel" Click="CancelRootsButton_Click" />
           <Button x:Name="AddRootButton" Content="Add..." Click="AddRootButton_Click" />
           <Button x:Name="RemoveRootButton" Content="Remove" Click="RemoveRootButton_Click" />
           <Button x:Name="ScanButton" Content="Scan" Click="ScanButton_Click" />
