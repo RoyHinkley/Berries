@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Controls.Selection;
 using Avalonia.Interactivity;
+using Berries.Core.Analysis;
 using Berries.Core.Domain;
 using Berries.FileSystem.Abstractions;
 
@@ -8,14 +9,30 @@ namespace Berries.Gui;
 
 public partial class MainWindow
 {
-    private void CancelRootsButton_Click(object? sender, RoutedEventArgs e)
-    {
-        if (controller.Session is null)
-            return;
+    private bool scopeIncludesDescendants;
+    private string scopeProjectionTitle = "Directory";
 
-        RootsPanel.IsVisible = false;
-        ExplorerPanel.IsVisible = true;
-        StatusText.Text = "Returned to the current session.";
+    private void ExploreButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (controller.Session is not null && CorpusRootsMatchCurrentSelection())
+        {
+            RootsPanel.IsVisible = false;
+            ExplorerPanel.IsVisible = true;
+            StatusText.Text = "Returned to the current session.";
+            return;
+        }
+
+        ScanButton_Click(sender, e);
+    }
+
+    private bool CorpusRootsMatchCurrentSelection()
+    {
+        var corpus = controller.Corpus;
+        if (corpus is null || corpus.Roots.Count != roots.Count)
+            return false;
+
+        return roots.All(root => corpus.Roots.Any(existing =>
+            fileSystem.PathsEqual(existing.Path, new FileSystemPath(root))));
     }
 
     private void ExplorerSelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -33,10 +50,13 @@ public partial class MainWindow
         var nodes = SelectedNodesFromActiveProjection();
         var files = DistinctFiles(nodes.SelectMany(node => node.Files));
         var oneNode = nodes.Count == 1 ? nodes[0] : null;
+        var selectedScope = oneNode is null ? null : InferSelectedScope(oneNode);
 
         PivotContentMenu.IsEnabled = files.Any(file => file.Content is not null);
-        PivotDirectoryMenu.IsEnabled = oneNode is not null && InferSelectedScope(oneNode) is not null;
-        PivotBranchMenu.IsEnabled = PivotDirectoryMenu.IsEnabled;
+        PivotDirectoryMenu.IsEnabled = selectedScope is not null;
+        PivotBranchMenu.IsEnabled = selectedScope is not null;
+        PivotBestDirectoryPairMenu.IsEnabled = selectedScope is not null && FindBestDirectoryPair(selectedScope.Value) is not null;
+        PivotBestBranchPairMenu.IsEnabled = selectedScope is not null && FindBestBranchPair(selectedScope.Value) is not null;
 
         var suggestions = controller.Counterparts?.Seeds;
         PivotBranchPairMenu.IsEnabled = suggestionIndex >= 0 && suggestions is { Count: > 0 };
@@ -97,6 +117,8 @@ public partial class MainWindow
         rightScope = null;
         PairExplorer.IsVisible = false;
         SingleExplorer.IsVisible = true;
+        BreadcrumbPanel.IsVisible = false;
+        BreadcrumbPanel.Children.Clear();
         ProjectionTitle.Text = contentIds.Count == 1 ? "Content" : $"Content — {contentIds.Count:N0} selected Contents";
 
         var nodes = session.DuplicateSets
@@ -122,20 +144,40 @@ public partial class MainWindow
 
     private void PivotDirectory_Click(object? sender, RoutedEventArgs e)
     {
-        var nodes = SelectedNodesFromActiveProjection();
-        if (nodes.Count != 1) return;
-        var scope = InferSelectedScope(nodes[0]);
+        var scope = SelectedScope();
         if (scope is null) return;
         ShowScopeProjection(scope.Value, includeDescendants: false, "Directory");
     }
 
     private void PivotBranch_Click(object? sender, RoutedEventArgs e)
     {
-        var nodes = SelectedNodesFromActiveProjection();
-        if (nodes.Count != 1) return;
-        var scope = InferSelectedScope(nodes[0]);
+        var scope = SelectedScope();
         if (scope is null) return;
         ShowScopeProjection(scope.Value, includeDescendants: true, "Branch");
+    }
+
+    private void PivotBestDirectoryPair_Click(object? sender, RoutedEventArgs e)
+    {
+        var scope = SelectedScope();
+        if (scope is null) return;
+        var pair = FindBestDirectoryPair(scope.Value);
+        if (pair is null) return;
+        ShowDirectoryPair(pair);
+    }
+
+    private void PivotBestBranchPair_Click(object? sender, RoutedEventArgs e)
+    {
+        var scope = SelectedScope();
+        if (scope is null) return;
+        var pair = FindBestBranchPair(scope.Value);
+        if (pair is null) return;
+        ShowAdHocBranchPair(pair.Value.First, pair.Value.Second, pair.Value.SharedContentCount);
+    }
+
+    private FileSystemPath? SelectedScope()
+    {
+        var nodes = SelectedNodesFromActiveProjection();
+        return nodes.Count == 1 ? InferSelectedScope(nodes[0]) : null;
     }
 
     private FileSystemPath? InferSelectedScope(ExplorerNode node)
@@ -144,9 +186,6 @@ public partial class MainWindow
         if (files.Count == 0) return null;
         if (files.Count == 1) return files[0].ParentDirectory;
 
-        // Directory/branch nodes contain all duplicate descendants. Walk the first
-        // file upward and choose the narrowest ancestor that contains every selected
-        // descendant and whose name (or full path for a root node) matches the node.
         FileSystemPath? candidate = files[0].ParentDirectory;
         while (candidate is not null)
         {
@@ -164,57 +203,190 @@ public partial class MainWindow
         return null;
     }
 
+    private DirectoryPair? FindBestDirectoryPair(FileSystemPath scope) =>
+        controller.DirectoryAnalysis?.DirectoryPairs
+            .Where(pair => fileSystem.PathsEqual(pair.First, scope) || fileSystem.PathsEqual(pair.Second, scope))
+            .OrderByDescending(pair => pair.SharedContentCount)
+            .FirstOrDefault();
+
+    private (FileSystemPath First, FileSystemPath Second, int SharedContentCount)? FindBestBranchPair(FileSystemPath scope)
+    {
+        var session = controller.Session;
+        var branches = controller.BranchStatistics?.Branches;
+        if (session is null || branches is null)
+            return null;
+
+        var seed = branches.FirstOrDefault(branch => fileSystem.PathsEqual(branch.Path, scope));
+        if (seed is null || seed.DuplicateContentCount == 0)
+            return null;
+
+        var seedContents = ContentsUnder(scope);
+        if (seedContents.Count == 0)
+            return null;
+
+        (FileSystemPath First, FileSystemPath Second, int SharedContentCount)? best = null;
+        double bestScore = 0;
+        foreach (var candidate in branches)
+        {
+            if (fileSystem.PathsEqual(candidate.Path, scope)
+                || fileSystem.IsDescendant(candidate.Path, scope)
+                || fileSystem.IsDescendant(scope, candidate.Path)
+                || candidate.DuplicateContentCount == 0)
+                continue;
+
+            var candidateContents = ContentsUnder(candidate.Path);
+            var shared = seedContents.Count(content => candidateContents.Contains(content));
+            if (shared == 0) continue;
+            var union = seedContents.Count + candidateContents.Count - shared;
+            var score = union == 0 ? 0 : shared * ((double)shared / union);
+            if (best is null || score > bestScore)
+            {
+                bestScore = score;
+                best = (scope, candidate.Path, shared);
+            }
+        }
+
+        return best;
+    }
+
+    private HashSet<ContentId> ContentsUnder(FileSystemPath scope)
+    {
+        var session = controller.Session ?? throw new InvalidOperationException("No session.");
+        return session.DuplicateSets
+            .Where(set => set.Files.Any(file =>
+                fileSystem.PathsEqual(file.ParentDirectory, scope)
+                || fileSystem.IsDescendant(file.ParentDirectory, scope)))
+            .Select(set => set.Content)
+            .ToHashSet();
+    }
+
+    private void ShowDirectoryPair(DirectoryPair pair)
+    {
+        leftScope = pair.First;
+        rightScope = pair.Second;
+        PairExplorer.IsVisible = true;
+        SingleExplorer.IsVisible = false;
+        BreadcrumbPanel.IsVisible = false;
+        BreadcrumbPanel.Children.Clear();
+        ProjectionTitle.Text = $"Directory Pair — {pair.SharedContentCount:N0} shared Contents";
+        LeftScopeText.Text = CorpusRelativeDisplay(pair.First);
+        RightScopeText.Text = CorpusRelativeDisplay(pair.Second);
+        LeftTree.ItemsSource = new[] { CreateTreeItem(BuildDirectoryTree(pair.First)) };
+        RightTree.ItemsSource = new[] { CreateTreeItem(BuildDirectoryTree(pair.Second)) };
+        UpdateCapabilities();
+    }
+
+    private ExplorerNode BuildDirectoryTree(FileSystemPath scope)
+    {
+        var session = controller.Session ?? throw new InvalidOperationException("No session.");
+        var files = session.DuplicateSets.SelectMany(set => set.Files)
+            .Where(file => fileSystem.PathsEqual(file.ParentDirectory, scope))
+            .OrderBy(file => file.Path.Value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var root = new ExplorerNode(scope.Value, files);
+        foreach (var file in files)
+            root.Children.Add(new ExplorerNode(Path.GetFileName(file.Path.Value), [file]));
+        return root;
+    }
+
+    private void ShowAdHocBranchPair(FileSystemPath first, FileSystemPath second, int sharedContentCount)
+    {
+        leftScope = first;
+        rightScope = second;
+        PairExplorer.IsVisible = true;
+        SingleExplorer.IsVisible = false;
+        BreadcrumbPanel.IsVisible = false;
+        BreadcrumbPanel.Children.Clear();
+        ProjectionTitle.Text = $"Branch Pair — {sharedContentCount:N0} shared Contents";
+        LeftScopeText.Text = CorpusRelativeDisplay(first);
+        RightScopeText.Text = CorpusRelativeDisplay(second);
+        LeftTree.ItemsSource = new[] { CreateTreeItem(BuildBranchTree(first)) };
+        RightTree.ItemsSource = new[] { CreateTreeItem(BuildBranchTree(second)) };
+        UpdateCapabilities();
+    }
+
     private void ShowScopeProjection(FileSystemPath scope, bool includeDescendants, string title)
     {
         var session = controller.Session;
         if (session is null) return;
 
+        scopeIncludesDescendants = includeDescendants;
+        scopeProjectionTitle = title;
         leftScope = null;
         rightScope = null;
         PairExplorer.IsVisible = false;
         SingleExplorer.IsVisible = true;
-        ProjectionTitle.Text = $"{title} — {FormatCorpusBreadcrumb(scope)}";
+        ProjectionTitle.Text = title;
+        BuildBreadcrumbs(scope);
 
-        if (includeDescendants)
-        {
-            ExplorerTree.ItemsSource = new[] { CreateTreeItem(BuildBranchTree(scope)) };
-        }
-        else
-        {
-            var files = session.DuplicateSets.SelectMany(set => set.Files)
-                .Where(file => fileSystem.PathsEqual(file.ParentDirectory, scope))
-                .OrderBy(file => file.Path.Value, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            var root = new ExplorerNode(scope.Value, files);
-            foreach (var file in files)
-                root.Children.Add(new ExplorerNode(Path.GetFileName(file.Path.Value), [file]));
-            ExplorerTree.ItemsSource = new[] { CreateTreeItem(root) };
-        }
+        ExplorerTree.ItemsSource = includeDescendants
+            ? new[] { CreateTreeItem(BuildBranchTree(scope)) }
+            : new[] { CreateTreeItem(BuildDirectoryTree(scope)) };
 
         UpdateCapabilities();
     }
 
-    private string FormatCorpusBreadcrumb(FileSystemPath path)
+    private void BuildBreadcrumbs(FileSystemPath scope)
     {
-        var corpusRoot = roots
-            .Select(root => fileSystem.NormalizePath(new FileSystemPath(root)))
-            .Where(root => fileSystem.PathsEqual(path, root) || fileSystem.IsDescendant(path, root))
-            .OrderByDescending(root => root.Value.Length)
-            .FirstOrDefault();
+        BreadcrumbPanel.Children.Clear();
+        var root = CorpusRootFor(scope);
+        if (root is null)
+        {
+            BreadcrumbPanel.IsVisible = false;
+            return;
+        }
 
-        if (string.IsNullOrEmpty(corpusRoot.Value))
-            return path.Value;
+        var chain = new List<FileSystemPath>();
+        var current = scope;
+        while (true)
+        {
+            chain.Add(current);
+            if (fileSystem.PathsEqual(current, root.Value)) break;
+            current = fileSystem.GetParentDirectory(current) ?? break;
+        }
+        chain.Reverse();
 
-        var relative = fileSystem.GetRelativePath(corpusRoot, path).Value;
-        if (relative == "." || string.IsNullOrEmpty(relative))
-            return corpusRoot.Value;
+        for (var i = 0; i < chain.Count; i++)
+        {
+            if (i > 0)
+                BreadcrumbPanel.Children.Add(new TextBlock { Text = "›", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
 
-        var parts = relative.Split(
-            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
-            StringSplitOptions.RemoveEmptyEntries);
-        return corpusRoot.Value + "  ›  " + string.Join("  ›  ", parts);
+            var path = chain[i];
+            var label = i == 0 ? path.Value : Path.GetFileName(path.Value);
+            var button = new Button
+            {
+                Content = label,
+                Padding = new Avalonia.Thickness(4, 1),
+                Tag = path
+            };
+            button.Click += Breadcrumb_Click;
+            BreadcrumbPanel.Children.Add(button);
+        }
+
+        BreadcrumbPanel.IsVisible = true;
     }
 
-    private void UpdateRootsCancelCapability() =>
-        CancelRootsButton.IsEnabled = controller.Session is not null;
+    private void Breadcrumb_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: FileSystemPath path })
+            ShowScopeProjection(path, scopeIncludesDescendants, scopeProjectionTitle);
+    }
+
+    private FileSystemPath? CorpusRootFor(FileSystemPath path)
+    {
+        var corpus = controller.Corpus;
+        if (corpus is null) return null;
+        return corpus.Roots.Select(root => root.Path).FirstOrDefault(root =>
+            fileSystem.PathsEqual(path, root) || fileSystem.IsDescendant(path, root));
+    }
+
+    private string CorpusRelativeDisplay(FileSystemPath path)
+    {
+        var root = CorpusRootFor(path);
+        if (root is null) return path.Value;
+        if (fileSystem.PathsEqual(root.Value, path)) return root.Value.Value;
+        return root.Value.Value + " › " + fileSystem.GetRelativePath(root.Value, path).Value
+            .Replace(Path.DirectorySeparatorChar.ToString(), " › ")
+            .Replace(Path.AltDirectorySeparatorChar.ToString(), " › ");
+    }
 }
