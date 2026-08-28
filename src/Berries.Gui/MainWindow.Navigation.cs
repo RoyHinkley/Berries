@@ -11,6 +11,7 @@ public partial class MainWindow
 {
     private bool scopeIncludesDescendants;
     private string scopeProjectionTitle = "Directory";
+    private FileSystemPath? currentScope;
 
     private void ExploreButton_Click(object? sender, RoutedEventArgs e)
     {
@@ -49,17 +50,29 @@ public partial class MainWindow
     {
         var nodes = SelectedNodesFromActiveProjection();
         var files = DistinctFiles(nodes.SelectMany(node => node.Files));
-        var oneNode = nodes.Count == 1 ? nodes[0] : null;
-        var selectedScope = oneNode is null ? null : InferSelectedScope(oneNode);
+        var scope = SelectedScope();
 
         PivotContentMenu.IsEnabled = files.Any(file => file.Content is not null);
-        PivotDirectoryMenu.IsEnabled = selectedScope is not null;
-        PivotBranchMenu.IsEnabled = selectedScope is not null;
-        PivotBestDirectoryPairMenu.IsEnabled = selectedScope is not null && FindBestDirectoryPair(selectedScope.Value) is not null;
-        PivotBestBranchPairMenu.IsEnabled = selectedScope is not null && FindBestBranchPair(selectedScope.Value) is not null;
+        PivotDirectoryMenu.IsEnabled = scope is not null;
+        PivotBranchMenu.IsEnabled = scope is not null;
+        PivotBestDirectoryPairMenu.IsEnabled = scope is not null && FindBestDirectoryPair(scope.Value) is not null;
+        PivotBestBranchPairMenu.IsEnabled = scope is not null && HasBranchPairCandidate(scope.Value);
 
         var suggestions = controller.Counterparts?.Seeds;
         PivotBranchPairMenu.IsEnabled = suggestionIndex >= 0 && suggestions is { Count: > 0 };
+    }
+
+    private bool HasBranchPairCandidate(FileSystemPath scope)
+    {
+        var branches = controller.BranchStatistics?.Branches;
+        if (branches is null)
+            return false;
+
+        return branches.Any(branch => fileSystem.PathsEqual(branch.Path, scope) && branch.DuplicateContentCount > 0)
+            && branches.Any(branch => !fileSystem.PathsEqual(branch.Path, scope)
+                && !fileSystem.IsDescendant(branch.Path, scope)
+                && !fileSystem.IsDescendant(scope, branch.Path)
+                && branch.DuplicateContentCount > 0);
     }
 
     private void UpdateSelectionStatus()
@@ -113,6 +126,7 @@ public partial class MainWindow
             .ToHashSet();
         if (contentIds.Count == 0) return;
 
+        currentScope = null;
         leftScope = null;
         rightScope = null;
         PairExplorer.IsVisible = false;
@@ -177,7 +191,9 @@ public partial class MainWindow
     private FileSystemPath? SelectedScope()
     {
         var nodes = SelectedNodesFromActiveProjection();
-        return nodes.Count == 1 ? InferSelectedScope(nodes[0]) : null;
+        if (nodes.Count == 1)
+            return InferSelectedScope(nodes[0]);
+        return nodes.Count == 0 ? currentScope : null;
     }
 
     private FileSystemPath? InferSelectedScope(ExplorerNode node)
@@ -262,6 +278,7 @@ public partial class MainWindow
 
     private void ShowDirectoryPair(DirectoryPair pair)
     {
+        currentScope = null;
         leftScope = pair.First;
         rightScope = pair.Second;
         PairExplorer.IsVisible = true;
@@ -291,6 +308,7 @@ public partial class MainWindow
 
     private void ShowAdHocBranchPair(FileSystemPath first, FileSystemPath second, int sharedContentCount)
     {
+        currentScope = null;
         leftScope = first;
         rightScope = second;
         PairExplorer.IsVisible = true;
@@ -307,9 +325,9 @@ public partial class MainWindow
 
     private void ShowScopeProjection(FileSystemPath scope, bool includeDescendants, string title)
     {
-        var session = controller.Session;
-        if (session is null) return;
+        if (controller.Session is null) return;
 
+        currentScope = scope;
         scopeIncludesDescendants = includeDescendants;
         scopeProjectionTitle = title;
         leftScope = null;
@@ -324,6 +342,7 @@ public partial class MainWindow
             : new[] { CreateTreeItem(BuildDirectoryTree(scope)) };
 
         UpdateCapabilities();
+        UpdatePivotCapabilities();
     }
 
     private void BuildBreadcrumbs(FileSystemPath scope)
@@ -376,8 +395,10 @@ public partial class MainWindow
     {
         var corpus = controller.Corpus;
         if (corpus is null) return null;
-        return corpus.Roots.Select(root => root.Path).FirstOrDefault(root =>
-            fileSystem.PathsEqual(path, root) || fileSystem.IsDescendant(path, root));
+        foreach (var root in corpus.Roots.Select(item => item.Path))
+            if (fileSystem.PathsEqual(path, root) || fileSystem.IsDescendant(path, root))
+                return root;
+        return null;
     }
 
     private string CorpusRelativeDisplay(FileSystemPath path)
