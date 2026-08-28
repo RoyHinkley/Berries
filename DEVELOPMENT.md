@@ -1,109 +1,68 @@
 # Development
 
-The governing design is split across `PROJECT.md`, `MODEL.md`, `ANALYSIS.md`, `SITUATIONS.md`, `WORKFLOW.md`, and the empirical working document `BOUNDARY.md`. `PROJECT.md` is the short architectural overview and index. This file records the current implementation state and immediate empirical work.
+The governing design is in `PROJECT.md`, `MODEL.md`, `ANALYSIS.md`, and `WORKFLOW.md`. `SITUATIONS.md` and `BOUNDARY.md` retain semantic/empirical research. This file describes the current implementation and, importantly, where it differs from the now-settled next design.
 
-The solution contains:
+## Solution
 
-- `Berries.Core` — platform/UI-independent domain, analysis, Cases, settlement state, planning contracts, and execution-plan contracts.
-- `Berries.FileSystem.Abstractions` — the deliberately small platform-neutral filesystem boundary.
+- `Berries.Core` — platform/UI-independent domain and analysis.
+- `Berries.FileSystem.Abstractions` — platform-neutral filesystem boundary.
 - `Berries.FileSystem.Windows` — Windows filesystem adapter.
-- `Berries.Gui` — Avalonia desktop front end and GUI-specific orchestration/diagnostics.
-- `Berries.Core.Tests` — synthetic, platform-independent tests of Core behavior and boundaries.
+- `Berries.Gui` — Avalonia desktop front end and orchestration.
+- `Berries.Core.Tests` — synthetic platform-independent Core tests.
 
-There is deliberately no console front end. Target framework is .NET 10. The GUI references Avalonia 12.1.0 and is built as `WinExe`.
+There is deliberately no console front end. Target framework is .NET 10. GUI is Avalonia and built as `WinExe`.
 
-## Current analysis pipeline
+## Current implemented discovery pipeline
 
-The GUI maintains a list of Corpus roots. Root normalization removes exact duplicates and descendants of already selected roots.
+The existing GUI can:
 
-The `Scan` button now runs the exploratory pipeline in sequence:
+1. normalize selected Corpus roots;
+2. construct a Portrait while applying `Berries.config` filtering;
+3. discover DuplicateSets by size grouping and SHA-256 hashing;
+4. identify widely distributed same-name DuplicateSets;
+5. apply current settlement machinery from the experimental checklist;
+6. analyze direct-directory relationships;
+7. derive first-class Branch statistics;
+8. rank promising Branch seeds;
+9. perform targeted Branch counterpart search and report candidates.
 
-1. load `Berries.config` and apply `[ignore]` rules while constructing the Initial Portrait;
-2. discover DuplicateSets by size grouping and SHA-256 hashing;
-3. cheaply screen for same-name DuplicateSets occurring once each in at least three distinct directories;
-4. present those candidates as a checklist asking which should be accepted with the retain-all resolution;
-5. apply the checked whole-DuplicateSet settlements;
-6. analyze unresolved direct-directory relationships and derive first-class statistics for every duplicate-bearing Branch;
-7. construct BranchPairs from the resulting DirectoryPair graph;
-8. rank/materialize the top Case sample;
-9. build the structural report and append branch-statistics, experimental branch-seed rankings, early-settlement, and configuration summaries.
+Comprehensive BranchPair generation is currently suspended for the targeted-discovery experiments and should remain so in the next design.
 
-The old individual `Find duplicates`, `Analyze directories`, `Analyze scopes`, and `Top cases` GUI buttons have been removed. Their controller operations remain separate so analysis stages stay testable and reusable.
+The current special distributed-DuplicateSet checklist and `DuplicateSettlements` are obsolete relative to the governing design. They were valuable experiments and should be removed/replaced rather than extended.
 
-The checklist is deliberately an exploratory pre-structural decision pass. Nothing is preselected. Canceling the dialog aborts the remainder of the run. Checked items are settlements for the current run only; persistent filename rules have not yet been implemented.
+## Configuration: rename ignore to exclude
 
-Each checklist item exposes all instance paths through a hover tooltip so the user can inspect context without expanding the main UI.
+Current code/config uses `[ignore]`. The governing format is now `[exclude]`.
 
-## Berries.config ignore filtering
+Retain the existing useful matching semantics:
 
-`src/Berries.Gui/Berries.config` is copied beside the GUI executable and loaded from `AppContext.BaseDirectory` at the start of every scan.
+    no separator
+        match any path component / filename
 
-The current format is deliberately simple:
+    separator present
+        match contiguous path segment in the full path
 
-    [ignore]
-    .git
-    bin
-    obj
-    *.tmp
-    .git/objects
+    * and ?
+        wildcards
 
-Blank lines and lines beginning with `#` or `;` are ignored. Matching is case-insensitive. `*` and `?` wildcards are supported.
+    # or ;
+        comments
 
-A pattern without a path separator is matched against every path component, so a directory-name match excludes all Files beneath that directory and an exact or wildcard filename can exclude that File wherever it occurs. A pattern containing `/` or `\` is matched against a contiguous portion of the full path.
+No compatibility requirement exists for `[ignore]` at this stage.
 
-Ignored Files never enter the Initial Portrait and therefore never participate in hashing, DuplicateSets, DirectoryPairs, BranchPairs, or Cases. The filesystem adapter may still enumerate ignored directories internally; traversal pruning is not implemented because the present purpose is corpus control for empirical testing rather than scan optimization.
-
-The structural report records the loaded configuration path and active ignore patterns so runs remain interpretable.
+Configuration exclusion has the same semantic effect as interactive Exclude: the matching FileInstance is not part of the working Corpus. For efficiency, configuration exclusions may continue to be filtered during acquisition rather than materialized and then removed.
 
 ## Duplicate discovery and accessibility
 
-Duplicate discovery first groups Files by length and hashes only non-singleton length groups. Equal hashes form physical `DuplicateSet`s. A DuplicateSet remains a fact about the Portrait even when some or all of its duplicate relationships are later accepted.
+Duplicate discovery groups by length and hashes only non-singleton groups. Equal SHA-256 hashes form DuplicateSets.
 
-When access to a particular File fails with `IOException`, `UnauthorizedAccessException`, or `SecurityException`, that File is evicted from the Current Portrait for the session. Programming failures propagate normally. Windows Content reads request permissive sharing (`FileShare.ReadWrite | FileShare.Delete`).
+Expected access failures while reading a file (`IOException`, `UnauthorizedAccessException`, `SecurityException`) evict that file from the working session; programming failures propagate. Windows `OpenRead` uses permissive sharing (`FileShare.ReadWrite | FileShare.Delete`).
 
-## Duplicate settlements
+Unique files should remain known to the session even though they are not duplicate-resolution targets. Move needs them for destination collision detection.
 
-`DuplicateSettlements` records duplicate relationships that have been semantically accepted and therefore no longer require a user decision. It supports:
+## Branch statistics
 
-- whole-Content/DuplicateSet acceptance;
-- acceptance of one specific equal-Content File pair;
-- copying settlement state for non-mutating experiments;
-- querying whether any relationship in a DuplicateSet or subset of its Files remains unresolved.
-
-Settlements do not change physical DuplicateSets or the Portrait. They change the unresolved evidence from which structural Cases are derived.
-
-Directory analysis is settlement-aware. A whole accepted DuplicateSet contributes no unresolved directory evidence. A selectively accepted File pair contributes no evidence for that pair while other mates of the same Content remain available.
-
-Case analysis is also settlement-aware: fully accepted DuplicateSets and fully accepted internal relationships no longer generate Cases.
-
-## Early distributed-DuplicateSet screening
-
-The current cheap screening phenotype is intentionally simple and transparent:
-
-- all instances have the same filename;
-- exactly one instance occurs in each represented directory;
-- at least three directories are represented.
-
-Candidates are ordered by descending directory count, then filename. The screen uses only DuplicateSet data and therefore runs before DirectoryPair construction. It does not attempt to infer a Situation or automatically accept anything.
-
-The user-facing question is whether all copies are intentionally distributed and should be retained. Accepting a candidate removes that Content from unresolved duplicate evidence before DirectoryPair and BranchPair construction, potentially reducing many downstream Cases through combinatorial effects.
-
-The AeonHacs experiment screened 185 candidates and the user accepted 48. Compared with the immediately preceding no-settlement baseline, DirectoryPairs fell from 1,734 to 1,153, BranchPairs from 11,141 to 7,971, and total Cases from 13,623 to 9,824. The step therefore appears to provide both semantic cleanup and substantial structural reduction.
-
-The interaction also exposed two further phenomena for study:
-
-- repeated related files such as Git hook `.sample` files or DLL/PDB/XML groups may be more coherent as one higher-level repeated-structure Case than as many independent DuplicateSet Cases;
-- opaque repository/application-managed files may be analytically useful evidence but poor deletion targets, reinforcing the distinction between duplicate identity and safe removability.
-
-## Directory analysis
-
-Directory records describe direct Files only. `FileCount` remains physical; duplicate-file and duplicate-Content counts describe unresolved duplicate evidence.
-
-Each unresolved Content contributes once to a `DirectoryPair` when at least one unresolved File-instance relationship crosses the two directories. The DirectoryPair graph supplies degree, weighted degree, strongest-edge concentration, connected components, density, and related diagnostics.
-
-## Branch statistics and analysis
-
-`BranchStatisticsAnalyzer` derives settlement-aware local statistics for every duplicate-bearing Branch independently of BranchPair enumeration. Each `BranchRecord` contains:
+`BranchStatisticsAnalyzer` derives:
 
     Path
     ParentPath
@@ -113,65 +72,187 @@ Each unresolved Content contributes once to a `DirectoryPair` when at least one 
     DuplicateContentCount
     DuplicateDirectoryCount
 
-`DuplicateContentCount` is a distinct-Content count across the whole branch, not the sum of descendant directory counts. These are fundamental exploratory values from which concentration and hierarchy gradients can be derived without first enumerating BranchPairs.
+`DuplicateContentCount` is distinct across the branch, not a sum of descendant directory counts.
 
-The report lists the top Branches by distinct duplicated Content and shows duplicate-file and duplicate-directory fractions plus parent-relative duplicated-Content, file, and directory retention. Branch-statistics analysis is timed separately.
-
-`BranchPriorityMetrics` now derives experimental parent-relative seed measures:
+`BranchPriorityMetrics` experiments included several parent-relative measures. The current preferred seed metric is:
 
     C = duplicated-Content retention / file retention
-    D = distinct duplicated Content in the child Branch
+    D = distinct duplicated Content in child Branch
+    seed score = D * (1 - 1/C), for C > 1; otherwise 0
 
-and reports four rankings:
+This metric repeatedly surfaced known meaningful structures in real corpora and is the current basis for targeted seed selection.
 
-    C
-    D * C
-    D * ln(C), clamped to zero when C <= 1
-    D * (1 - 1/C), clamped to zero when C <= 1
+## Targeted counterpart analysis
 
-The last measure is bounded above by D and can be interpreted as duplicated Content concentrated beyond what would be expected from the Branch's share of parent files. No formula is preferred yet. The report prints the top 50 for each measure and sampled ranks through the full population to make knees or sharp falloffs visible.
+`BranchCounterpartAnalyzer` is the current direction for container-centric discovery.
 
-BranchPair analysis remains separate and consumes the already constructed `DirectoryPair` graph instead of reconstructing pair evidence independently from DuplicateSets.
+Current behavior/design:
 
-Each DirectoryPair edge is propagated through ancestor-or-self Branch combinations. Its leverage is added once to each effective BranchPair cut it crosses. The current BranchPair measure is therefore weighted cut size, and `DirectoryPairCount` records the number of distinct direct DirectoryPairs contributing to the cut.
+- rank eligible Branch seeds by the preferred seed score;
+- inspect a top-10 seed window each selection round;
+- find each seed's best non-nested counterpart from distinct duplicated-Content overlap;
+- pair score = shared distinct Content * Jaccard;
+- choose the highest pair score from the window;
+- cull/block both selected branch roots and descendants;
+- repeat for a compact shortlist;
+- retain a few top counterpart candidates for diagnostics;
+- direct exact-root `DirectoryPair.SharedContentCount` may be reported diagnostically but does not drive ranking.
 
-Nested BranchPairs remain effective disjoint cuts: if one root is inside the other, the descendant subtree is excluded from the ancestor side. Moving a nested boundary can legitimately increase or decrease crossing evidence.
+This distinction is important:
 
-This eliminates duplicated DuplicateSet-to-directory-pair expansion and makes settlement effects flow naturally from DirectoryPairs into BranchPairs.
+    seed score -> where should we look?
+    pair score -> did we find a promising relationship?
 
-## Cases and ordering
+Real-corpus testing showed the winning pair can originate from a lower seed rank within the window rather than the highest seed.
 
-`CaseAnalyzer` forms one population from unresolved DuplicateSet, Single-directory, DirectoryPair, and BranchPair Cases. It ranks lightweight candidates before materializing bounded File sets for the requested sample.
+## Performance findings
 
-Descending leverage remains the temporary sampling order only. Real-corpus work has established that leverage is not the program objective and is not known to be the best general Case ordering. Exact distinct-Content BranchPair leverage and weighted structural leverage produce materially different rankings. Specificity, coverage, concentration, boundary position, and settlement impact remain active empirical characteristics.
+Exhaustive BranchPair generation proved combinatorial. Representative experiments ranged from tens of thousands of pairs in small source trees to roughly 15 million pairs and tens of minutes in a large archive corpus.
 
-The current research framing distinguishes two broad viewpoints:
+By contrast, Branch statistics are cheap and targeted counterpart discovery has been on the order of seconds or less on large corpora while surfacing recognizable relationships.
 
-- file-centric: why is this Content duplicated broadly or repeatedly?
-- container-centric: why does this directory or Branch contain so much duplicated Content?
+Do not restore exhaustive BranchPair generation merely to preserve the older Case model.
 
-The working hypothesis is that cheap local statistics can generate promising Cases directly and reduce dependence on exhaustive pair enumeration. File-centric grouped settlement has already shown large downstream benefit; the current experiment asks whether concentrated container-centric Branch seeds can be ranked cheaply before counterpart search.
+## Next implementation revision: Duplicate Explorer
 
-The actual objective is reduction of the user's remaining decision work. A Resolution can accomplish this through filesystem changes, acceptance settlements, or both. Resolving several objectively similar Cases with one compact user interaction is therefore directly aligned with the program objective.
+The next revision should shift from report/dialog-driven experimentation to the governing Explorer model.
 
-## Structural diagnostics
+### Stable application shell
 
-The top-Case report retains full run context and timing. `StructuralEvidenceAnalyzer` derives sampled BranchPair evidence on demand, including per-side breadth, crossing-evidence directories, contributing DirectoryPairs, hierarchical relatives, boundary movement, and direct-evidence concentration.
+Add/retain a conventional `File` menu with intended commands:
 
-Report-time structural analysis is separately instrumented because large corpora exposed expensive repeated scans. These diagnostics remain exploratory and are not part of the intended final interactive cost model.
+    Select Roots...
+    Load Saved Session...   [initially nonfunctional/disabled is acceptable]
+    Save Session...         [initially nonfunctional/disabled is acceptable]
+    Execute...
+    Exit
 
-## Tests
+`Select Roots...` displays the current Add / Remove / Scan root-selection interaction.
 
-`Berries.Core.Tests` currently contains twenty-one tests.
+After Scan begins/completes enough acquisition to establish the session, transition to the Duplicate Explorer. The Explorer should become the long-lived work surface rather than creating a sequence of special analysis dialogs.
 
-Coverage includes Corpus normalization, Portrait construction and ignore filtering, duplicate discovery, file eviction, propagation of programming failures, settlement-aware directory analysis, first-class Branch statistics, parent-relative Branch priority metrics, graph metrics, DirectoryPair-driven BranchPair analysis including weighted evidence and nested cuts, settlement propagation through DirectoryPairs into BranchPairs, Case ranking/bounding, and structural evidence.
+### Status/progress
 
-The settlement tests cover both whole-DuplicateSet acceptance and selective pairwise acceptance with other mates remaining unresolved.
+Move scan/analysis progress into a persistent bottom status bar. It should expose current stage and progress within that stage.
 
-## Immediate empirical work
+Preserve analysis-stage boundaries so heavier work can migrate to asynchronous background tasks. Full concurrency is not required in the first revision, but do not build a UI architecture that assumes one monolithic blocking Scan must finish before the Explorer exists.
 
-Run the same non-source-code corpus with the existing ignore configuration and inspect the experimental seed rankings. We want to determine whether any of the four simple measures exhibits a useful sharp falloff and whether recognized large concentrated structures such as the LTspice branches rise naturally without the ranking being swamped by tiny high-ratio branches.
+### Remove special exclusion screen
 
-If one simple measure behaves well, use its highest-value Branches as seeds and search for counterpart Branches sharing the greatest amount of their duplicated Content. The purpose is to test whether useful BranchPair Cases can be discovered directly rather than exhaustively enumerated.
+The current distributed-DuplicateSet checklist should disappear. Its use case belongs in Content projection plus ordinary Exclude.
 
-Case ordering remains an open research question. No Situation inference, persistent Resolution rules, generalization rules, Dispositions, virtual ActionPlans, or physical execution have yet been implemented.
+### Projections
+
+Implement toward:
+
+    Content
+        one pane; Content roots -> full-path FileInstance leaves
+
+    DirectoryPair
+        two panes rooted at exact directories
+
+    BranchPair
+        two panes rooted at branches
+
+Every selection resolves to duplicate FileInstances. Higher structural nodes are scope shortcuts, not directory-operation targets.
+
+### Commands
+
+Design toward:
+
+    Back / Forward
+    Pivot
+    Suggest Case
+    Invert Selection
+    Exclude
+    Delete
+    Move -> / <- Move
+    Undo
+
+There is no Keep, Accept/Settle, or Apply.
+
+Exclude/Delete/Move immediately transform the Working Portrait. Undo reverses portrait operations. Back/Forward handles navigation history.
+
+### Suggest Case
+
+Suggestions are analysis-produced foci, not a queue. Enable the command when enough analysis is available. The current Content heuristics and targeted Branch counterpart analyzer are candidate suggestion sources.
+
+## Move implementation requirements
+
+Move semantics are now settled and should be implemented exactly from `MODEL.md` / `WORKFLOW.md` rather than inferred from ordinary filesystem Move semantics.
+
+For each selected source duplicate instance:
+
+1. map its relative directory path from source scope beneath destination scope;
+2. if identical Content already exists directly within that computed destination directory, delete the source and preserve the existing destination name;
+3. otherwise use the source filename at that directory;
+4. free path -> Move;
+5. same filename + same Content -> Delete source;
+6. same filename + different Content -> flag immediately, leave both untouched, continue other instances.
+
+Do not search descendant destination directories for same Content. `Within` means the exact computed directory.
+
+Do not invent filenames, rename, or overwrite different Content.
+
+## Portrait operation model
+
+The next Core model should make the distinction explicit:
+
+    Initial Portrait
+        fixed scan result
+
+    ordered portrait operations
+        Exclude / Delete / Move
+
+    Working Portrait
+        deterministic result; user's desired Corpus
+
+The existing settlement model is transitional code and should not dictate the new architecture.
+
+Exclude contributes no filesystem Action. Delete and Move contribute physical work for Execute.
+
+## Execute direction
+
+Physical execution is not the first target of the Explorer revision, but the architecture should preserve the settled model:
+
+- pre-execution summary before approval, including planned Content losses;
+- no early last-instance warning during ordinary Delete editing;
+- no global filesystem revalidation/rescan before execution;
+- attempt the approved plan;
+- preserve dependency safety (especially copy-before-delete for cross-device Move);
+- if a prerequisite fails, omit dependent destructive work;
+- continue independent safe operations;
+- post-execution report records actual successes/failures/exceptions.
+
+## Save/Load direction
+
+Save/Load may remain nonfunctional. If implemented later, serialize one session object as compressed JSON so it can be loaded directly into the application model.
+
+Loading does not reconcile with current disk state. A fresh scan is a New Session.
+
+Avoid designing a detailed persistence schema during the Explorer rewrite unless actual use demonstrates the need.
+
+## Tests during the rewrite
+
+Preserve the existing useful duplicate-discovery, filesystem-boundary, Branch-statistics, and targeted-counterpart tests.
+
+Replace settlement-centric tests as the new Exclude/Working-Portrait operation model lands.
+
+Add focused synthetic tests for:
+
+- Exclude removing instances from duplicate analysis without filesystem Actions;
+- Undo of Exclude/Delete/Move;
+- Content-relative Invert Selection logic if implemented in Core/view-model code;
+- Move relative-path preservation;
+- Move destination-directory same-Content detection independent of filename;
+- exact-directory (`within`, not descendant) semantics;
+- same-name/same-Content collision reducing to source deletion;
+- same-name/different-Content collision leaving both untouched while other moves proceed;
+- collision detection against unique destination files;
+- cross-device execution dependency: failed copy must suppress source delete when execution is implemented.
+
+## Immediate goal
+
+Bring the code into alignment with the now-settled portrait-first Duplicate Explorer design without attempting every deferred feature at once.
+
+The first revision should establish the correct long-lived shell, session/Portrait model, projection foundation, ordinary Exclude/Delete/Move command architecture, status/progress location, and targeted suggestion path. Visual polish, Save/Load, full asynchronous optimization, and physical Execute can follow once the interaction model is exercised against real corpora.
