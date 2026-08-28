@@ -21,18 +21,17 @@
     </Menu>
 
     <Grid Grid.Row="1">
-      <Grid x:Name="RootsPanel" Margin="24" RowDefinitions="Auto,*,Auto">
+      <Grid x:Name="RootsPanel" Margin="24" RowDefinitions="Auto,Auto,*">
         <StackPanel Spacing="5">
-          <TextBlock Text="Select Corpus Roots" FontSize="26" FontWeight="SemiBold" />
-          <TextBlock Text="Add one or more disjoint directory trees, then explore to begin." Opacity="0.65" />
+          <TextBlock Text="Search these directories for duplicates" FontSize="26" FontWeight="SemiBold" />
+          <TextBlock Text="Add one or more disjoint directory trees." Opacity="0.65" />
         </StackPanel>
-        <ListBox x:Name="RootsList" Grid.Row="1" Margin="0,20,0,20" />
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,18,0,8">
           <Button x:Name="AddRootButton" Content="Add..." Click="AddRootButton_Click" />
           <Button x:Name="RemoveRootButton" Content="Remove" Click="RemoveRootButton_Click" />
-          <Button x:Name="ScanButton" Content="Explore" Click="ScanButton_Click" />
-          <Button x:Name="CancelRootsButton" Content="Cancel" Click="CancelRootsButton_Click" />
+          <Button x:Name="ScanButton" Content="Explore" Click="ExploreButton_Click" />
         </StackPanel>
+        <ListBox x:Name="RootsList" Grid.Row="2" />
       </Grid>
 
       <Grid x:Name="ExplorerPanel" IsVisible="False" RowDefinitions="Auto,*">
@@ -46,7 +45,9 @@
                   <MenuItem x:Name="PivotContentMenu" Header="Content" Click="PivotSelectedContent_Click" IsEnabled="False" />
                   <MenuItem x:Name="PivotDirectoryMenu" Header="Containing Directory" Click="PivotDirectory_Click" IsEnabled="False" />
                   <MenuItem x:Name="PivotBranchMenu" Header="Branch" Click="PivotBranch_Click" IsEnabled="False" />
-                  <MenuItem x:Name="PivotBranchPairMenu" Header="Current Branch Pair" Click="PivotBranchPair_Click" IsEnabled="False" />
+                  <MenuItem x:Name="PivotBestDirectoryPairMenu" Header="Best Directory Pair" Click="PivotBestDirectoryPair_Click" IsEnabled="False" />
+                  <MenuItem x:Name="PivotBestBranchPairMenu" Header="Best Branch Pair" Click="PivotBestBranchPair_Click" IsEnabled="False" />
+                  <MenuItem x:Name="PivotBranchPairMenu" Header="Current Suggested Branch Pair" Click="PivotBranchPair_Click" IsEnabled="False" />
                 </MenuFlyout>
               </Button.Flyout>
             </Button>
@@ -66,7 +67,10 @@
         </Border>
 
         <Grid Grid.Row="1" Margin="14" RowDefinitions="Auto,*">
-          <TextBlock x:Name="ProjectionTitle" FontSize="18" FontWeight="SemiBold" Text="Corpus" Margin="2,0,0,10" TextWrapping="Wrap" />
+          <StackPanel Margin="2,0,0,10" Spacing="4">
+            <TextBlock x:Name="ProjectionTitle" FontSize="18" FontWeight="SemiBold" Text="Corpus" />
+            <StackPanel x:Name="BreadcrumbPanel" Orientation="Horizontal" Spacing="4" IsVisible="False" />
+          </StackPanel>
 
           <Grid x:Name="SingleExplorer" Grid.Row="1">
             <TreeView x:Name="ExplorerTree" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged" />
