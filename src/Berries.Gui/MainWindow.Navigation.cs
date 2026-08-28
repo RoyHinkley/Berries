@@ -361,7 +361,9 @@ public partial class MainWindow
         {
             chain.Add(current);
             if (fileSystem.PathsEqual(current, root.Value)) break;
-            current = fileSystem.GetParentDirectory(current) ?? break;
+            var parent = fileSystem.GetParentDirectory(current);
+            if (parent is null) break;
+            current = parent.Value;
         }
         chain.Reverse();
 
