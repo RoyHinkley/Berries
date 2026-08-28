@@ -26,7 +26,7 @@
           <TextBlock Text="Search these directories for duplicates" FontSize="26" FontWeight="SemiBold" />
           <TextBlock Text="Add one or more disjoint directory trees." Opacity="0.65" />
         </StackPanel>
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,18,0,8">
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,8">
           <Button x:Name="AddRootButton" Content="Add..." Click="AddRootButton_Click" />
           <Button x:Name="RemoveRootButton" Content="Remove" Click="RemoveRootButton_Click" />
           <Button x:Name="ScanButton" Content="Explore" Click="ExploreButton_Click" />
@@ -62,7 +62,10 @@
               <Button x:Name="UndoButton" Content="Undo" Click="UndoButton_Click" IsEnabled="False" />
             </StackPanel>
 
-            <Button x:Name="SuggestCaseButton" Grid.Column="9" HorizontalAlignment="Right" Content="Suggest Case" Click="SuggestCaseButton_Click" IsEnabled="False" />
+            <StackPanel Grid.Column="9" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="7">
+              <Button x:Name="PreviousCaseButton" Content="Previous Case" Click="PreviousCaseButton_Click" />
+              <Button x:Name="SuggestCaseButton" Content="Suggest Case" Click="SuggestCaseButton_Click" IsEnabled="False" />
+            </StackPanel>
           </Grid>
         </Border>
 
