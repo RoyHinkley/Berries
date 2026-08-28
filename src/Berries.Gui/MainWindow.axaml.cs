@@ -178,8 +178,8 @@ public partial class MainWindow : Window
         LeftScopeText.Text = leftScope.Value.Value;
         RightScopeText.Text = rightScope.Value.Value;
 
-        LeftTree.ItemsSource = [CreateTreeItem(BuildBranchTree(leftScope.Value))];
-        RightTree.ItemsSource = [CreateTreeItem(BuildBranchTree(rightScope.Value))];
+        LeftTree.ItemsSource = new[] { CreateTreeItem(BuildBranchTree(leftScope.Value)) };
+        RightTree.ItemsSource = new[] { CreateTreeItem(BuildBranchTree(rightScope.Value)) };
         UpdateCapabilities();
     }
 
@@ -353,8 +353,8 @@ public partial class MainWindow : Window
     {
         if (PairExplorer.IsVisible && leftScope is not null && rightScope is not null)
         {
-            LeftTree.ItemsSource = [CreateTreeItem(BuildBranchTree(leftScope.Value))];
-            RightTree.ItemsSource = [CreateTreeItem(BuildBranchTree(rightScope.Value))];
+            LeftTree.ItemsSource = new[] { CreateTreeItem(BuildBranchTree(leftScope.Value)) };
+            RightTree.ItemsSource = new[] { CreateTreeItem(BuildBranchTree(rightScope.Value)) };
         }
         else
         {
@@ -445,91 +445,65 @@ public partial class MainWindow : Window
                         try
                         {
                             fileSystem.MoveFile(move.Source, move.Destination);
-                            completed++;
                         }
                         catch (IOException)
                         {
-                            try
-                            {
-                                fileSystem.CopyFile(move.Source, move.Destination);
-                                fileSystem.DeleteFile(move.Source); // dependent deletion only after successful copy
-                                completed++;
-                            }
-                            catch (Exception fallbackFailure)
-                            {
-                                failedMoveDestinations.Add(move.Destination);
-                                failures.Add($"Move {move.Source} -> {move.Destination}: {fallbackFailure.Message}");
-                            }
+                            fileSystem.CopyFile(move.Source, move.Destination);
+                            fileSystem.DeleteFile(move.Source);
                         }
+                        completed++;
                         break;
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 if (action is MoveFileAction failedMove)
                     failedMoveDestinations.Add(failedMove.Destination);
-                failures.Add($"{action}: {ex.Message}");
+                failures.Add($"{DescribeAction(action)} — {ex.Message}");
             }
         }
 
-        EndProgress($"Execution complete — {completed:N0} completed, {skipped:N0} dependent action(s) skipped, {failures.Count:N0} failure(s).");
-        await ShowMessageAsync("Execution Summary",
-            $"Completed: {completed:N0}\nSkipped after prerequisite failure: {skipped:N0}\nFailures: {failures.Count:N0}"
-            + (failures.Count == 0 ? string.Empty : "\n\n" + string.Join("\n", failures.Take(20))));
+        EndProgress($"Execution finished — {completed:N0} completed, {skipped:N0} dependent action(s) skipped, {failures.Count:N0} failure(s)."
+            + (failures.Count == 0 ? string.Empty : " See the failure summary."));
+
+        if (failures.Count > 0)
+            await ShowMessageAsync("Execution failures", string.Join(Environment.NewLine + Environment.NewLine, failures.Take(50)));
     }
 
     private int CountPhysicalContentLosses(BerriesSession session)
     {
-        var physical = session.InitialPortrait.Files
+        var physicallyDeleted = session.Actions.OfType<DeleteFileAction>().Select(action => action.Path).ToArray();
+        return session.InitialPortrait.Files
             .Where(file => file.Content is not null)
-            .Select(file => (file.Content!.Value, file.Path))
-            .ToList();
-
-        foreach (var action in session.Actions)
-        {
-            switch (action)
-            {
-                case DeleteFileAction delete:
-                    physical.RemoveAll(item => fileSystem.PathsEqual(item.Path, delete.Path));
-                    break;
-                case MoveFileAction move:
-                    var index = physical.FindIndex(item => fileSystem.PathsEqual(item.Path, move.Source));
-                    if (index >= 0)
-                        physical[index] = (physical[index].Value, move.Destination);
-                    break;
-            }
-        }
-
-        var initialContents = session.InitialPortrait.Files.Where(file => file.Content is not null)
-            .Select(file => file.Content!.Value).Distinct().ToArray();
-        var surviving = physical.Select(item => item.Value).ToHashSet();
-        return initialContents.Count(content => !surviving.Contains(content));
+            .GroupBy(file => file.Content!.Value)
+            .Count(group => group.All(file => physicallyDeleted.Any(path => fileSystem.PathsEqual(path, file.Path))));
     }
 
-    private void EnsureParent(FileSystemPath path)
+    private void EnsureParent(FileSystemPath destination)
     {
-        var parent = fileSystem.GetParentDirectory(path);
+        var parent = fileSystem.GetParentDirectory(destination);
         if (parent is not null && !fileSystem.Exists(parent.Value))
             fileSystem.CreateDirectory(parent.Value);
     }
 
+    private static string DescribeAction(FileAction action) => action switch
+    {
+        DeleteFileAction delete => $"Delete {delete.Path.Value}",
+        CopyFileAction copy => $"Copy {copy.Source.Value} -> {copy.Destination.Value}",
+        MoveFileAction move => $"Move {move.Source.Value} -> {move.Destination.Value}",
+        _ => action.ToString() ?? action.GetType().Name
+    };
+
     private async Task<bool> ConfirmAsync(string title, string message, string affirmative)
     {
-        var dialog = new Window { Title = title, Width = 560, Height = 260, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
-        var yes = new Button { Content = affirmative, MinWidth = 90 };
-        var no = new Button { Content = "Cancel", MinWidth = 90 };
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Children = { no, yes } };
-        dialog.Content = new Grid
+        var dialog = new Window
         {
-            Margin = new Avalonia.Thickness(20),
-            RowDefinitions = new RowDefinitions("*,Auto"),
-            Children =
-            {
-                new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
-                buttons
-            }
+            Title = title,
+            Width = 560,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            Content = BuildDialogContent(message, affirmative, out var yes, out var no)
         };
-        Grid.SetRow(buttons, 1);
         yes.Click += (_, _) => dialog.Close(true);
         no.Click += (_, _) => dialog.Close(false);
         return await dialog.ShowDialog<bool>(this);
@@ -537,22 +511,45 @@ public partial class MainWindow : Window
 
     private async Task ShowMessageAsync(string title, string message)
     {
-        var dialog = new Window { Title = title, Width = 650, Height = 360, WindowStartupLocation = WindowStartupLocation.CenterOwner };
-        var close = new Button { Content = "Close", MinWidth = 90, HorizontalAlignment = HorizontalAlignment.Right };
-        var grid = new Grid { Margin = new Avalonia.Thickness(20), RowDefinitions = new RowDefinitions("*,Auto") };
-        grid.Children.Add(new TextBox { Text = message, IsReadOnly = true, AcceptsReturn = true, TextWrapping = Avalonia.Media.TextWrapping.Wrap });
-        grid.Children.Add(close);
-        Grid.SetRow(close, 1);
-        dialog.Content = grid;
-        close.Click += (_, _) => dialog.Close();
+        var dialog = new Window
+        {
+            Title = title,
+            Width = 700,
+            Height = 420,
+            Content = new Grid
+            {
+                Margin = new Avalonia.Thickness(20),
+                RowDefinitions = RowDefinitions.Parse("*,Auto"),
+                Children =
+                {
+                    new TextBox { Text = message, IsReadOnly = true, AcceptsReturn = true, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                    new Button { Content = "Close", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Avalonia.Thickness(0,12,0,0) }
+                }
+            }
+        };
+        if (dialog.Content is Grid grid && grid.Children[1] is Button close)
+        {
+            Grid.SetRow(close, 1);
+            close.Click += (_, _) => dialog.Close();
+        }
         await dialog.ShowDialog(this);
     }
 
-    private void ExitMenu_Click(object? sender, RoutedEventArgs e) => Close();
+    private static Control BuildDialogContent(string message, string affirmative, out Button yes, out Button no)
+    {
+        yes = new Button { Content = affirmative, MinWidth = 90 };
+        no = new Button { Content = "Cancel", MinWidth = 90 };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
+        buttons.Children.Add(no);
+        buttons.Children.Add(yes);
+        var panel = new StackPanel { Margin = new Avalonia.Thickness(20), Spacing = 20 };
+        panel.Children.Add(new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap });
+        panel.Children.Add(buttons);
+        return panel;
+    }
 
     private void RefreshRoots()
     {
-        RootsList.ItemsSource = null;
         RootsList.ItemsSource = roots.ToArray();
         ScanButton.IsEnabled = roots.Count > 0;
         RemoveRootButton.IsEnabled = roots.Count > 0;
@@ -565,21 +562,34 @@ public partial class MainWindow : Window
         ScanButton.IsEnabled = enabled && roots.Count > 0;
     }
 
-    private void BeginProgress(string text, bool indeterminate)
+    private void BeginProgress(string message, bool indeterminate)
     {
-        StatusText.Text = text;
+        StatusText.Text = message;
         StatusProgress.IsVisible = true;
         StatusProgress.IsIndeterminate = indeterminate;
-        StatusProgress.Value = 0;
+        if (!indeterminate) StatusProgress.Value = 0;
     }
 
-    private void EndProgress(string text)
+    private void EndProgress(string message)
     {
-        StatusText.Text = text;
-        StatusProgress.IsIndeterminate = false;
+        StatusText.Text = message;
         StatusProgress.IsVisible = false;
+        StatusProgress.IsIndeterminate = false;
     }
 
     private static string ShortContent(ContentId content) =>
         content.Value.Length <= 12 ? content.Value : content.Value[..12];
+
+    private sealed class ExplorerNode
+    {
+        public ExplorerNode(string label, IEnumerable<FileInstance>? files = null)
+        {
+            Label = label;
+            Files = files?.ToArray() ?? [];
+        }
+
+        public string Label { get; }
+        public IReadOnlyList<FileInstance> Files { get; set; }
+        public List<ExplorerNode> Children { get; } = [];
+    }
 }
