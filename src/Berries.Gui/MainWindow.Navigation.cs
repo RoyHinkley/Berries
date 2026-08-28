@@ -53,7 +53,7 @@ public partial class MainWindow
         var files = DistinctFiles(nodes.SelectMany(node => node.Files));
         var scope = SelectedScope();
 
-        PivotContentMenu.IsEnabled = files.Any(file => file.Content is not null);
+        PivotContentMenu.IsEnabled = controller.Session is not null;
         PivotDirectoryMenu.IsEnabled = scope is not null;
         PivotBranchMenu.IsEnabled = scope is not null;
         PivotBestDirectoryPairMenu.IsEnabled = scope is not null && FindBestDirectoryPair(scope.Value) is not null;
@@ -86,7 +86,7 @@ public partial class MainWindow
             return;
 
         var files = DistinctFiles(nodes.SelectMany(node => node.Files));
-        var contents = files.Where(file => file.Content is not null)
+        var groups = files.Where(file => file.Content is not null)
             .Select(file => file.Content!.Value)
             .Distinct()
             .Count();
@@ -94,7 +94,7 @@ public partial class MainWindow
         if (files.Count == 1)
             StatusText.Text = $"{files[0].Path.Value} — {files[0].Length:N0} bytes";
         else if (files.Count > 0)
-            StatusText.Text = $"Selection — {files.Count:N0} duplicate instances, {contents:N0} Contents";
+            StatusText.Text = $"Selection — {files.Count:N0} files, {groups:N0} Groups";
         else
             StatusText.Text = nodes.Count == 1 ? nodes[0].Label : $"Selection — {nodes.Count:N0} items";
     }
@@ -125,7 +125,11 @@ public partial class MainWindow
             .Select(file => file.Content!.Value)
             .Distinct()
             .ToHashSet();
-        if (contentIds.Count == 0) return;
+        if (contentIds.Count == 0)
+        {
+            ShowContentProjection();
+            return;
+        }
 
         currentScope = null;
         leftScope = null;
@@ -134,27 +138,31 @@ public partial class MainWindow
         SingleExplorer.IsVisible = true;
         BreadcrumbPanel.IsVisible = false;
         BreadcrumbPanel.Children.Clear();
-        ProjectionTitle.Text = contentIds.Count == 1 ? "Content" : $"Content — {contentIds.Count:N0} selected Contents";
+        ProjectionTitle.Text = contentIds.Count == 1 ? "Group" : $"Groups — {contentIds.Count:N0} selected";
 
         var nodes = session.DuplicateSets
             .Where(set => contentIds.Contains(set.Content))
             .OrderByDescending(set => set.Files.Count)
-            .Select(set =>
-            {
-                var names = set.Files.Select(file => Path.GetFileName(file.Path.Value))
-                    .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-                var title = names.Length == 1
-                    ? $"{names[0]}  —  {set.Files.Count:N0} instances"
-                    : $"Content {ShortContent(set.Content)}  —  {set.Files.Count:N0} instances";
-                var node = new ExplorerNode(title, set.Files);
-                foreach (var file in set.Files.OrderBy(file => file.Path.Value, StringComparer.OrdinalIgnoreCase))
-                    node.Children.Add(new ExplorerNode(file.Path.Value, [file]));
-                return node;
-            })
+            .Select(set => BuildGroupNode(set.Files))
             .ToArray();
 
         ExplorerTree.ItemsSource = nodes.Select(CreateTreeItem).ToArray();
         UpdateCapabilities();
+    }
+
+    private ExplorerNode BuildGroupNode(IReadOnlyList<FileInstance> files)
+    {
+        var names = files.Select(file => Path.GetFileName(file.Path.Value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var shownNames = string.Join(", ", names.Take(2));
+        if (names.Length > 2) shownNames += ", …";
+        var title = $"{shownNames} — {files.Count:N0} files";
+        var node = new ExplorerNode(title, files);
+        foreach (var file in files.OrderBy(file => file.Path.Value, StringComparer.OrdinalIgnoreCase))
+            node.Children.Add(new ExplorerNode(file.Path.Value, [file]));
+        return node;
     }
 
     private void PivotDirectory_Click(object? sender, RoutedEventArgs e)
@@ -286,7 +294,7 @@ public partial class MainWindow
         SingleExplorer.IsVisible = false;
         BreadcrumbPanel.IsVisible = false;
         BreadcrumbPanel.Children.Clear();
-        ProjectionTitle.Text = $"Directory Pair — {pair.SharedContentCount:N0} shared Contents";
+        ProjectionTitle.Text = $"Directory Pair — {pair.SharedContentCount:N0} shared Groups";
         LeftScopeText.Text = CorpusRelativeDisplay(pair.First);
         RightScopeText.Text = CorpusRelativeDisplay(pair.Second);
         LeftTree.ItemsSource = new[] { CreateTreeItem(BuildDirectoryTree(pair.First)) };
@@ -316,7 +324,7 @@ public partial class MainWindow
         SingleExplorer.IsVisible = false;
         BreadcrumbPanel.IsVisible = false;
         BreadcrumbPanel.Children.Clear();
-        ProjectionTitle.Text = $"Branch Pair — {sharedContentCount:N0} shared Contents";
+        ProjectionTitle.Text = $"Branch Pair — {sharedContentCount:N0} shared Groups";
         LeftScopeText.Text = CorpusRelativeDisplay(first);
         RightScopeText.Text = CorpusRelativeDisplay(second);
         LeftTree.ItemsSource = new[] { CreateTreeItem(BuildBranchTree(first)) };
