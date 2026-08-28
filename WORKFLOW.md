@@ -1,319 +1,275 @@
-# Berries Decision and Execution Workflow
+# Berries User and Execution Workflow
 
-This document defines presentation of Cases, construction of Dispositions, virtual application, ActionPlan compilation, execution safety, and filesystem-boundary requirements. Terminology and semantic invariants are defined in `MODEL.md`; Situation semantics are in `SITUATIONS.md`.
+This document defines application flow, Duplicate Explorer interaction, portrait operations, Move semantics, execution, and persistence direction. Terminology and invariants are defined in `MODEL.md`; discovery/ranking is defined in `ANALYSIS.md`.
 
-## Present a Case
+## Application shell and program flow
 
-The UI should expose each Case as one self-contained decision area without requiring the user to understand its formal Case type.
+Berries should use one long-lived application shell rather than a wizard sequence of analysis screens.
 
-A scrollable list of Case panels is the preferred presentation. Panels need not be fully materialized before scrolling into view; lightweight summaries can be expanded or virtualized as needed.
+A conventional `File` menu should provide the application-level commands:
 
-The active panel body shows only Case data useful to establishing the Disposition, such as:
+    Select Roots...
+    Load Saved Session...      [may initially be disabled]
+    Save Session...            [may initially be disabled]
+    Execute...
+    Exit
 
-    concise Case description
-    relevant paths/branches
-    defining duplicate relationships
-    leverage, coverage, concentration, and other useful structural evidence
-    Situation selector
-    Resolution selector
-    projected surviving arrangement
-    directory mappings where applicable
-    Accept / Apply controls
+### New session
 
-Additional detail should be available on demand without cluttering the primary presentation. Tooltips, hover details, expandable evidence, and similar secondary surfaces are appropriate for paths, contributing instances, and other context needed only occasionally.
+`Select Roots...` shows the root-selection view. The current Add / Remove / Scan interaction is appropriate.
 
-Case information should emphasize the objective duplication pattern that caused the Case to exist rather than unrelated duplication merely lying within its bounds.
+Selected roots are normalized to a minimal disjoint set. Scan begins a new session and transitions into the Duplicate Explorer as soon as practical. The corpus roots themselves provide the initial Explorer structure while analysis results become available.
 
-Situation identification is optional. Objective evidence may constrain or rank the offered Situations. Once the user selects one, proposed Resolutions are drawn from that asserted Situation; see `SITUATIONS.md`.
+There is no special pre-analysis exclusion/settlement screen.
 
-When no Situation is selected, Berries may offer generally applicable Resolutions that still address the Case's defining duplication pattern.
+### Loaded session
 
-Selecting a Resolution adjusts the Case view to show the resulting proposed Disposition and any parameters still required from the user.
+`Load Saved Session...`, when implemented, restores the saved session directly into the Duplicate Explorer. It does not rescan or reconcile the filesystem.
 
-Every Resolution implies one Disposition and must supply or solicit every parameter required for that Disposition. Multiple Resolutions may imply the same Disposition.
+### Long-lived Explorer
 
-## Determine the Disposition
+The Duplicate Explorer is the primary working UI. Analysis should progressively enrich it rather than requiring a completed monolithic scan before the application can become interactive.
 
-The UI presents the desired surviving arrangement whenever possible rather than asking the user to enumerate removals.
+Heavy work should migrate toward asynchronous background tasks where practical. The architecture should not assume that every analysis stage must block the UI or that all derived analysis is simultaneously current.
 
-A Disposition defines the exact intended filesystem state within Case authority. It does not imply that every File in the Case is modified.
+A status bar at the bottom of the main window owns progress reporting. It should show the current stage and meaningful progress within that stage, for example hashing count/percentage. Avoid modal progress UI.
 
-Fundamental rule:
+Controls such as `Suggest Case` become enabled when the analysis required to support them is available. Background recomputation must not steal focus or unexpectedly restructure the user's current Explorer view.
 
-    A Case need not resolve all duplication within its bounds; its Resolution
-    must address the duplication pattern that caused the Case to exist.
+## Explorer projections
 
-Other internal duplication can remain untouched for subsequent Cases.
+The Explorer presents the Working Portrait through interchangeable projections.
 
-### DuplicateSet Case
+### Content projection
 
-Show retained File instances. Multiple instances may be retained. Omitted instances of the same Content are implied removable when the selected Resolution calls for deduplication.
+One pane. Each root node represents one duplicated Content; leaves are the full-path FileInstances having that Content.
 
-A retain-all Resolution can instead settle every relationship in the DuplicateSet while leaving the Portrait unchanged.
+All FileInstances are shown individually. Do not substitute directories as leaves: multiple identical instances can exist in one directory, and operational scope must remain instance-precise.
 
-### Single-directory Case
+Selecting a Content node is shorthand for selecting its currently represented FileInstance descendants.
 
-The Resolution addresses Content duplicated internally within that directory. Unique Files and unrelated duplicate relationships need not be changed unless the selected Resolution explicitly requires it.
+### DirectoryPair projection
 
-### DirectoryPair Case
+Two equivalent tree panes rooted at two exact directories. It is a narrow container-centric view and can be understood as a degenerate BranchPair projection.
 
-The Resolution addresses the Content relationship directly shared by the two directories. Unique Files are handled according to the selected Situation/Resolution and explicit user choices rather than by a universal delete/retain default.
+### BranchPair projection
 
-### BranchPair Case
+Two equivalent tree panes rooted at two branches. Directory nodes organize duplicate FileInstances. Selecting a directory node selects the applicable duplicate FileInstances beneath it; the directory itself is not an operation target.
 
-The Resolution addresses duplicated Content crossing the two effective sides of the BranchPair cut. Duplication wholly internal to either side is not part of the Case's semantic obligation and can remain for later Cases.
+Unique files are not shown as resolution candidates, although the session can retain knowledge of them for collision detection and other constraints.
 
-Keep/destination relationships can be expressed through directory mappings, for example:
+## Navigation and Pivot
 
-    OldPhotos\Family -> Photos\Family
-    OldPhotos\Trips  -> Photos\Travel
+Cases are suggested foci, not a queue and not a separate mandatory Case screen.
 
-A source directory with no accepted special mapping can preserve its relative path beneath the selected destination when that is appropriate to the Resolution.
+Berries should provide a command such as `Suggest Case` whose purpose is:
 
-Removing an empty source directory is a directory-specific choice and can normally default to yes when consistent with the selected Resolution.
+    identify something likely to reward attention
 
-A Disposition is complete when every destination/retention decision required by the selected Resolution is unambiguous. A change-producing Disposition cannot be applied until complete and valid.
+A suggestion establishes an appropriate focus/projection. The user may then navigate or Pivot freely.
 
-## Directory mappings
+`Pivot` changes the projection or structural interpretation of the current focus without modifying the Working Portrait. It belongs with navigation controls, along with Back/Forward, rather than with Undoable resolution operations.
 
-High-level structural Cases can contain useful subordinate directory correspondences.
+Exact Pivot availability is context-sensitive and can evolve with the Explorer implementation.
 
-Derive proposed mappings on demand from DirectoryPair relationships within the selected source/destination branches rather than storing them permanently in BranchPair.
+## Selection model
 
-Proposed mappings are fully user-editable. The user can accept, reject, or change mappings piecemeal.
+Selection always reduces to a set of duplicate FileInstances in the Working Portrait.
 
-Where a Resolution requires moving material into a destination and no special mapping is accepted, preserve the relative source path beneath the destination as the deterministic fallback when appropriate.
+    leaf selection
+        one FileInstance
+
+    Content selection
+        all represented instances of that Content
+
+    directory/branch node selection
+        all applicable duplicate FileInstances represented beneath that node
+
+Ctrl/Shift/multiple selection should behave conventionally where the tree control permits it.
+
+`Invert Selection` is Content-relative. For each Content represented by the current selection, select its other currently selectable instances and deselect the selected instances. Do not invert unrelated visible Contents. Excluded instances are not selectable and therefore cannot be selected by inversion.
+
+## Resolution controls
+
+The primary interaction is selection-first:
+
+    select FileInstances / structural scope
+        -> invoke operation
+        -> Working Portrait changes immediately
+
+Do not use tool-first paint semantics for destructive operations.
+
+A compact toolbar should expose the principal commands. Context menus may duplicate common commands as a convenience, but should not be the sole discoverability mechanism. Per-item Keep/Delete buttons would create unnecessary clutter and make bulk work awkward.
+
+The working command set is approximately:
+
+    Back / Forward
+    Pivot
+    Suggest Case
+    Invert Selection
+    Exclude
+    Delete
+    Move ->
+    <- Move
+    Undo
+
+Commands are enabled according to projection and selection validity.
+
+There is no `Keep`. A surviving instance simply has no destructive operation applied to it.
+
+There is no `Accept` or `Settle`. If instances should cease to participate in Berries, `Exclude` removes them from the Working Portrait.
+
+There is no `Apply`. Exclude/Delete/Move immediately update the Working Portrait and operation history. Undo provides local safety; Execute is the ultimate physical commitment boundary.
+
+## Exclude
+
+Exclude removes selected FileInstances from the working Corpus.
+
+The excluded instances disappear from all projections and derived analysis and are no longer selectable. No filesystem Action is produced.
+
+Record Exclude as an undoable portrait operation, conceptually one excluded instance per operation/history entry even if a bulk UI command groups them for Undo presentation.
+
+Configuration exclusions have the same semantic result. `Berries.config` should use `[exclude]`, not `[ignore]`. Configuration exclusions are automatic initial Exclude operations; implementation may filter them during acquisition for efficiency.
+
+## Delete
+
+Delete removes selected FileInstances from the Working Portrait and contributes deletion work to the eventual Action Plan.
+
+Do not interrupt ordinary editing merely because the operation removes every remaining instance of one or more Contents. Potential Content loss is summarized at the pre-execution review, not treated as an early warning.
+
+## Move
+
+Move is duplicate-motivated structural relocation, not a general file-management command and not an inferred directory merge.
+
+The user explicitly selects source and destination scopes in a two-pane projection. The selected scopes establish the directory correspondence. Berries preserves source paths beneath the selected source scope when mapping them beneath the destination scope.
 
 Example:
 
-    source: OldPhotos\Trips\d.jpg
-    special mapping: Trips -> Travel
-    result: Photos\Travel\d.jpg
+    source scope:       Old\Photos\Trips
+    destination scope: Photos\Travel
 
-without that mapping:
+    source instance:   Old\Photos\Trips\2024\a.jpg
+    computed directory:Photos\Travel\2024
 
-    result: Photos\Trips\d.jpg
+The duplicate counterpart's existing directory elsewhere does not establish a mapping. If the user later wants a broader mapping, it is a separate Move operation. Thus a reorganization can naturally be expressed by a sequence such as:
 
-## Accept and Apply
+    Old\Photos\Trips -> Photos\Travel
+    Old\Photos       -> Photos
 
-A Resolution can produce settlement state, filesystem-state change, or both.
+The first handles the renamed/reorganized subtree; the second handles the remainder.
 
-If the selected/approved Resolution produces no filesystem change to the Current Portrait, the command is:
+### Destination-authoritative collision semantics
 
-    Accept
+Choosing the destination asserts that its existing organization is the right place. Work already completed there is authoritative. Berries does not rename destination files, invent filenames, or undo existing organization.
 
-Accept records the Resolution's settlement semantics. It performs no filesystem Action. The accepted duplicate relationships cease to generate future Cases even though the physical Portrait is unchanged.
+For each selected source FileInstance:
 
-If the Resolution changes the Current Portrait, the command is:
+1. Determine the exact computed destination directory from the source's relative directory path.
+2. If the same Content already exists **within that exact destination directory**, regardless of filename, the desired Content is already in the right place. Retain the existing destination name and reduce the source operation to Delete.
+3. Otherwise compute the destination path using the source filename.
+4. If that path is free, Move the source there.
+5. If that path contains identical Content, retain the destination and Delete the source.
+6. If that path contains different Content, flag the collision immediately, leave source and destination untouched, and continue with the rest of the requested Move.
 
-    Apply
+`Within` means directly in the computed destination directory, not somewhere beneath its descendant tree.
 
-Apply first validates the Disposition. Expected incompleteness while the user is editing is not itself an error, but Apply requires a complete and realizable Disposition.
+Unique destination files participate in collision detection even though unique files are not selectable resolution targets. The Initial/session model therefore retains enough filesystem knowledge to detect them.
 
-Validation includes destination/path collisions. A required destination may be absent or already contain identical Content, but two different Contents may not silently be assigned to the same destination path. Berries must not invent a filename, silently overwrite, or choose one Content over another.
+There is no separate Merge command. Move plus the destination-authoritative collision rules covers the duplicate-resolution behavior we need. General rename and general unique-file reorganization remain out of scope.
 
-If validation fails, no virtual change is made. Structured validation issues are returned to the Case panel with enough information to solicit only the additional Resolution data needed.
+## Undo and navigation history
 
-If validation succeeds, the ActionPlan is executed only against the virtual Current Portrait and any settlement consequences of the Resolution are recorded.
+Undo reverses portrait operations. It does not mean Back.
 
-The new Current Portrait reflects:
+Back/Forward reverse navigation/Pivot history. Exclude/Delete/Move belong to the operation history; Pivot and ordinary navigation belong to view history.
 
-    virtual deletions
-    moves/renames
-    copies
-    resulting DuplicateSet membership
-    resulting directory structure
+The exact grouping of a multi-instance command into one user-visible Undo step is a UI implementation detail, but the model must retain enough information to reconstruct the Working Portrait deterministically.
 
-The new unresolved decision state also reflects settlements established by the Resolution.
+## Derived analysis after portrait changes
 
-After Accept or Apply, derived Cases are regenerated from the resulting Portrait plus unresolved duplicate state. The same Case need not be retained as a persistent object; if its defining evidence has been settled or changed, it simply no longer regenerates in the same form.
+The Working Portrait changes immediately after Exclude/Delete/Move. Duplicate membership and higher-level evidence derived from it can therefore change.
 
-Undo/redo must therefore restore both the accepted virtual Action sequence and the corresponding settlement state.
+Correct incremental invalidation is desirable, but broad in-memory recomputation is acceptable initially if measured performance is adequate. Known Content need not be reread or rehashed merely because a virtual operation changed its location or membership.
 
-## Compile the ActionPlan
+Asynchronous recomputation should publish availability/results without forcing the user out of the current view. A suggestion can become stale and be recomputed; the Explorer itself remains the stable interaction surface.
 
-Once the Disposition is complete, compile it deterministically into primitive filesystem Actions.
+## Save / Resume
 
-For each required Content/destination:
+Persistence is conceptually straightforward but deliberately optional for the next implementation revision.
 
-    if an identical instance already exists at the required destination:
-        no copy is needed
-    otherwise:
-        create the required instance from a valid source
-        prefer move when it also satisfies source removal and is safe
-        otherwise copy
+A saved session should serialize one session object containing all state necessary to resume directly, including at least:
 
-For each Case instance explicitly excluded by the Disposition:
+    Initial Portrait
+    ordered portrait-operation history and/or directly reconstructible Working Portrait
+    selected Corpus roots and exclusion state
+    Content identities and analysis state worth retaining
+    useful Explorer/view state
 
-    remove it from the projected result
+JSON is preferred for inspectability and schema evolution. Session files should normally be compressed because Portrait data can be large.
 
-Do **not** interpret every Case member omitted from an unrelated subdecision as removable. Removal follows from the selected Disposition, whose semantic scope is determined by the Resolution.
+`Save Session...` and `Load Saved Session...` may be present but nonfunctional/disabled until actual use demonstrates that persistence is worth implementing. Avoid freezing a persistence schema while the runtime model is still evolving.
 
-The ActionPlan defines the logical filesystem transformation. Settlements are not Actions and are not compiled into it.
-
-Safety-dependent physical ordering, source protection, cross-filesystem behavior, and temporary storage belong to ExecutionPlan construction.
-
-Optimization of copy versus move, metadata preservation, and directory operations remain implementation details within these rules.
-
-No real filesystem modification occurs while compiling an ActionPlan.
-
-## Refresh after virtual Apply or settlement
-
-Derived analysis is recomputed from the new Current Portrait and unresolved duplicate state as described in `ANALYSIS.md`.
-
-Known virtual operations preserve Content identity:
-
-    delete
-        removes a known instance
-
-    move/rename
-        changes path only
-
-    copy
-        adds another instance of known Content
-
-Settlement removes accepted duplicate relationships from future structural evidence without changing File instances.
-
-Re-reading or rehashing real filesystem Content is unnecessary unless external filesystem change invalidates the session model.
-
-## Keep/drop scoring and user history
-
-Keep/drop scoring is heuristic presentation machinery, not authority.
-
-Scores may influence:
-
-    sorting duplicate instances
-    preferred survivor presentation
-    Case ordering
-    preselection
-
-Scores never directly produce filesystem Actions.
-
-Possible future persistent user information includes:
-
-    explicit directory/branch preferences
-    confirmed Situations
-    selected Resolutions/Dispositions
-    accepted/rejected mappings
-    accepted settlements
-    user-defined rules
-    previous choices in analogous Cases
-
-Such information may later influence Situation ordering, Resolution ordering, Case ordering, keep/drop scoring, and preselection. None is required for the initial implementation.
+There is no saved-session reconciliation workflow. To obtain a fresh filesystem view, the user starts a New Session by selecting roots and scanning.
 
 ## Execute
 
-Execute means the user accepts the projected filesystem represented by the Current Portrait and requests real filesystem modification.
+Execute is application-level and deliberately separated from ordinary Explorer operations.
 
-Before modifying disk:
+### Pre-execution summary
 
-    perform a lightweight preflight for known relevant changes, missing sources,
-    and destination conflicts
+Before modifying disk, show an execution summary describing the intended work and ask for explicit approval. Include at least:
 
-    compute a synopsis of planned changes
+    planned moves/copies/deletions
+    Content that will have no surviving instance in the final working Corpus
+    other useful aggregate consequences
 
-    identify irrecoverable Content loss:
-        Content present in the Initial Portrait for which the final projected
-        Portrait contains zero surviving instances
+This is the appropriate place to call attention to Content loss. Ordinary Delete editing does not raise a last-copy warning.
 
-    highlight irrecoverable loss distinctly from harmless deletion of redundant
-    instances
+### Execution practice
 
-    require final user approval
+After approval, assume the Action Plan is valid and attempt it. Do not globally validate/rescan/reconcile the filesystem first. Such a pass cannot guarantee later atomic operations will succeed and introduces an unnecessary time-of-check/time-of-use race.
 
-Then derive and execute an ExecutionPlan from the accumulated ActionPlans.
+Filesystem operations can fail. Handle failures locally and preserve dependency safety:
 
-The ExecutionPlan may reorder or expand logical Actions when doing so preserves the same final Portrait and increases safety.
+    independent operations continue where safe;
+    a failed prerequisite suppresses dependent destructive work;
+    a cross-device Move may be implemented as Copy followed by Delete;
+    if that Copy fails, the source Delete must not occur;
+    if an ordinary Move fails, leave the source intact;
+    record failures/exceptions for the post-execution report.
 
-Execution safety invariant:
+Move collisions known from the Working Portrait are handled when Move is requested. New conflicts or changes that arise later are ordinary execution failures.
 
-    Before any operation that could destroy or invalidate a required source,
-    a verified usable instance of that Content must already exist at a secured
-    final destination or in the execution cache.
+### Post-execution summary
 
-Duplicate identity alone is not authority to delete. Files in application-managed, repository-managed, generated, cached, deployed, or otherwise structurally significant locations may require stronger validation or explicit authorization even when identical Content exists elsewhere.
+After execution, report what actually happened:
 
-Use the execution cache only when useful. Straightforward redundant-instance deletion need not incur cache I/O when a retained source can be validated immediately before deletion and the instance is otherwise authorized for removal.
+    successful operations
+    failures and exceptions
+    skipped dependent operations
+    conflicts/discrepancies encountered during execution
 
-For relocation, multiple destinations, pathname dependencies, or other fragile source relationships:
-
-    choose a valid source instance
-
-    if the source is expendable and the cache is on the same filesystem,
-    move it into the cache; otherwise copy it
-
-    verify cached Content before relying on it
-
-    use the cached instance for required placements
-
-    treat cross-filesystem moves as copy followed by later source removal
-
-    delay destructive removals until required destinations are secured
-
-    delete the cache after successful execution
-
-    retain the cache after failure when recovery or diagnosis still requires it
-
-Validate sources as they are staged or relied upon and validate destinations before placing Content. Immediately before destructive removal, establish that required surviving Content is secured.
-
-Record completed physical operations durably enough to diagnose partial execution or failure.
-
-Execution summary should report:
-
-    completed operations
-    exceptions
-    conflicts
-    failures
-    discrepancies between projected and actual filesystem state
+Do not repeat Content-loss warnings as warnings here; those were part of the approved pre-execution plan. The post-execution report is factual.
 
 ## Filesystem abstraction requirements
 
-Core must not depend on Windows path syntax, drive letters, NTFS file IDs, alternate data streams, ACLs, reparse points, case-insensitive path behavior, or other filesystem-specific assumptions.
+Core must remain independent of Windows path syntax, drive letters, NTFS IDs, ACLs, reparse points, case-insensitive behavior, and other platform assumptions.
 
-The abstraction may grow richer semantics when justified, including:
+The abstraction should provide the least capabilities required by the model: hierarchy/navigation, metadata needed for discovery, readable ordinary Content, and safe create/copy/move/delete operations.
 
-    path identity/comparison
-    parent-directory traversal
-    directory enumeration
-    file size and required timestamps
-    Content reading
-    create/copy/move/delete
-    directory create/remove
-    metadata preservation policy
-    symbolic links / reparse points / filesystem links
-    hard links
-    path conflicts
-    case sensitivity
-    cross-filesystem moves
-    atomicity guarantees
+Symbolic/special objects remain outside the initial ordinary-file model. Hard links need no special treatment initially if the adapter exposes their directory entries as ordinary instances. Duplicate identity is based on ordinary byte Content, not ACLs, alternate streams, ownership, or other metadata.
 
-The initial contract assumes only the least common capabilities needed by the application:
+## Deliberately deferred
 
-    hierarchical directories
-    named regular File instances
-    file length
-    readable ordinary file Content as a byte stream
-    basic create/copy/move/delete operations
+The following are not required before the next Explorer implementation:
 
-Content identity is defined solely by the bytes returned by the ordinary file Content stream. Filesystem-specific metadata is not part of duplicate identity in the initial implementation.
+    Save/Load implementation
+    general unique-file maintenance
+    rename as a user operation
+    sophisticated Situation inference
+    persistent learned rules
+    exhaustive BranchPair generation
+    aggressive incremental/background recomputation optimization
+    exact final toolbar styling and projection-specific visual polish
 
-Symbolic links, reparse points, filesystem aliases, and similar symbolic objects are outside the initial model. Directory traversal must not follow them; adapters ignore them rather than exposing them to Core as ordinary Files or directories.
-
-Hard links receive no special treatment initially. If the adapter enumerates multiple directory entries as ordinary Files, Core may model them as separate instances with identical Content.
-
-Sparse Files are treated according to their logical byte streams. Alternate data streams, resource forks, extended attributes, ACLs, ownership, and similar metadata are ignored for duplicate identity.
-
-The filesystem adapter decides what Core can safely regard as a regular File or directory. Core should not grow a taxonomy of every platform's exotic filesystem objects.
-
-## Deferred refinements
-
-Deliberately deferred until experience demonstrates value:
-
-    heuristic Situation inference/ranking beyond current empirical work
-    sophisticated persistent user learning
-    general-purpose filesystem reorganization beyond duplicate-motivated Resolutions
-    aggressive incremental recomputation optimization
-    formal/mathematically complete Situation or Resolution enumeration
-    generic recognition of application-managed / non-destructive regions
-
-The architecture should permit these additions without requiring them now.
+The architecture should leave room for these without implementing them prematurely.
