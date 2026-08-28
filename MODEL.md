@@ -4,240 +4,247 @@ This document defines the architectural vocabulary and semantic invariants used 
 
 ## Core terminology
 
+### Filesystem
+
+The physical universe from which Berries observes and eventually modifies files. The filesystem is larger than the Corpus: objects outside selected roots, and objects excluded from Berries, remain ordinary filesystem objects without belonging to the working Corpus.
+
 ### Corpus
 
-The set of disjoint filesystem trees selected for analysis.
+The logical set of filesystem material the user intends Berries to work with.
+
+A new Corpus begins with one or more selected filesystem roots. Roots are normalized so no retained root is a descendant of another retained root. Exclusion subtracts material from the Corpus.
+
+The Corpus is not a synonym for the filesystem and need not contain every object beneath a physical volume or filesystem hierarchy.
 
 ### Corpus root
 
-A filesystem directory selected to contribute its tree to the Corpus. Selected roots are normalized so no retained root is a descendant of another retained root.
+A filesystem directory selected to contribute its tree to the Corpus.
 
-### File
+### FileInstance
 
-One filesystem instance of Content at a particular path. A File is an instance, not the byte content itself.
+One filesystem instance of Content at a particular path. A FileInstance is an instance/location, not the byte content itself.
 
 ### Content
 
-The byte sequence contained by a File. Content identity is established sufficiently for the program's purposes by duplicate detection.
+The byte sequence contained by a FileInstance. Content identity is established sufficiently for Berries by duplicate detection; the current implementation uses SHA-256 after size grouping.
 
 ### Initial Portrait
 
-The modeled state of the Corpus when it was scanned. It records the real filesystem state from which the user begins constructing projected Portraits and provides the known source state used by execution validation.
+The modeled state observed when a new session scans its selected roots. It is the fixed starting point from which the Working Portrait can always be reconstructed.
 
-### Portrait
+Configuration exclusions are semantically initial Exclude operations even if the implementation optimizes them by filtering during acquisition.
 
-A modeled filesystem state. The Initial Portrait is obtained from disk. Subsequent Portraits are derived by applying virtual Actions to the preceding Portrait.
+### Working Portrait
 
-### Current Portrait
+The modeled state of the user's desired Corpus during the session.
 
-The Portrait produced by the currently accepted sequence of virtual Actions. It represents the filesystem state the user is presently designing.
+It is deterministically obtained by applying the ordered sequence of portrait operations to the Initial Portrait. The principal portrait-changing operations are:
+
+    Exclude
+    Delete
+    Move
+
+The Working Portrait is not required to match the current physical filesystem before Execute. Until Execute, it is a virtual design.
+
+### Portrait operation
+
+An undoable operation that transforms the Working Portrait.
+
+Portrait operations and filesystem Actions are related but distinct:
+
+    Exclude
+        removes selected FileInstances from the working Corpus;
+        produces no filesystem Action
+
+    Delete
+        removes selected FileInstances from the Working Portrait;
+        produces filesystem deletion Actions
+
+    Move
+        relocates selected duplicate FileInstances in the Working Portrait;
+        produces the filesystem Actions necessary to realize that relocation
+
+The ordered portrait-operation history is sufficient to reconstruct the Working Portrait from the Initial Portrait.
+
+### Exclude
+
+Remove selected FileInstances from the working Corpus without changing the filesystem.
+
+An excluded instance:
+
+    is absent from the Working Portrait;
+    does not participate in duplicate analysis, projections, Cases, or suggestions;
+    is not selectable, including through Invert Selection;
+    produces no filesystem Action;
+    remains physically present on disk;
+    can be restored by Undo.
+
+Exclusion is portrait state, not an assertion that duplication is acceptable. It replaces the earlier settlement/acceptance concept.
 
 ### Duplicate
 
-A File whose Content is identical to at least one other File in the same Portrait.
+A FileInstance whose Content is identical to at least one other FileInstance in the same Working Portrait.
 
 ### DuplicateSet
 
-All File instances in a Portrait having one identical Content identity, when at least two such instances exist. One DuplicateSet therefore represents exactly one distinct duplicated Content.
-
-A DuplicateSet is a physical fact about the Portrait. Accepting some or all relationships represented by a DuplicateSet does not change the DuplicateSet itself.
-
-### Duplicate settlement
-
-A record that one or more objectively duplicated File relationships no longer require a user decision because a Resolution has established that those relationships are acceptable.
-
-Settlement is decision state, not filesystem state. It therefore does not alter the Portrait and is not a filesystem Action.
-
-Settlements can apply at two useful granularities:
-
-    whole Content / DuplicateSet
-        all duplicate relationships represented by the Content are accepted
-
-    pairwise
-        one specific pair of equal-Content File instances is accepted while
-        other relationships involving the same Content remain unresolved
-
-Downstream Case-generating analysis operates on unresolved duplicate relationships: physical duplicate relationships minus settlements.
+All FileInstances in the Working Portrait having one identical Content identity, when at least two such instances exist. One DuplicateSet represents exactly one distinct duplicated Content.
 
 ### Directory
 
-For duplicate-analysis statistics, a Directory record describes Files directly contained by that directory only. Descendants are not folded into local counts. The filesystem directory/tree itself may of course contain descendants.
+For duplicate-analysis statistics, a Directory record describes Files directly contained by that directory only. Descendants are not folded into local counts.
 
 ### DirectoryPair
 
-An unordered pair of distinct directories having one or more distinct unresolved duplicated Contents directly represented in both directories. DirectoryPair describes local/direct shared Content only.
+An unordered pair of distinct directories having one or more distinct duplicated Contents directly represented in both directories. DirectoryPair is useful derived evidence and a useful narrow projection, but need not be a separately generated first-class Case type.
 
 ### Branch
 
-A directory together with all of its descendants. `Branch` is the formal tree-structural term; `scope` remains available in ordinary discussion for any chosen analytical context or bounded region.
+A directory together with all descendants. `Branch` is the formal tree-structural term; `scope` remains useful in ordinary discussion for any chosen bounded region.
 
 ### BranchPair
 
-An unordered pair of distinct directory-rooted Branches for which descendant DirectoryPairs provide shared-content evidence. A BranchPair can exist even when its two root directories have no directly shared Files.
+A pair of directory-rooted Branches whose descendants exhibit duplicate-content relationships. BranchPair is the principal container-centric Case/focus.
 
-The two effective sides of a BranchPair are always disjoint. If one root is a descendant of the other, the descendant subtree is omitted from the ancestor side and becomes the other effective side. Canonical pair ordering has no semantic relationship to ancestry. Identical roots are invalid.
-
-A nested BranchPair is best understood as a **cut through a containing tree**. Moving the descendant root moves the cut: material formerly on the descendant side can move to the ancestor side. Consequently, moving a root downward can increase or decrease leverage even though no duplicate relationship in the Portrait has changed.
-
-### Bounded
-
-Having membership determined unambiguously by specified criteria.
+Comprehensive BranchPair enumeration is no longer required by the design. Promising BranchPairs can be discovered by selecting promising Branch seeds and searching for strong counterparts.
 
 ### Case
 
-A bounded set of Files in the Current Portrait, containing at least one unresolved duplicate relationship, considered together for one coherent Disposition.
+An objectively derived unresolved duplication question or promising focus in the Working Portrait.
 
-A Case is objective and program-discovered from the Current Portrait plus the current duplicate-settlement state. A Situation is not required to discover a Case.
+Cases are suggestions for attention, not persistent workflow objects and not a mandatory queue. Berries should identify something likely to reward attention; the user remains free to navigate and Pivot elsewhere.
 
-A structural Case may include unique Files because those Files can matter to the eventual Disposition. The Case boundary limits Disposition authority: evidence outside the Case may provide context, but external Files remain unchanged unless independently brought under Disposition authority.
+The three useful duplication viewpoints currently recognized are:
 
-Most importantly, **a Case need not resolve all duplication within its bounds; it should resolve the duplication that caused that Case to exist.** Internal or otherwise unrelated duplication can remain for other Cases.
+    Content / DuplicateSet
+        Why is this Content duplicated in these locations?
 
-The defining unresolved duplication pattern is therefore part of the Case's meaning, even when the Case bounds contain additional Files.
+    same-directory
+        Why are multiple instances of this Content present in one directory?
 
-A useful analytical bias follows: settle duplication at the lowest structural level that supports a coherent semantic question. If a DuplicateSet can be naturally resolved on its own, promoting its evidence into DirectoryPair or BranchPair Cases can create weaker and less coherent questions.
+    BranchPair / container-centric
+        Why is so much duplicated Content represented between these branches?
 
-Contextual question:
-
-    Case
-        What Files are under consideration, and what unresolved objective
-        duplication relationship caused them to be considered together?
+DirectoryPair can be treated as a narrow/degenerate BranchPair projection.
 
 ### Situation
 
-The asserted semantic context of a Case: what is going on that explains the Case's defining duplication pattern.
+Optional semantic context explaining a Case. Situation remains useful vocabulary and research material, but the Explorer and resolution operations do not require the user to classify a Situation before acting.
 
-A Situation is semantic input, not an objective filesystem fact and not a prerequisite for Case discovery. Berries may constrain or rank the Situations it offers using objective Case evidence, but once the user identifies a Situation, that Situation is the operative context for proposing Resolutions unless objective contradictions emerge.
+### Projection
 
-The possibility that a Situation assertion could be mistaken does not create a competing programmatic interpretation. Berries does not offer unrelated Resolutions merely because some other semantic explanation is conceivable.
+A way of organizing the duplicate FileInstances of the Working Portrait for exploration and resolution.
 
-Contextual question:
+Initial projections are:
 
-    Situation
-        What is going on here?
+    Content
+        one pane; Content nodes with full-path FileInstance leaves
 
-A useful Situation evokes one or more potentially appropriate Resolutions that can be mapped to fully parameterized Dispositions.
+    DirectoryPair
+        two equivalent panes rooted at two exact directories
 
-### Resolution
+    BranchPair
+        two equivalent panes rooted at two branches
 
-A Situation-aware, user-facing description of a proposed outcome.
+Projection changes presentation, not resolution semantics.
 
-A Resolution exists to express an operational outcome naturally in the language of the selected Situation. Different Resolutions, including Resolutions belonging to different Situations, may produce the same Disposition.
+### Pivot
 
-A Resolution is applicable only when it addresses the duplication pattern that defines the Case. It may address additional relevant Files within Case authority, but it cannot leave the defining question semantically unanswered while claiming to resolve the Case.
+A navigation operation that changes projection and/or focus without changing the Working Portrait.
 
-A Resolution can have two distinct consequences:
+Pivot belongs with navigation, not Undoable portrait operations. Back/Forward navigation is the natural inverse mechanism for navigation history.
 
-    settlement
-        duplicate relationships are established as acceptable and cease to
-        generate future decision work
+### Selection
 
-    Disposition
-        desired filesystem-state consequences, possibly none
+A set of duplicate FileInstances in the current Working Portrait.
 
-Thus a Resolution can substantially reduce remaining decision work even when its Disposition leaves the Portrait unchanged.
+This is the common operational abstraction across projections. Selecting a leaf selects one FileInstance. Selecting a higher tree node is shorthand for selecting the applicable duplicate FileInstances represented beneath that node.
 
-Contextual question:
+Directories are not themselves filesystem-operation targets in the current design. Higher-level nodes define resolution scope.
 
-    Resolution
-        Given this Situation, what is a natural useful outcome for the
-        duplication that produced this Case?
+### Invert Selection
 
-### Disposition
+A selection operation, not a portrait operation. For every Content represented in the current selection, select the other currently selectable instances of that Content and deselect the selected ones.
 
-The precise desired placement and retention of Files within a Case.
+Excluded instances are absent from the Working Portrait and therefore never participate in inversion.
 
-A Disposition is the operational filesystem-state meaning of an accepted Resolution. It defines the desired surviving arrangement, including approved directory mappings and destinations where applicable. It is a desired state, not a sequence of filesystem operations.
+### Resolution operation
 
-Case membership defines the maximum authority of the Disposition; it does not imply that every File within the Case must be changed. Files and internal duplication unrelated to the selected Resolution can remain untouched.
+A positive operation applied to selected duplicate FileInstances. The current set is deliberately small:
 
-A Resolution whose entire outcome is acceptance can therefore have a no-change Disposition while still producing substantial settlement.
+    Exclude
+    Delete
+    Move left-to-right / right-to-left
 
-Contextual question:
+There is no Keep operation. Survival is simply the absence of a destructive operation.
 
-    Disposition
-        What filesystem-state outcome does the user want?
-        Which Content instances/locations should remain or appear, and where?
+There is no Accept/Settle operation. If duplication should no longer participate in Berries, Exclude expresses that directly by removing the relevant instances from the working Corpus.
 
-### Directory mapping
+There is no Apply step. Resolution operations immediately update the Working Portrait and operation history. Undo provides local reversibility; Execute is the separate filesystem commitment boundary.
 
-A user-approved relationship between a source directory and a destination directory within a structural Disposition.
+### Move
 
-Example:
+A duplicate-motivated relocation from a selected source scope to a selected destination scope.
 
-    OldPhotos\Family -> Photos\Family
-    OldPhotos\Trips  -> Photos\Travel
+For each selected source FileInstance, preserve its relative path beneath the selected source scope when mapping it beneath the destination scope. Directory correspondence is explicitly established by the scopes the user selects; Berries does not infer that one differently named source directory maps to another differently named destination directory merely because their files duplicate each other.
 
-Mappings can be suggested from observed DirectoryPair relationships and edited piecemeal by the user.
+For each source instance, let the computed destination directory be the exact directory obtained by applying the relative source directory path beneath the destination scope:
+
+1. If identical Content already exists **within that exact destination directory**, regardless of filename, the destination is authoritative and the source becomes a deletion. Existing destination naming is preserved.
+2. Otherwise, if the computed destination filename is free, move the source there.
+3. Otherwise, if that filename is occupied by identical Content, retain the destination instance and delete the source.
+4. Otherwise, the filename is occupied by different Content: flag the collision immediately, leave both files untouched, and continue the rest of the Move.
+
+The collision check includes unique destination files even though unique files are not resolution candidates. Berries retains enough knowledge of the scanned filesystem to detect such constraints.
+
+Move never invents a filename and never overwrites different Content. Rename is outside the current problem scope.
 
 ### Action
 
-A primitive filesystem operation used to implement an ActionPlan. Tentative primitive operations are delete, copy, and move/rename. Directory creation/removal and metadata handling may be explicit Actions or well-defined helpers.
+A primitive physical filesystem operation used to realize portrait operations at Execute time. Typical primitives are copy, move/rename, delete, and required directory creation/removal helpers.
 
-### ActionPlan
+### Action Plan
 
-A deterministic logical transformation, expressed in primitive filesystem Actions, that implements a fully specified Disposition. Its ordering is sufficient to define and apply the virtual transformation, but need not be the literal order used for real filesystem execution.
+The filesystem work implied by the current ordered portrait operations. It is derivative of the desired Working Portrait; it is not the definition of that Portrait.
 
-Settlements are not Actions and are not included in the physical ActionPlan. The composite filesystem ActionPlan must still transform the real Initial Portrait into the final desired filesystem state.
+Exclude produces no filesystem Action. Delete and Move do.
 
-### Disposition validation
+### Execute
 
-Validation of a proposed Disposition before it is applied to the virtual Portrait. Validation detects collisions, ambiguities, missing parameters, and other conditions preventing the desired state from being realized unambiguously. It reports structured issues; it does not invent a solution.
+The explicit commitment boundary at which Berries attempts to realize the approved Action Plan against the physical filesystem.
 
-### ExecutionPlan
+Berries assumes the Action Plan was valid when constructed. It does not globally rescan or reconcile the filesystem immediately before execution. Any atomic filesystem operation can fail; failures are handled as execution outcomes.
 
-A safe physical realization of accumulated ActionPlans against the real filesystem. It may reorder or expand logical Actions when the final result is equivalent and safety improves.
+Dependent destructive operations are conditional on prerequisite success. In particular, a cross-device move implemented as copy followed by delete must omit the delete if the copy fails.
 
-### Execution cache
+Independent operations continue when safe after another operation fails.
 
-Temporary verified storage used by the ExecutionPlan to secure required Content before an operation could destroy or invalidate a source needed later. The cache is execution machinery, not part of the Portrait or Disposition.
+### Execution reports
 
-### Leverage
+Before Execute, Berries presents a summary of the intended physical work and asks for confirmation. This pre-execution report includes Content that will have no surviving instance in the final working Corpus.
 
-Leverage is an objective estimate of the reach of a Case's defining duplicate evidence. It is one candidate prioritization characteristic, not the program objective and not an invariant requiring unnecessary computational precision.
+Berries does not raise an earlier warning merely because a Delete operation removes all remaining instances of a Content.
 
-By Case type:
+After execution, Berries presents what actually happened: completed operations, failures, skipped dependent operations, exceptions, and other execution discrepancies. Content-loss warnings are not repeated as warnings after execution; by then they are historical consequences of the approved plan.
 
-    DuplicateSet Case
-        leverage = 1
+### Save / saved session
 
-    Single-directory Case
-        leverage = distinct unresolved Contents represented more than once
-                   directly in that directory
+A saved session, if implemented, persists enough state to load the session directly rather than rescanning/reconciling the filesystem. Conceptually this is one serializable session object containing the Initial Portrait, portrait-operation history/Working Portrait state, and useful application state.
 
-    DirectoryPair Case
-        leverage = distinct unresolved duplicated Contents represented directly
-                   in both directories
+The intended representation is JSON, normally compressed because Portraits can be large. Save/Load may remain unimplemented until experience demonstrates that persistence is useful.
 
-    BranchPair Case
-        current experimental leverage = weighted cut size: the sum of
-                   DirectoryPair leverage crossing the effective-side cut
+Loading a saved session restores that session as-is. Starting fresh means selecting roots and scanning a New Session; there is no required rescan/reconcile workflow for an old session.
 
-The BranchPair measure intentionally allows one Content to contribute through several DirectoryPairs. Earlier code counted each crossing Content exactly once. Real-corpus testing showed that the two measures can produce materially different Case orderings; neither ordering has yet been established as generally preferable.
+## Governing invariants
 
-The actual presentation objective is reduction of user decision work. Leverage, structural weight, specificity, settlement impact, and other objective characteristics are evidence toward that objective.
-
-### Deletion safety
-
-Duplicate identity alone does not imply that an instance is safe to remove. A File can occupy a required location in an application-managed, repository-managed, generated, cached, deployed, or otherwise externally maintained structure even when identical Content exists elsewhere.
-
-Such structures can still provide valuable evidence for understanding relationships among branches. The future safety model may therefore distinguish analytical visibility from destructive authority: Berries can observe duplicates in a region without automatically treating individual Files there as deletion candidates.
-
-### Hidden
-
-A Case presentation state indicating that the user has dismissed the Case without requiring an ActionPlan. Hidden Cases are omitted from the working list unless requested. Hidden does not alter the Portrait or affect inclusion of the same Files in other Cases.
-
-## Semantic chain
-
-The central decision chain is:
-
-    unresolved objective duplication pattern
-        -> Case
-        -> Situation
-        -> Resolution
-        -> settlement and/or Disposition
-        -> ActionPlan for any filesystem changes
-
-ExecutionPlan is the safe physical realization of accumulated ActionPlans and sits outside the semantic decision chain.
-
-The chain is intentionally compositional. Resolving one Case need not eliminate every duplicate inside its bounds. A Resolution can reduce the remaining problem by changing the Portrait, by adding settlements, or both. Derived Cases are then regenerated from the resulting Portrait plus unresolved duplicate state.
+1. The Corpus is the logical material the user intends Berries to work with; it is not the filesystem.
+2. The Initial Portrait is the fixed scanned starting state for a session.
+3. The Working Portrait always represents the user's desired Corpus and is reconstructible from the Initial Portrait plus an ordered sequence of portrait operations.
+4. Selection always denotes duplicate FileInstances, even when the user selects higher structural nodes.
+5. Exclude changes the Corpus/Portrait only; it never changes the filesystem.
+6. Delete and Move change the Working Portrait immediately and contribute physical work to Execute.
+7. There is no Keep, Accept, Settle, or Apply semantic layer in the current design.
+8. Pivot/navigation changes presentation only.
+9. Unique files can remain known to the model even though duplicate resolution operations do not target them.
+10. No real filesystem change occurs before Execute.
+11. Execute attempts the approved plan and handles encountered failures rather than requiring a global filesystem revalidation pass.
+12. Core remains independent of UI and platform-specific filesystem behavior.
