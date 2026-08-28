@@ -1,4 +1,4 @@
-<Window xmlns="https://github.com/avaloniaui"
+<Window xmlns="https://github.com/avaloniauI"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Berries.Gui.MainWindow"
         Title="Berries"
@@ -37,35 +37,33 @@
 
       <Grid x:Name="ExplorerPanel" IsVisible="False" RowDefinitions="Auto,*">
         <Border Padding="10,8" BorderThickness="0,0,0,1">
-          <Grid ColumnDefinitions="Auto,Auto,Auto,20,Auto,Auto,Auto,20,Auto,*" ColumnSpacing="7">
-            <Button Content="Back" IsEnabled="False" />
-            <Button Grid.Column="1" Content="Forward" IsEnabled="False" />
-            <Button x:Name="PivotButton" Grid.Column="2" Content="Pivot" Click="PivotButton_Click">
-              <Button.Flyout>
-                <MenuFlyout>
-                  <MenuItem x:Name="PivotContentMenu" Header="Content" Click="PivotContentOrAll_Click" IsEnabled="False" />
-                  <MenuItem x:Name="PivotDirectoryMenu" Header="Containing Directory" Click="PivotDirectory_Click" IsEnabled="False" />
-                  <MenuItem x:Name="PivotBranchMenu" Header="Branch" Click="PivotBranch_Click" IsEnabled="False" />
-                  <MenuItem x:Name="PivotBestDirectoryPairMenu" Header="Best Directory Pair" Click="PivotBestDirectoryPair_Click" IsEnabled="False" />
-                  <MenuItem x:Name="PivotBestBranchPairMenu" Header="Best Branch Pair" Click="PivotBestBranchPair_Click" IsEnabled="False" />
-                  <MenuItem x:Name="PivotBranchPairMenu" Header="Current Suggested Branch Pair" Click="PivotBranchPair_Click" IsEnabled="False" />
-                </MenuFlyout>
-              </Button.Flyout>
-            </Button>
+          <Grid ColumnDefinitions="Auto,20,Auto,Auto,Auto,20,Auto,*" ColumnSpacing="7">
+            <StackPanel Orientation="Horizontal" Spacing="7">
+              <Button x:Name="BackButton" Content="Back" Click="BackButton_Click" IsEnabled="False" />
+              <Button x:Name="PivotButton" Content="Pivot ▾" Click="PivotButton_Click">
+                <Button.Flyout>
+                  <MenuFlyout>
+                    <MenuItem x:Name="PivotContentMenu" Header="Group" Click="PivotContentOrAll_Click" IsEnabled="False" />
+                    <MenuItem x:Name="PivotDirectoryMenu" Header="Containing Directory" Click="PivotDirectory_Click" IsEnabled="False" />
+                    <MenuItem x:Name="PivotBranchMenu" Header="Branch" Click="PivotBranch_Click" IsEnabled="False" />
+                    <MenuItem x:Name="PivotBestDirectoryPairMenu" Header="Best Directory Pair" Click="PivotBestDirectoryPair_Click" IsEnabled="False" />
+                    <MenuItem x:Name="PivotBestBranchPairMenu" Header="Best Branch Pair" Click="PivotBestBranchPair_Click" IsEnabled="False" />
+                    <MenuItem x:Name="PivotBranchPairMenu" Header="Current Suggested Branch Pair" Click="PivotBranchPair_Click" IsEnabled="False" />
+                  </MenuFlyout>
+                </Button.Flyout>
+              </Button>
+              <Button x:Name="ForwardButton" Content="Forward" Click="ForwardButton_Click" IsEnabled="False" />
+              <Button x:Name="SuggestCaseButton" Content="Suggest" Click="SuggestCaseButton_Click" IsEnabled="False" />
+            </StackPanel>
 
-            <Button x:Name="InvertButton" Grid.Column="4" Content="Invert Selection" Click="InvertButton_Click" IsEnabled="False" />
-            <Button x:Name="ExcludeButton" Grid.Column="5" Content="Exclude" Click="ExcludeButton_Click" IsEnabled="False" />
-            <Button x:Name="DeleteButton" Grid.Column="6" Content="Delete" Click="DeleteButton_Click" IsEnabled="False" />
+            <Button x:Name="InvertButton" Grid.Column="2" Content="Invert Selection" Click="InvertButton_Click" IsEnabled="False" />
+            <Button x:Name="ExcludeButton" Grid.Column="3" Content="Exclude" Click="ExcludeButton_Click" IsEnabled="False" />
+            <Button x:Name="DeleteButton" Grid.Column="4" Content="Delete" Click="DeleteButton_Click" IsEnabled="False" />
 
-            <StackPanel Grid.Column="8" Orientation="Horizontal" Spacing="7">
+            <StackPanel Grid.Column="6" Orientation="Horizontal" Spacing="7">
               <Button x:Name="MoveRightButton" Content="Move →" Click="MoveRightButton_Click" IsEnabled="False" />
               <Button x:Name="MoveLeftButton" Content="← Move" Click="MoveLeftButton_Click" IsEnabled="False" />
               <Button x:Name="UndoButton" Content="Undo" Click="UndoButton_Click" IsEnabled="False" />
-            </StackPanel>
-
-            <StackPanel Grid.Column="9" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="7">
-              <Button x:Name="PreviousCaseButton" Content="Previous Case" Click="PreviousCaseButton_Click" />
-              <Button x:Name="SuggestCaseButton" Content="Suggest Case" Click="SuggestCaseButton_Click" IsEnabled="False" />
             </StackPanel>
           </Grid>
         </Border>
