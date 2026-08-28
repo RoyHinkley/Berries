@@ -8,24 +8,24 @@ internal sealed class BerriesConfig
     private readonly Regex[] componentPatterns;
     private readonly Regex[] pathPatterns;
 
-    private BerriesConfig(string path, IReadOnlyList<string> ignorePatterns)
+    private BerriesConfig(string path, IReadOnlyList<string> excludePatterns)
     {
         Path = path;
-        IgnorePatterns = ignorePatterns;
+        ExcludePatterns = excludePatterns;
 
-        componentPatterns = ignorePatterns
+        componentPatterns = excludePatterns
             .Where(pattern => !ContainsSeparator(pattern))
             .Select(pattern => CompileGlob(pattern, matchPath: false))
             .ToArray();
 
-        pathPatterns = ignorePatterns
+        pathPatterns = excludePatterns
             .Where(ContainsSeparator)
             .Select(pattern => CompileGlob(pattern, matchPath: true))
             .ToArray();
     }
 
     public string Path { get; }
-    public IReadOnlyList<string> IgnorePatterns { get; }
+    public IReadOnlyList<string> ExcludePatterns { get; }
 
     public static BerriesConfig Load(string path)
     {
@@ -33,7 +33,7 @@ internal sealed class BerriesConfig
             return new BerriesConfig(path, Array.Empty<string>());
 
         var patterns = new List<string>();
-        var inIgnoreSection = false;
+        var inExcludeSection = false;
 
         foreach (var sourceLine in File.ReadLines(path))
         {
@@ -43,41 +43,30 @@ internal sealed class BerriesConfig
 
             if (line.StartsWith('[') && line.EndsWith(']'))
             {
-                inIgnoreSection = line[1..^1].Trim()
-                    .Equals("ignore", StringComparison.OrdinalIgnoreCase);
+                inExcludeSection = line[1..^1].Trim()
+                    .Equals("exclude", StringComparison.OrdinalIgnoreCase);
                 continue;
             }
 
-            if (!inIgnoreSection)
-                continue;
-
-            patterns.Add(line);
+            if (inExcludeSection)
+                patterns.Add(line);
         }
 
         return new BerriesConfig(path, patterns);
     }
 
-    public bool IsIgnored(FileSystemPath path)
+    public bool IsExcluded(FileSystemPath path)
     {
-        if (IgnorePatterns.Count == 0)
+        if (ExcludePatterns.Count == 0)
             return false;
 
         var normalized = path.Value.Replace('\\', '/');
         var components = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
-        foreach (var pattern in componentPatterns)
-        {
-            if (components.Any(component => pattern.IsMatch(component)))
-                return true;
-        }
+        if (componentPatterns.Any(pattern => components.Any(pattern.IsMatch)))
+            return true;
 
-        foreach (var pattern in pathPatterns)
-        {
-            if (pattern.IsMatch(normalized))
-                return true;
-        }
-
-        return false;
+        return pathPatterns.Any(pattern => pattern.IsMatch(normalized));
     }
 
     private static bool ContainsSeparator(string pattern) =>

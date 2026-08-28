@@ -16,6 +16,12 @@ public sealed class WindowsFileSystem : IFileSystem
             : new FileSystemPath(Path.TrimEndingDirectorySeparator(parent.FullName));
     }
 
+    public FileSystemPath GetRelativePath(FileSystemPath relativeTo, FileSystemPath path) =>
+        new(Path.GetRelativePath(NormalizePath(relativeTo).Value, NormalizePath(path).Value));
+
+    public FileSystemPath Combine(FileSystemPath directory, FileSystemPath relativePath) =>
+        NormalizePath(new FileSystemPath(Path.Combine(directory.Value, relativePath.Value)));
+
     public IEnumerable<FileSystemFile> EnumerateFiles(FileSystemPath root)
     {
         var options = new EnumerationOptions
@@ -45,12 +51,20 @@ public sealed class WindowsFileSystem : IFileSystem
         FileAccess.Read,
         FileShare.ReadWrite | FileShare.Delete);
 
-    public bool Exists(FileSystemPath path) => throw new NotImplementedException();
-    public void CreateDirectory(FileSystemPath path) => throw new NotImplementedException();
-    public void CopyFile(FileSystemPath source, FileSystemPath destination) => throw new NotImplementedException();
-    public void MoveFile(FileSystemPath source, FileSystemPath destination) => throw new NotImplementedException();
-    public void DeleteFile(FileSystemPath path) => throw new NotImplementedException();
-    public void RemoveDirectory(FileSystemPath path) => throw new NotImplementedException();
+    public bool Exists(FileSystemPath path) => File.Exists(path.Value) || Directory.Exists(path.Value);
+
+    public void CreateDirectory(FileSystemPath path) => Directory.CreateDirectory(path.Value);
+
+    public void CopyFile(FileSystemPath source, FileSystemPath destination) =>
+        File.Copy(source.Value, destination.Value, overwrite: false);
+
+    public void MoveFile(FileSystemPath source, FileSystemPath destination) =>
+        File.Move(source.Value, destination.Value, overwrite: false);
+
+    public void DeleteFile(FileSystemPath path) => File.Delete(path.Value);
+
+    public void RemoveDirectory(FileSystemPath path) => Directory.Delete(path.Value, recursive: false);
+
     public bool PathsEqual(FileSystemPath left, FileSystemPath right) =>
         StringComparer.OrdinalIgnoreCase.Equals(
             NormalizePath(left).Value,

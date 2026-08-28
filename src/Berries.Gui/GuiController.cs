@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Berries.Core;
 using Berries.Core.Analysis;
-using Berries.Core.Cases;
 using Berries.Core.Domain;
 using Berries.FileSystem.Abstractions;
 
@@ -9,29 +8,29 @@ namespace Berries.Gui;
 
 public sealed class GuiController
 {
+    private readonly IFileSystem fileSystem;
     private readonly BerriesEngine engine;
-    private readonly CaseAnalyzer caseAnalyzer;
     private readonly BranchStatisticsAnalyzer branchStatisticsAnalyzer;
+    private readonly BranchCounterpartAnalyzer counterpartAnalyzer;
 
     public GuiController(
+        IFileSystem fileSystem,
         BerriesEngine engine,
-        CaseAnalyzer caseAnalyzer,
-        BranchStatisticsAnalyzer branchStatisticsAnalyzer)
+        BranchStatisticsAnalyzer branchStatisticsAnalyzer,
+        BranchCounterpartAnalyzer counterpartAnalyzer)
     {
+        this.fileSystem = fileSystem;
         this.engine = engine;
-        this.caseAnalyzer = caseAnalyzer;
         this.branchStatisticsAnalyzer = branchStatisticsAnalyzer;
+        this.counterpartAnalyzer = counterpartAnalyzer;
     }
 
     public Corpus? Corpus { get; private set; }
-    public Portrait? Portrait { get; private set; }
+    public BerriesSession? Session { get; private set; }
     public ScanResult? Scan { get; private set; }
-    public DuplicateDiscoveryResult? DuplicateDiscovery { get; private set; }
     public DirectoryAnalysisResult? DirectoryAnalysis { get; private set; }
     public BranchStatisticsResult? BranchStatistics { get; private set; }
-    public BranchAnalysisResult? BranchAnalysis { get; private set; }
-    public CaseAnalysisResult? CaseAnalysis { get; private set; }
-    public DuplicateSettlements DuplicateSettlements { get; } = new();
+    public BranchCounterpartResult? Counterparts { get; private set; }
 
     public IReadOnlyList<string> NormalizeRoots(IEnumerable<string> rootPaths) =>
         engine.CreateCorpus(rootPaths.Select(path => new FileSystemPath(path)))
@@ -41,164 +40,82 @@ public sealed class GuiController
 
     public async Task<ScanResult> ScanAsync(
         IEnumerable<string> rootPaths,
-        Func<FileSystemPath, bool>? ignorePath = null,
-        IProgress<ScanProgress>? progress = null,
+        Func<FileSystemPath, bool>? excludePath = null,
+        IProgress<ScanProgress>? scanProgress = null,
+        IProgress<DuplicateDiscoveryProgress>? duplicateProgress = null,
         CancellationToken cancellationToken = default)
     {
         var totalTimer = Stopwatch.StartNew();
-
         var phaseTimer = Stopwatch.StartNew();
+
         Corpus = engine.CreateCorpus(rootPaths.Select(path => new FileSystemPath(path)));
         phaseTimer.Stop();
         var normalizationElapsed = phaseTimer.Elapsed;
 
         phaseTimer.Restart();
-        Portrait = await engine.BuildInitialPortraitAsync(
+        var acquired = await engine.BuildInitialPortraitAsync(
             Corpus,
-            ignorePath,
-            progress,
+            excludePath,
+            scanProgress,
             cancellationToken);
         phaseTimer.Stop();
         var portraitElapsed = phaseTimer.Elapsed;
 
-        DuplicateSettlements.Clear();
-        DuplicateDiscovery = null;
-        DirectoryAnalysis = null;
-        BranchStatistics = null;
-        BranchAnalysis = null;
-        CaseAnalysis = null;
-        totalTimer.Stop();
+        var duplicates = await engine.DiscoverDuplicatesAsync(
+            acquired,
+            duplicateProgress,
+            cancellationToken);
 
+        Session = new BerriesSession(fileSystem, duplicates.Portrait);
+
+        totalTimer.Stop();
         Scan = new ScanResult(
             Corpus.Roots.Select(root => root.Path.Value).ToArray(),
-            Portrait.Files.Count,
-            Portrait.Files.Sum(file => file.Length),
+            Session.InitialPortrait.Files.Count,
+            Session.InitialPortrait.Files.Sum(file => file.Length),
+            duplicates.DuplicateSets.Count,
+            duplicates.DuplicateFileCount,
             normalizationElapsed,
             portraitElapsed,
-            totalTimer.Elapsed);
+            duplicates.Timing.Total,
+            totalTimer.Elapsed,
+            duplicates.Evictions.Count);
+
+        await RefreshAnalysisAsync(cancellationToken);
         return Scan;
     }
 
-    public async Task<DuplicateDiscoveryResult> DiscoverDuplicatesAsync(
-        IProgress<DuplicateDiscoveryProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+    public async Task RefreshAnalysisAsync(CancellationToken cancellationToken = default)
     {
-        if (Portrait is null)
-            throw new InvalidOperationException("A portrait must be constructed before duplicate discovery.");
+        if (Corpus is null || Session is null)
+            throw new InvalidOperationException("A session must exist before analysis.");
 
-        DuplicateDiscovery = await engine.DiscoverDuplicatesAsync(Portrait, progress, cancellationToken);
-        Portrait = DuplicateDiscovery.Portrait;
-        DirectoryAnalysis = null;
-        BranchStatistics = null;
-        BranchAnalysis = null;
-        CaseAnalysis = null;
-        return DuplicateDiscovery;
-    }
-
-    public IReadOnlyList<SprinkledDuplicateCandidate> FindSprinkledDuplicateCandidates(int minimumDirectories = 3)
-    {
-        if (DuplicateDiscovery is null)
-            throw new InvalidOperationException("Duplicate discovery must complete before candidate screening.");
-        if (minimumDirectories < 2)
-            throw new ArgumentOutOfRangeException(nameof(minimumDirectories));
-
-        return DuplicateDiscovery.DuplicateSets
-            .Where(set => !DuplicateSettlements.IsContentAccepted(set.Content))
-            .Select(set =>
-            {
-                var names = set.Files
-                    .Select(file => System.IO.Path.GetFileName(file.Path.Value))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-                if (names.Length != 1 || string.IsNullOrWhiteSpace(names[0]))
-                    return null;
-
-                var directoryCount = set.Files
-                    .Select(file => file.ParentDirectory)
-                    .Distinct()
-                    .Count();
-
-                // Exploratory phenotype: one same-name instance in each represented directory.
-                if (directoryCount != set.Files.Count || directoryCount < minimumDirectories)
-                    return null;
-
-                return new SprinkledDuplicateCandidate(
-                    set,
-                    names[0],
-                    set.Files.Count,
-                    directoryCount);
-            })
-            .Where(candidate => candidate is not null)
-            .Cast<SprinkledDuplicateCandidate>()
-            .OrderByDescending(candidate => candidate.DirectoryCount)
-            .ThenBy(candidate => candidate.FileName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(candidate => candidate.DuplicateSet.Content.Value, StringComparer.Ordinal)
-            .ToArray();
-    }
-
-    public void AcceptWholeDuplicateSets(IEnumerable<SprinkledDuplicateCandidate> candidates)
-    {
-        foreach (var candidate in candidates)
-            DuplicateSettlements.Accept(candidate.DuplicateSet);
-
-        DirectoryAnalysis = null;
-        BranchStatistics = null;
-        BranchAnalysis = null;
-        CaseAnalysis = null;
-    }
-
-    public async Task<DirectoryAnalysisResult> AnalyzeDirectoriesAsync(
-        CancellationToken cancellationToken = default)
-    {
-        if (Corpus is null || Portrait is null || DuplicateDiscovery is null)
-            throw new InvalidOperationException("Duplicate discovery must complete before directory analysis.");
+        var settlements = new DuplicateSettlements(); // compatibility only; exclusion changes the Portrait itself.
+        var duplicateSets = Session.DuplicateSets;
 
         DirectoryAnalysis = await engine.AnalyzeDirectoriesAsync(
-            Portrait,
-            DuplicateDiscovery.DuplicateSets,
-            DuplicateSettlements,
+            Session.WorkingPortrait,
+            duplicateSets,
+            settlements,
             cancellationToken);
 
-        BranchStatistics = branchStatisticsAnalyzer.Analyze(
+        BranchStatistics = await Task.Run(() => branchStatisticsAnalyzer.Analyze(
             Corpus,
-            Portrait,
-            DuplicateDiscovery.DuplicateSets,
-            DuplicateSettlements,
+            Session.WorkingPortrait,
+            duplicateSets,
+            settlements,
             DirectoryAnalysis.Directories,
-            cancellationToken);
+            cancellationToken), cancellationToken);
 
-        BranchAnalysis = null;
-        CaseAnalysis = null;
-        return DirectoryAnalysis;
-    }
-
-    public async Task<BranchAnalysisResult> AnalyzeBranchesAsync(
-        CancellationToken cancellationToken = default)
-    {
-        if (Corpus is null || DirectoryAnalysis is null)
-            throw new InvalidOperationException("Directory analysis must complete before branch analysis.");
-
-        BranchAnalysis = await engine.AnalyzeBranchesAsync(
+        Counterparts = await Task.Run(() => counterpartAnalyzer.Analyze(
             Corpus,
+            BranchStatistics.Branches,
+            duplicateSets,
             DirectoryAnalysis.DirectoryPairs,
-            cancellationToken);
-        CaseAnalysis = null;
-        return BranchAnalysis;
-    }
-
-    public CaseAnalysisResult AnalyzeTopCases(int limit = 25)
-    {
-        if (Portrait is null || DuplicateDiscovery is null || DirectoryAnalysis is null || BranchAnalysis is null)
-            throw new InvalidOperationException("Branch analysis must complete before case analysis.");
-
-        CaseAnalysis = caseAnalyzer.AnalyzeTop(
-            Portrait,
-            DuplicateDiscovery.DuplicateSets,
-            DirectoryAnalysis.DirectoryPairs,
-            BranchAnalysis.BranchPairs,
-            DuplicateSettlements,
-            limit);
-        return CaseAnalysis;
+            settlements,
+            seedLimit: 25,
+            counterpartLimit: 5,
+            cancellationToken: cancellationToken), cancellationToken);
     }
 }
 
@@ -206,6 +123,10 @@ public sealed record ScanResult(
     IReadOnlyList<string> Roots,
     int FileCount,
     long TotalBytes,
+    int DuplicateSetCount,
+    int DuplicateFileCount,
     TimeSpan CorpusNormalizationElapsed,
     TimeSpan PortraitAcquisitionElapsed,
-    TimeSpan TotalElapsed);
+    TimeSpan DuplicateDiscoveryElapsed,
+    TimeSpan TotalElapsed,
+    int EvictionCount);

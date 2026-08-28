@@ -8,6 +8,13 @@ public interface IFileSystem
 {
     FileSystemPath NormalizePath(FileSystemPath path);
     FileSystemPath? GetParentDirectory(FileSystemPath path);
+
+    FileSystemPath GetRelativePath(FileSystemPath relativeTo, FileSystemPath path) =>
+        throw new NotSupportedException("This filesystem adapter does not provide relative-path construction.");
+
+    FileSystemPath Combine(FileSystemPath directory, FileSystemPath relativePath) =>
+        throw new NotSupportedException("This filesystem adapter does not provide path construction.");
+
     IEnumerable<FileSystemFile> EnumerateFiles(FileSystemPath root);
     Stream OpenRead(FileSystemPath path);
 

@@ -2,93 +2,92 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Berries.Gui.MainWindow"
         Title="Berries"
-        Width="1500"
-        Height="900"
-        MinWidth="1000"
-        MinHeight="700">
-  <Grid RowDefinitions="Auto,Auto,150,Auto,*" Margin="20">
-    <StackPanel Spacing="4">
-      <TextBlock Text="Berries" FontSize="28" FontWeight="SemiBold" />
-      <TextBlock Text="Duplicate-file structural analysis" Opacity="0.65" />
-    </StackPanel>
+        Width="1300"
+        Height="850"
+        MinWidth="900"
+        MinHeight="600">
+  <Grid RowDefinitions="Auto,*,Auto">
+    <Menu Grid.Row="0">
+      <MenuItem Header="_File">
+        <MenuItem Header="Select Roots..." Click="SelectRootsMenu_Click" />
+        <Separator />
+        <MenuItem x:Name="LoadSessionMenu" Header="Load Saved Session..." IsEnabled="False" />
+        <MenuItem x:Name="SaveSessionMenu" Header="Save Session..." IsEnabled="False" />
+        <Separator />
+        <MenuItem x:Name="ExecuteMenu" Header="Execute..." Click="ExecuteMenu_Click" IsEnabled="False" />
+        <Separator />
+        <MenuItem Header="Exit" Click="ExitMenu_Click" />
+      </MenuItem>
+    </Menu>
 
-    <Grid Grid.Row="1" Margin="0,24,0,0" ColumnDefinitions="*,Auto" ColumnSpacing="12">
-      <TextBlock Text="Corpus roots" FontWeight="SemiBold" VerticalAlignment="Center" />
-      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-        <Button x:Name="AddRootButton" Content="Add..." Click="AddRootButton_Click" />
-        <Button x:Name="RemoveRootButton" Content="Remove" Click="RemoveRootButton_Click" />
-        <Button x:Name="ScanButton" Content="Scan" Click="ScanButton_Click" />
-      </StackPanel>
+    <Grid Grid.Row="1">
+      <Grid x:Name="RootsPanel" Margin="24" RowDefinitions="Auto,*,Auto">
+        <StackPanel Spacing="5">
+          <TextBlock Text="Select Corpus Roots" FontSize="26" FontWeight="SemiBold" />
+          <TextBlock Text="Add one or more disjoint directory trees, then scan to begin." Opacity="0.65" />
+        </StackPanel>
+        <ListBox x:Name="RootsList" Grid.Row="1" Margin="0,20,0,20" />
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+          <Button x:Name="AddRootButton" Content="Add..." Click="AddRootButton_Click" />
+          <Button x:Name="RemoveRootButton" Content="Remove" Click="RemoveRootButton_Click" />
+          <Button x:Name="ScanButton" Content="Scan" Click="ScanButton_Click" />
+        </StackPanel>
+      </Grid>
+
+      <Grid x:Name="ExplorerPanel" IsVisible="False" RowDefinitions="Auto,*">
+        <Border Padding="10,8" BorderThickness="0,0,0,1">
+          <Grid ColumnDefinitions="Auto,Auto,Auto,20,Auto,Auto,Auto,20,Auto,*" ColumnSpacing="7">
+            <Button Content="Back" IsEnabled="False" />
+            <Button Grid.Column="1" Content="Forward" IsEnabled="False" />
+            <Button Grid.Column="2" Content="Pivot">
+              <Button.Flyout>
+                <MenuFlyout>
+                  <MenuItem Header="Content" Click="PivotContent_Click" />
+                  <MenuItem x:Name="PivotBranchPairMenu" Header="Current Branch Pair" Click="PivotBranchPair_Click" IsEnabled="False" />
+                </MenuFlyout>
+              </Button.Flyout>
+            </Button>
+
+            <Button x:Name="InvertButton" Grid.Column="4" Content="Invert Selection" Click="InvertButton_Click" />
+            <Button x:Name="ExcludeButton" Grid.Column="5" Content="Exclude" Click="ExcludeButton_Click" />
+            <Button x:Name="DeleteButton" Grid.Column="6" Content="Delete" Click="DeleteButton_Click" />
+
+            <StackPanel Grid.Column="8" Orientation="Horizontal" Spacing="7">
+              <Button x:Name="MoveRightButton" Content="Move →" Click="MoveRightButton_Click" IsEnabled="False" />
+              <Button x:Name="MoveLeftButton" Content="← Move" Click="MoveLeftButton_Click" IsEnabled="False" />
+              <Button x:Name="UndoButton" Content="Undo" Click="UndoButton_Click" IsEnabled="False" />
+            </StackPanel>
+
+            <Button x:Name="SuggestCaseButton" Grid.Column="9" HorizontalAlignment="Right" Content="Suggest Case" Click="SuggestCaseButton_Click" IsEnabled="False" />
+          </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="14" RowDefinitions="Auto,*">
+          <TextBlock x:Name="ProjectionTitle" FontSize="18" FontWeight="SemiBold" Text="Corpus" Margin="2,0,0,10" />
+
+          <Grid x:Name="SingleExplorer" Grid.Row="1">
+            <TreeView x:Name="ExplorerTree" SelectionMode="Multiple" />
+          </Grid>
+
+          <Grid x:Name="PairExplorer" Grid.Row="1" IsVisible="False" ColumnDefinitions="*,*" ColumnSpacing="14">
+            <Grid RowDefinitions="Auto,*">
+              <TextBlock x:Name="LeftScopeText" FontWeight="SemiBold" TextWrapping="Wrap" Margin="2,0,0,8" />
+              <TreeView x:Name="LeftTree" Grid.Row="1" SelectionMode="Multiple" />
+            </Grid>
+            <Grid Grid.Column="1" RowDefinitions="Auto,*">
+              <TextBlock x:Name="RightScopeText" FontWeight="SemiBold" TextWrapping="Wrap" Margin="2,0,0,8" />
+              <TreeView x:Name="RightTree" Grid.Row="1" SelectionMode="Multiple" />
+            </Grid>
+          </Grid>
+        </Grid>
+      </Grid>
     </Grid>
 
-    <ListBox x:Name="RootsList"
-             Grid.Row="2"
-             Margin="0,10,0,0" />
-
-    <Border Grid.Row="3" Margin="0,20,0,0" Padding="20" BorderThickness="1" CornerRadius="8">
-      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="20" RowSpacing="8">
-        <TextBlock Text="Files" FontWeight="SemiBold" />
-        <TextBlock x:Name="FileCountText" Grid.Column="1" Text="—" />
-
-        <TextBlock Grid.Row="1" Text="Total bytes" FontWeight="SemiBold" />
-        <TextBlock x:Name="TotalBytesText" Grid.Row="1" Grid.Column="1" Text="—" />
-
-        <TextBlock Grid.Row="2" Text="Corpus normalization" FontWeight="SemiBold" />
-        <TextBlock x:Name="NormalizationElapsedText" Grid.Row="2" Grid.Column="1" Text="—" />
-
-        <TextBlock Grid.Row="3" Text="Portrait acquisition" FontWeight="SemiBold" />
-        <TextBlock x:Name="PortraitElapsedText" Grid.Row="3" Grid.Column="1" Text="—" />
-
-        <TextBlock Grid.Row="4" Text="Duplicate files" FontWeight="SemiBold" />
-        <TextBlock x:Name="DuplicateFileCountText" Grid.Row="4" Grid.Column="1" Text="—" />
-
-        <TextBlock Grid.Row="5" Text="Duplicate sets" FontWeight="SemiBold" />
-        <TextBlock x:Name="DuplicateSetCountText" Grid.Row="5" Grid.Column="1" Text="—" />
-
-        <TextBlock Grid.Row="6" Text="Size grouping" FontWeight="SemiBold" />
-        <TextBlock x:Name="SizeGroupingElapsedText" Grid.Row="6" Grid.Column="1" Text="—" />
-
-        <TextBlock Grid.Row="7" Text="Content hashing" FontWeight="SemiBold" />
-        <TextBlock x:Name="HashingElapsedText" Grid.Row="7" Grid.Column="1" Text="—" />
-
-        <TextBlock Grid.Row="8" Text="Duplicate directories" FontWeight="SemiBold" />
-        <TextBlock x:Name="DirectoryCountText" Grid.Row="8" Grid.Column="1" Text="—" />
-
-        <TextBlock Grid.Row="9" Text="Directory pairs" FontWeight="SemiBold" />
-        <TextBlock x:Name="DirectoryPairCountText" Grid.Row="9" Grid.Column="1" Text="—" />
-
-        <TextBlock Grid.Row="10" Text="Directory analysis" FontWeight="SemiBold" />
-        <TextBlock x:Name="DirectoryAnalysisElapsedText" Grid.Row="10" Grid.Column="1" Text="—" />
-
-        <TextBlock Grid.Row="11" Text="Branch pairs" FontWeight="SemiBold" />
-        <TextBlock x:Name="BranchPairCountText" Grid.Row="11" Grid.Column="1" Text="—" />
-
-        <TextBlock Grid.Row="12" Text="Branch analysis" FontWeight="SemiBold" />
-        <TextBlock x:Name="BranchAnalysisElapsedText" Grid.Row="12" Grid.Column="1" Text="—" />
-
-        <TextBlock Grid.Row="13" Text="Status" FontWeight="SemiBold" />
-        <TextBlock x:Name="StatusText" Grid.Row="13" Grid.Column="1" Text="No corpus selected." TextWrapping="Wrap" />
+    <Border Grid.Row="2" Padding="10,6" BorderThickness="0,1,0,0">
+      <Grid ColumnDefinitions="*,260">
+        <TextBlock x:Name="StatusText" Text="Select corpus roots to begin." VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        <ProgressBar x:Name="StatusProgress" Grid.Column="1" Height="12" Minimum="0" Maximum="100" IsVisible="False" />
       </Grid>
     </Border>
-
-    <Grid Grid.Row="4" Margin="0,20,0,0" ColumnDefinitions="*,*,1.35*" ColumnSpacing="20">
-      <Grid RowDefinitions="Auto,*">
-        <TextBlock Text="Strongest directory pairs" FontWeight="SemiBold" />
-        <ListBox x:Name="DirectoryPairsList" Grid.Row="1" Margin="0,8,0,0" />
-      </Grid>
-      <Grid Grid.Column="1" RowDefinitions="Auto,*">
-        <TextBlock Text="Strongest branch pairs" FontWeight="SemiBold" />
-        <ListBox x:Name="BranchPairsList" Grid.Row="1" Margin="0,8,0,0" />
-      </Grid>
-      <Grid Grid.Column="2" RowDefinitions="Auto,*">
-        <TextBlock Text="Top cases and settlement comparison — Ctrl+A, Ctrl+C to copy" FontWeight="SemiBold" />
-        <TextBox x:Name="CasesReportText"
-                 Grid.Row="1"
-                 Margin="0,8,0,0"
-                 IsReadOnly="True"
-                 AcceptsReturn="True"
-                 TextWrapping="NoWrap" />
-      </Grid>
-    </Grid>
   </Grid>
 </Window>
