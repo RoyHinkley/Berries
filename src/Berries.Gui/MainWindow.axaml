@@ -10,12 +10,12 @@
     <Menu Grid.Row="0">
       <MenuItem Header="_File">
         <MenuItem Header="Select Roots..." Click="SelectRootsMenu_Click" />
-        <Separator />
+        <MenuItem Header="-" />
         <MenuItem x:Name="LoadSessionMenu" Header="Load Saved Session..." IsEnabled="False" />
         <MenuItem x:Name="SaveSessionMenu" Header="Save Session..." IsEnabled="False" />
-        <Separator />
+        <MenuItem Header="-" />
         <MenuItem x:Name="ExecuteMenu" Header="Execute..." Click="ExecuteMenu_Click" IsEnabled="False" />
-        <Separator />
+        <MenuItem Header="-" />
         <MenuItem Header="Exit" Click="ExitMenu_Click" />
       </MenuItem>
     </Menu>
