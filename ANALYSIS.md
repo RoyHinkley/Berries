@@ -1,147 +1,118 @@
 # Berries Analysis Design
 
-This document defines how Berries constructs the objective analysis state from a Corpus and how Cases are discovered and presented for attention. Terminology and semantic invariants are defined in `MODEL.md`.
+This document defines how Berries discovers duplicate Content, derives structural evidence, and identifies promising foci for the Duplicate Explorer. Terminology and semantic invariants are defined in `MODEL.md`; interaction and execution are defined in `WORKFLOW.md`.
+
+## Purpose of analysis
+
+Analysis exists to help the user find duplication likely to reward attention. It does not own the workflow and does not prescribe a mandatory Case queue.
+
+The Duplicate Explorer is the stable interaction surface. Analysis progressively supplies:
+
+    duplicate Content and FileInstances
+    directory/branch structure
+    structural evidence
+    candidate projections/foci
+    Suggested Cases
+
+The governing presentation idea remains:
+
+    identify something likely to reward attention
+
+and, when choosing among comparable candidates:
+
+    prefer the smallest comprehensible question with substantial downstream
+    simplifying effect
 
 ## Generate the Initial Portrait
 
 Allow selection of filesystem directories. Selected directories become Corpus roots.
 
-Input roots are normalized: canonicalize paths, remove exact duplicates, and discard any selected root contained by another selected root. The retained Corpus therefore contains the minimal disjoint root set.
+Normalize roots by canonicalizing paths, removing exact duplicates, and discarding selected roots contained by another selected root.
 
-Scan every regular File beneath the roots and record path and required platform-neutral metadata. Filesystem-specific metadata, when useful, is obtained only through the filesystem abstraction.
-
-At this stage Content identity is generally unknown.
+Scan regular files beneath the roots and record path plus required platform-neutral metadata. The Initial Portrait should retain unique files as well as duplicate candidates. Unique files are not resolution targets, but they can constrain operations such as Move by occupying destination paths.
 
 Unsupported symbolic/special filesystem objects are handled by the platform adapter and are not exposed to Core as ordinary Files.
 
+### Configuration exclusion
+
+`Berries.config` uses an `[exclude]` section. Exclusion is subtraction from the logical Corpus, not a special duplicate-resolution concept.
+
+Current useful matching semantics remain:
+
+    pattern without path separator
+        match any path component / filename
+
+    pattern containing / or \
+        match a contiguous path segment anywhere in the full path
+
+    * and ?
+        wildcard matching
+
+    # or ; at line start
+        comment
+
+Configuration exclusions are semantically automatic initial Exclude operations. The implementation may omit/filter matching instances during acquisition to avoid unnecessary downstream work.
+
+The earlier `[ignore]` name is obsolete and need not be retained for compatibility while the format is still under development.
+
 ## Enumerate DuplicateSets
 
-Enumerate all Files in the Portrait and group by length.
+Group FileInstances by length. Singleton size groups need no hashing for duplicate detection but remain known to the Initial Portrait.
 
-Files in singleton-size groups require no hashing for duplicate detection and remain represented as unique Files.
+Hash only non-singleton size groups. The current implementation uses SHA-256. Partition equal hashes into DuplicateSets; singleton hash groups remain unique files.
 
-For each non-singleton size group, hash candidate contents sufficiently to establish reliable Content identity. Progressive/prefix hashing is an optional optimization; the present implementation may proceed directly to full hashing when that is simpler and measured performance is acceptable.
+If a File becomes unavailable while hashing, expected access failures (`IOException`, `UnauthorizedAccessException`, `SecurityException`) can evict it from the working session. Programming failures must propagate normally.
 
-Partition equal hashes into exact DuplicateSets. Singleton hash groups are discarded from duplicate analysis but their Files remain in the Portrait.
+Windows Content reads currently request permissive sharing (`ReadWrite | Delete`) so files open by other applications can often still be hashed.
 
-Each DuplicateSet represents one distinct duplicated Content identity.
+## No settlement layer
 
-If a File becomes unavailable or inaccessible during an operation, it is evicted from the Current Portrait for the remainder of the session. Programming failures are not converted into file evictions.
+The earlier `DuplicateSettlements` model is no longer part of the intended design.
 
-## Subtract settled duplicate relationships
+If FileInstances should not participate in Berries, Exclude removes them from the Working Portrait. Therefore downstream duplicate and structural analysis simply operates on the Working Portrait.
 
-DuplicateSets are physical facts about the Portrait and are not rewritten when the user accepts duplication.
+A Content with fewer than two remaining Working-Portrait instances naturally ceases to be a DuplicateSet for duplicate-oriented presentation.
 
-A separate `DuplicateSettlements` state records duplicate relationships that no longer require a user decision. It supports both:
+This replaces whole-Content and pairwise settlement bookkeeping with an ordinary portrait transformation.
 
-    whole-Content acceptance
-        every relationship represented by one DuplicateSet is settled
+## File-centric analysis
 
-    pairwise acceptance
-        one specific pair of equal-Content File instances is settled while
-        other relationships involving the same Content can remain unresolved
+A Content/DuplicateSet projection is a first-class way to understand widely distributed duplication.
 
-Downstream structural analysis operates on unresolved duplicate relationships only. Thus acceptance can reduce the Case population even when the filesystem Portrait itself does not change.
+Real-corpus experiments showed that repeated support/template/generated Contents can manufacture large amounts of semantically weak directory/branch evidence. Examples included repository hook samples, DLL/PDB groups, UUID-like generated artifacts, and saved-web-page support files.
 
-This subtraction occurs when physical duplicate equality is converted into structural evidence. Hashing and DuplicateSet construction remain unaffected.
+The former special early "sprinkled DuplicateSet" checklist was useful experimentally but should not survive as a separate screen. Its lesson is retained: file-centric duplication often deserves attention before container-centric evidence built from it.
 
-Whole-DuplicateSet settlement is particularly important because one widely repeated Content can induce many DirectoryPairs and many higher-level BranchPairs. One user decision can therefore remove substantially more future decision work than the DuplicateSet Case alone suggests.
+The previous cheap phenotype remains potentially useful as a Suggested-Case heuristic:
 
-## Early distributed-DuplicateSet review
+    same filename for every instance
+    one instance per directory
+    at least three represented directories
 
-Before constructing DirectoryPairs, Berries may cheaply screen DuplicateSets for objective patterns likely to support a simple retain-all Resolution.
+But such candidates should be presented through the ordinary Explorer/Content projection, where Exclude and other normal operations are available.
 
-The current exploratory phenotype is:
+## Directory records and DirectoryPairs
 
-    every instance has the same filename
-    exactly one instance occurs in each represented directory
-    at least three distinct directories are represented
+Directory statistics describe directly contained files only; descendants are not folded into local counts.
 
-These conditions are inexpensive because they use only already-discovered DuplicateSet membership and paths. They do not establish a Situation. Instead, they identify Cases for which the user can answer one compact question: whether all copies are intentionally distributed and should be retained.
-
-The current GUI presents all such candidates in one checklist, ordered by descending directory count. Nothing is preselected. Hovering an item shows all instance paths. Checked candidates become whole-DuplicateSet settlements before DirectoryPair construction.
-
-This step is not merely a performance optimization. It is a semantic normalization pass: if a duplication can be coherently understood and resolved at the DuplicateSet level, allowing it to generate DirectoryPairs and BranchPairs can create weaker relational Cases whose apparent structure is only an artifact of that unresolved low-level evidence.
-
-The current review also demonstrates that multiple Cases can sometimes be resolved through one grouped user interaction. If several Cases share an intelligible resolution context, combining them into one question directly advances the program objective of minimizing decision work.
-
-Repeated candidates can themselves reveal a better structural level. For example, many related files that repeatedly co-occur under the same directories may be more coherently presented as one directory- or branch-level Case than as many independent DuplicateSet questions. The correct presentation level is therefore empirical; 'lowest level first' is a bias toward semantic coherence, not an invariant.
-
-Persistent filename-based or other user-approved rules may later preselect known cases, but no such rule system is currently implemented.
-
-## Build Directory records
-
-Include directories represented by unresolved duplicate relationships.
-
-Directory statistics describe directly contained Files only. Descendants are not folded into local counts.
-
-Maintain at least:
+Useful values include:
 
     Path
     FileCount
     DuplicateFileCount
     DuplicateContentCount
 
-`FileCount` remains a physical direct-file count for the directory. `DuplicateFileCount` and `DuplicateContentCount` describe unresolved duplicate evidence only.
+DirectoryPair describes two exact directories sharing one or more duplicated Contents directly. `SharedContentCount` counts distinct shared Contents.
 
-A directory is a candidate Single-directory Case whenever at least one Content has more than one unresolved File-instance relationship directly in that directory. External instances of the same Content do not suppress the Case.
+DirectoryPairs remain useful derived evidence and diagnostics. They are not required as an independently generated Case population and are not required to discover targeted BranchPairs.
 
-## Build the sparse DirectoryPair graph
+Useful graph diagnostics discovered during experiments include degree, weighted degree, strongest-edge concentration, connected components, density, directional coverage, and Jaccard overlap. Retain these where cheap/useful; they are evidence, not semantic classification.
 
-DirectoryPair describes direct/local unresolved shared Content between two directories.
+Same-directory duplicates remain a distinct useful viewpoint because no DirectoryPair is needed to express them.
 
-For each unresolved DuplicateSet relationship:
+## Branch records
 
-    determine the directly represented directories
-    for every unordered directory pair having at least one unresolved instance pair:
-        contribute that Content once to DirectoryPair(A,B)
-
-Thus DirectoryPair leverage is the number of distinct unresolved duplicated Contents occurring directly in both directories.
-
-The DirectoryPair population is also a useful weighted undirected graph:
-
-    directory = vertex
-    DirectoryPair = edge
-    DirectoryPair leverage = edge weight
-
-Cheap graph characteristics are retained or derived because empirical testing shows that they distinguish useful structural phenomena:
-
-    degree
-        number of other directories sharing unresolved duplicated Content
-
-    weighted degree
-        sum of incident DirectoryPair leverage
-
-    maximum incident edge leverage
-
-    mean incident edge leverage
-
-    strongest-edge concentration
-        maximum edge leverage / weighted degree
-
-    connected components
-    largest component size
-    graph density among participating directories
-
-For a DirectoryPair, derive:
-
-    directional coverage
-        shared Content / duplicated Content represented by each endpoint
-
-    Jaccard overlap
-
-    edge concentration at each endpoint
-        edge leverage / endpoint weighted degree
-
-These are objective evidence, not semantic classification.
-
-Empirically, high coverage plus high concentration identifies a very different relationship from high coverage embedded in a large diffuse hub. For example, standardized generated/template directories can form exact-content cliques with very low edge concentration.
-
-## Build Branch records
-
-A Branch is useful as an objective unit even before it is paired with another Branch.
-
-For every duplicate-bearing Branch, derive settlement-aware local statistics independently of BranchPair enumeration:
+`BranchStatisticsAnalyzer` derives first-class statistics for duplicate-bearing branches without enumerating BranchPairs:
 
     Path
     ParentPath
@@ -151,214 +122,158 @@ For every duplicate-bearing Branch, derive settlement-aware local statistics ind
     DuplicateContentCount
     DuplicateDirectoryCount
 
-`DuplicateContentCount` is the number of distinct unresolved duplicated Contents represented anywhere in the Branch. It must not be obtained by summing descendant Directory `DuplicateContentCount` values because the same Content can occur in several descendant directories.
+`DuplicateContentCount` is a distinct-Content count across the branch and must not be obtained by summing descendant directory counts.
 
-These values support local hierarchy analysis. In particular, compare a child with its parent to observe how much duplicated Content is retained while ordinary structural breadth is discarded. A child retaining most duplicated Content while containing far fewer Files or directories is a natural candidate focus for a container-centric Case.
+These values are cheap enough to compute on large corpora and proved useful for finding structurally concentrated duplication.
 
-Branch records are deliberately independent of BranchPair construction. The working hypothesis is that promising BranchPair Cases may often be found by first locating an objectively interesting Branch and then searching only for plausible counterparts, rather than enumerating every BranchPair combination.
+## Branch seed priority
 
-## Build BranchPairs
+For a child Branch relative to its immediate parent, define:
 
-A Branch rooted at A contains A and all descendants.
+    D = child DuplicateContentCount
 
-BranchPair analysis consumes the already-constructed DirectoryPair graph. It does not independently reconstruct directory-pair evidence from DuplicateSets.
+    C = (child duplicated-Content retention)
+        / (child ordinary file retention)
 
-Each DirectoryPair contributes its weight to containing pairs of ancestor-or-self Branches.
+The current successful seed score is:
 
-A BranchPair has two effective sides. For non-overlapping roots these are the ordinary recursive branches. For nested roots, the descendant subtree is omitted from the ancestor side and constitutes the other side. The two effective sides are always disjoint.
+    D * (1 - 1/C)       when C > 1
+    0                   otherwise
 
-Only DirectoryPair evidence crossing both effective sides contributes BranchPair leverage.
+This can be interpreted as duplicated Content concentrated beyond what would be expected from the Branch's share of parent files. It is bounded above by D and intentionally becomes zero at C = 1.
 
-Current experimental BranchPair leverage is the **weighted cut size**: sum the DirectoryPair leverage crossing the effective-side cut. Equivalently, a duplicated Content contributes once for each contributing DirectoryPair through which it crosses the cut. The same Content may therefore contribute more than once to a BranchPair.
+Real-corpus tests repeatedly promoted known meaningful structures, including moved/copy trees such as LTSpiceXVII and recognizable broad organizational problems.
 
-This is intentionally treated as a structural payoff measure rather than an approximation that must eventually be corrected to an exact distinct-Content count. Real-corpus testing showed that exact and weighted BranchPair leverage can produce materially different Case orders; which ordering is more useful remains an empirical question because the actual objective is reduction of user decision work, not preservation of a particular leverage definition.
+Seed score answers only:
 
-DirectoryPairCount records the number of distinct direct DirectoryPairs contributing evidence to the BranchPair.
+    where is it promising to look?
 
-A BranchPair can exist even when its root directories share no direct Files.
+It is not a BranchPair score.
 
-Example:
+## Targeted BranchPair counterpart discovery
 
-    A\Family <-> B\Family
-    A\Trips  <-> B\Travel
+Comprehensive BranchPair enumeration is suspended and is not required by the intended architecture. Exhaustive ancestor Cartesian expansion produced combinatorial populations (including tens of millions of pairs on large corpora) without proportional user value.
 
-can induce:
+Instead, use promising Branch seeds and search directly for counterparts sharing duplicated Content.
 
-    BranchPair(A,B)
+Current experimental algorithm:
 
-without DirectoryPair(A,B).
+1. Rank eligible Branch seeds by `D * (1 - 1/C)`.
+2. Consider the top 10 eligible seeds in a selection round.
+3. For each seed, find its best non-nested counterpart from unresolved/working DuplicateSet Content overlap.
+4. Rank the seed/counterpart relationship by:
 
-### Nested BranchPairs as cuts
+       shared distinct Content * Jaccard overlap
 
-A nested BranchPair is a partition of a containing tree, not merely a large bounding box around a smaller one.
+5. Select the highest pair score among the top-10 seed window.
+6. Cull/block both selected branch roots and their descendants from later seed selection.
+7. Repeat to obtain a compact shortlist.
 
-For:
+The best pair can originate from seed rank 2, 6, or another position rather than rank 1. Therefore seed score and pair score must remain conceptually separate:
 
-    A <-> B
+    seed score
+        promising place to search
 
-where B is inside A, the effective sides are:
+    pair score
+        promising relationship actually found
 
-    A excluding B <-> B
+For diagnostics, retaining the top few counterpart candidates per seed is useful.
 
-If the descendant root moves downward from B to B\C, the effective sides become:
+### Boundary precision
 
-    A excluding B\C <-> B\C
+Branch-level shared/Jaccard scoring can occasionally prefer a slightly broader parent over a child that feels like the more natural semantic boundary when the two contain almost identical duplicate Content. This is mathematically legitimate and may yield the same eventual disposition.
 
-The part of B outside B\C moves from the descendant side to the ancestor side. Duplicate relationships formerly internal to B can therefore become cross-cut relationships, while other relationships can cease crossing the cut.
+Do not add boundary heuristics merely to perfect such examples unless Explorer use demonstrates that the distinction affects user resolution.
 
-Consequently, leverage can increase or decrease as a BranchPair boundary moves downward. This reflects real repartitioning of the same objective duplication graph.
+Direct `DirectoryPair.SharedContentCount` between exact candidate roots is a cheap diagnostic but experiments showed it is not a strong enough discriminator to drive BranchPair ranking.
 
-This makes boundary movement itself useful structural evidence. Related BranchPairs reached by moving roots through the directory hierarchy should not automatically be treated as strict subset/refinement relationships.
+## Suggested Cases / foci
 
-## Construct candidate Cases
+A Case is best treated as a suggested Explorer focus rather than a persistent object in a global list.
 
-Cases are objective, program-discovered bounded sets of Files derived from the Current Portrait plus the current unresolved-duplication state. Situations are not needed for discovery.
+The useful viewpoints currently are:
 
-Candidate Case types and bounds currently include:
+    Content-centric
+        one duplicated Content and its instances
 
-    DuplicateSet Case
-        all File instances in one DuplicateSet having at least one unresolved
-        duplicate relationship
+    same-directory
+        internal duplicate instances in one directory
 
-    Single-directory Case
-        all Files directly contained by a directory having unresolved internal
-        duplication
+    BranchPair/container-centric
+        duplicated Content distributed between two branches
 
-    DirectoryPair Case
-        all Files directly contained by either directory in the unresolved pair
+DirectoryPair is naturally a narrow BranchPair projection.
 
-    BranchPair Case
-        all Files on the two effective disjoint BranchPair sides
+`Suggest Case` should become available when enough derived analysis exists to produce a useful suggestion. It need not wait for every possible analysis stage to complete.
 
-The Case catalogue is not presumed complete. Real-corpus work suggests two broad discovery viewpoints:
+A suggestion establishes a focus and projection. The user can Pivot or navigate away; Berries does not force the user to resolve the suggested Case.
 
-    file-centric
-        Why is this Content duplicated broadly or repeatedly?
+## Projection data
 
-    container-centric
-        Why does this directory or Branch contain so much duplicated Content?
+### Content projection
 
-A useful candidate need not originate from exhaustive pair enumeration. Distinctive local conditions may generate Cases directly. Examples under active study include widely distributed same-name Content, directories with dense internal duplication, branches with high duplicated-Content concentration, and branches whose duplicate relationships are unusually diffuse.
+Organize as:
 
-Structural Cases include unique Files as defined by their bounds because those Files may matter to a Disposition.
+    Content
+        full-path FileInstance
+        full-path FileInstance
+        ...
 
-The defining unresolved duplication pattern supplies the reason for considering the Case. A Case need not resolve unrelated duplication within its bounds; see `MODEL.md`.
+Do not collapse leaves to directories. Multiple same-Content instances can exist in one directory, and every selectable leaf must retain exact FileInstance semantics.
 
-Cases may overlap. A Resolution can therefore alter the unresolved evidence that causes other Cases to exist even when its Disposition makes no filesystem change.
+### Pair projections
 
-To avoid unnecessary memory expansion, lightweight Case candidates can be ranked before bounded File sets are materialized. Materialize only Cases actually needed for presentation or further analysis.
+DirectoryPair and BranchPair projections use two equivalent tree panes. Higher directory nodes represent the set of applicable duplicate FileInstances beneath them.
 
-## Leverage and presentation priority
+Unique files are generally not displayed in these duplicate-resolution trees, but remain known to the session for operational constraints such as Move collisions.
 
-Leverage remains one objective structural measurement. It is not the program objective and is not presumed to define the best Case order.
+## Derived analysis after portrait operations
 
-For DuplicateSet, Single-directory, and DirectoryPair Cases it remains an exact distinct-unresolved-Content count. For BranchPairs the current experiment uses weighted crossing evidence as described above.
+Exclude/Delete/Move immediately transform the Working Portrait. Derived duplicate and structural analysis can therefore become stale.
 
-The actual objective is to reduce the user's remaining decision work. A useful Resolution can accomplish that by removing duplicate Files, by restructuring them, or simply by establishing that some duplication is acceptable. Therefore a Case can have high decision impact even when its Disposition leaves the Portrait unchanged.
+Invalidate/recompute affected data such as:
 
-Early implementation ranked Cases only by descending leverage. Real-corpus testing showed that this is insufficient. Exact distinct-Content BranchPair leverage and weighted structural leverage produce materially different orderings, and neither has yet been established as generally superior.
+    DuplicateSet membership
+    Directory records and DirectoryPairs
+    Branch records and seed scores
+    targeted counterpart candidates
+    Suggested Cases
 
-Broad ancestor BranchPairs can also have the highest leverage while substantially narrower or differently placed cuts present much clearer questions. Maximum information gain can therefore occur below the leverage maximum.
+Known Content does not need to be reread or rehashed merely because a virtual operation changes location or membership.
 
-The governing presentation heuristic remains:
+Correct incremental invalidation is desirable, but broad recomputation from in-memory session data is acceptable initially if performance is good enough.
 
-    Ask the smallest comprehensible question with the greatest downstream
-    simplifying effect.
+The longer-term architecture should permit heavy analysis to run asynchronously. Background completion should update capability/availability (for example enabling Suggest Case) without taking control of the Explorer or unexpectedly changing the user's current focus.
 
-Useful objective dimensions already identified include:
+## Scan and progress
 
-    leverage / structural weight
-        potential reach of the defining duplicate evidence
+The next UI should avoid a monolithic blocking "Scan then show results" architecture even if early implementation still invokes stages sequentially.
 
-    breadth / specificity
-        how much filesystem structure is brought into the question
+The Explorer can begin with the selected corpus roots while analysis proceeds. A persistent status bar should report the active stage and progress within that stage.
 
-    coverage
-        how completely each side participates in the defining relationship
+Natural stages include:
 
-    concentration
-        whether evidence is focused in a few strong correspondences or diffuse
-        across many weak ones
+    filesystem enumeration / portrait acquisition
+    size grouping
+    hashing candidate files
+    DuplicateSet construction
+    directory analysis
+    Branch statistics
+    suggestion/counterpart analysis
 
-    structural depth / boundary position
-        whether the Case represents a broad or more localized cut/relationship
+Exact progress granularity is an implementation matter, but stage boundaries should remain explicit so later asynchronous orchestration does not require redesigning the analysis engine.
 
-    directional containment
-        whether nearly all duplicated Content on one side is represented on
-        the other while the reverse is not true
+## Empirical lessons retained
 
-    settlement impact
-        how much unresolved Case-generating structure could disappear if one
-        user answer settles the Case
+Real-corpus work has established several practical principles:
 
-Case ordering is therefore an open empirical problem. Do not prematurely collapse these characteristics into an unexplained weighted scalar.
+- low-level repeated Content can generate misleadingly large higher-level structure;
+- file-centric and container-centric questions are complementary, not competing universal Case types;
+- Branch statistics are cheap and useful before any BranchPair construction;
+- targeted counterpart search is dramatically cheaper and often more useful than exhaustive BranchPair enumeration;
+- seed quality and pair quality are different measurements;
+- broad structural boundaries need not be mathematically perfected if the same useful resolution remains available;
+- application-managed/generated/repository trees can create substantial duplication evidence, which is one reason configurable Corpus exclusion is useful;
+- the program should discover promising attention targets, not attempt to infer semantic truth autonomously.
 
-## Deletion safety and analytical visibility
-
-A DuplicateSet proves Content equality but does not prove that one instance can safely substitute for another. Files inside repositories, package caches, generated outputs, application data, deployment trees, or other externally maintained structures may be required at their exact locations.
-
-Berries should therefore treat 'duplicate' and 'safe deletion candidate' as separate properties. A region can remain analytically visible because its duplicates are valuable evidence for understanding directory or branch relationships while destructive Dispositions within that region are restricted or discouraged.
-
-A future implementation may allow users or rules to mark folders or recognizable structural regions as externally managed / non-destructive. The correct scope and detection mechanism remain open research questions.
-
-## Settlement-impact experiments
-
-A useful way to evaluate decision impact is to compare analyses over identical physical data before and after user-approved settlements. Compare at least:
-
-    unresolved DuplicateSet Cases
-    Single-directory Cases
-    DirectoryPairs
-    BranchPairs
-    total Cases
-    graph components and largest component
-    top-Case membership/order
-    phase timing
-
-The early distributed-DuplicateSet review now provides a natural aggregate experiment: one run establishes the no-settlement baseline; the next run over the same corpus asks the user which cheaply recognized DuplicateSets should be retained everywhere, then constructs all structural analysis from the reduced unresolved evidence.
-
-User-approved rules may eventually generalize a Resolution across objectively identifiable similar Cases. A heuristic can suggest similarity; a rule would explicitly authorize applying the same Resolution to matching Cases.
-
-## Exploratory structural diagnostics
-
-For sampled BranchPairs, derive on demand rather than materializing a second enormous graph:
-
-    whether roots are nested
-    duplicated Content count on each effective side
-    weighted evidence relative to distinct Content on each side
-    contributing DirectoryPair count
-    strongest contributing DirectoryPairs
-    related/subordinate BranchPairs from hierarchy movement
-    leverage ratio relative to the reference BranchPair
-    DirectoryPair evidence ratio relative to the reference BranchPair
-
-Contributing DirectoryPairs are often more explanatory than duplicated-file samples because they show where the cross-cut relationship actually occurs.
-
-The related BranchPair population is also informative, but ancestry alone must not be interpreted as strict set refinement for nested cuts.
-
-## Empirical development method
-
-Do not implement Situation inference before understanding the objective case space.
-
-Use real corpora to inspect small, high-value samples of Cases. Characterize objective structural patterns first, then ask which Situations are compatible with those patterns.
-
-As characteristic regions become understood, they can be marked empirically covered so subsequent samples expose new regions of the case space. "Covered" does not mean the Situation is known; it only means the objective structural phenotype has already been examined.
-
-If objective evidence does not narrow the applicable Situations, that is a valid result. The user supplies the Situation.
-
-## Refresh derived analysis after Apply or settlement
-
-Cases and structural indexes are derived data.
-
-After a virtual Apply or a new settlement, invalidate/recompute affected portions of:
-
-    unresolved DuplicateSet evidence
-    Directory records
-    DirectoryPair relationships and graph metrics
-    Branch records
-    BranchPair relationships
-    candidate Cases
-    presentation ordering
-
-Do not reread the filesystem or rehash known Content merely because the virtual Portrait or settlement state changed. Delete, move/rename, and copy operations preserve known Content identity; acceptance changes decision state, not physical Content identity.
-
-Correct incremental invalidation is desirable, but broader recomputation from the in-memory Portrait and known DuplicateSets is acceptable initially if performance permits.
+These findings should guide implementation without hard-coding application-specific special cases.
