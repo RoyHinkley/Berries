@@ -80,17 +80,17 @@ public partial class MainWindow : Window
     {
         RootsPanel.IsVisible = false; ExplorerPanel.IsVisible = true; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
         ProjectionTitle.Text = "Corpus";
-        ExplorerTree.ItemsSource = roots.Select(root => CreateTreeItem(new ExplorerNode(root))).ToArray();
+        ExplorerTree.ItemsSource = roots.Select(root => new ExplorerNode(root)).ToArray();
     }
 
     private void ShowContentProjection()
     {
         var session = controller.Session; if (session is null) return;
         leftScope = null; rightScope = null; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true; ProjectionTitle.Text = "Groups";
-        var nodes = session.DuplicateSets.OrderByDescending(set => set.Files.Count)
+        ExplorerTree.ItemsSource = session.DuplicateSets.OrderByDescending(set => set.Files.Count)
             .ThenBy(set => set.Files[0].Path.Value, StringComparer.OrdinalIgnoreCase)
             .Select(set => BuildGroupNode(set.Files)).ToArray();
-        ExplorerTree.ItemsSource = nodes.Select(CreateTreeItem).ToArray(); UpdateCapabilities();
+        UpdateCapabilities();
     }
 
     private void SuggestCaseButton_Click(object? sender, RoutedEventArgs e)
@@ -106,8 +106,8 @@ public partial class MainWindow : Window
         PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
         ProjectionTitle.Text = $"Branch Pair — {suggestion.Counterparts[0].SharedDuplicateContentCount:N0} shared groups";
         LeftScopeText.Text = leftScope.Value.Value; RightScopeText.Text = rightScope.Value.Value;
-        LeftTree.ItemsSource = new[] { CreateTreeItem(BuildBranchTree(leftScope.Value)) };
-        RightTree.ItemsSource = new[] { CreateTreeItem(BuildBranchTree(rightScope.Value)) }; UpdateCapabilities();
+        LeftTree.ItemsSource = new[] { BuildBranchTree(leftScope.Value) };
+        RightTree.ItemsSource = new[] { BuildBranchTree(rightScope.Value) }; UpdateCapabilities();
     }
 
     private ExplorerNode BuildBranchTree(FileSystemPath scope)
@@ -138,12 +138,6 @@ public partial class MainWindow : Window
         node.Files = node.Children.SelectMany(PopulateScopeFiles).Distinct().ToArray(); return node.Files;
     }
 
-    private static TreeViewItem CreateTreeItem(ExplorerNode node)
-    {
-        var item = new TreeViewItem { Header = node.Label, Tag = node };
-        if (node.Children.Count > 0) item.ItemsSource = node.Children.Select(CreateTreeItem).ToArray(); return item;
-    }
-
     private void PivotContent_Click(object? sender, RoutedEventArgs e) => ShowContentProjection();
     private void PivotBranchPair_Click(object? sender, RoutedEventArgs e)
     {
@@ -165,15 +159,21 @@ public partial class MainWindow : Window
         var selectedPaths = selectedFiles.Select(file => file.Path).ToArray();
         var targetFiles = controller.Session.DuplicateSets.Where(set => contents.Contains(set.Content)).SelectMany(set => set.Files)
             .Where(file => !selectedPaths.Any(path => fileSystem.PathsEqual(path, file.Path))).Select(file => file.Path).ToArray();
-        var leaves = EnumerateItems(tree.ItemsSource).Where(item => item.Tag is ExplorerNode node && node.Children.Count == 0 && node.Files.Count == 1)
-            .Where(item => targetFiles.Any(path => fileSystem.PathsEqual(path, ((ExplorerNode)item.Tag!).Files[0].Path))).Cast<object>().ToArray();
+        var leaves = EnumerateNodes(tree.ItemsSource)
+            .Where(node => node.Children.Count == 0 && node.Files.Count == 1)
+            .Where(node => targetFiles.Any(path => fileSystem.PathsEqual(path, node.Files[0].Path)))
+            .Cast<object>().ToArray();
         tree.SelectedItems.Clear(); foreach (var item in leaves) tree.SelectedItems.Add(item);
     }
 
-    private static IEnumerable<TreeViewItem> EnumerateItems(System.Collections.IEnumerable? items)
+    private static IEnumerable<ExplorerNode> EnumerateNodes(System.Collections.IEnumerable? items)
     {
         if (items is null) yield break;
-        foreach (var item in items.OfType<TreeViewItem>()) { yield return item; foreach (var child in EnumerateItems(item.ItemsSource)) yield return child; }
+        foreach (var node in items.OfType<ExplorerNode>())
+        {
+            yield return node;
+            foreach (var child in EnumerateNodes(node.Children)) yield return child;
+        }
     }
 
     private async void ExcludeButton_Click(object? sender, RoutedEventArgs e)
@@ -212,7 +212,7 @@ public partial class MainWindow : Window
     private void RefreshCurrentProjection()
     {
         if (PairExplorer.IsVisible && leftScope is not null && rightScope is not null)
-        { LeftTree.ItemsSource = new[] { CreateTreeItem(BuildBranchTree(leftScope.Value)) }; RightTree.ItemsSource = new[] { CreateTreeItem(BuildBranchTree(rightScope.Value)) }; }
+        { LeftTree.ItemsSource = new[] { BuildBranchTree(leftScope.Value) }; RightTree.ItemsSource = new[] { BuildBranchTree(rightScope.Value) }; }
         else ShowContentProjection();
     }
     private IReadOnlyList<FileInstance> SelectedFilesFromActiveProjection() => PairExplorer.IsVisible
@@ -220,7 +220,7 @@ public partial class MainWindow : Window
     private IReadOnlyList<FileInstance> SelectedFiles(TreeView tree)
     {
         if (tree.SelectedItems is null) return [];
-        return DistinctFiles(tree.SelectedItems.OfType<TreeViewItem>().Select(item => item.Tag).OfType<ExplorerNode>().SelectMany(node => node.Files));
+        return DistinctFiles(tree.SelectedItems.OfType<ExplorerNode>().SelectMany(node => node.Files));
     }
     private IReadOnlyList<FileInstance> DistinctFiles(IEnumerable<FileInstance> files)
     {
