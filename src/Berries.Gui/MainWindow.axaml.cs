@@ -105,7 +105,8 @@ public partial class MainWindow : Window
         leftScope = suggestion.Seed.Branch.Path; rightScope = suggestion.Counterparts[0].Branch.Path;
         PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
         ProjectionTitle.Text = $"Branch Pair — {suggestion.Counterparts[0].SharedDuplicateContentCount:N0} shared groups";
-        LeftScopeText.Text = leftScope.Value.Value; RightScopeText.Text = rightScope.Value.Value;
+        BuildPairBreadcrumbs(leftScope.Value, LeftScopeBreadcrumbs, true, "Branch");
+        BuildPairBreadcrumbs(rightScope.Value, RightScopeBreadcrumbs, true, "Branch");
         LeftTree.ItemsSource = new[] { BuildBranchTree(leftScope.Value) };
         RightTree.ItemsSource = new[] { BuildBranchTree(rightScope.Value) }; UpdateCapabilities();
     }
@@ -291,30 +292,32 @@ public partial class MainWindow : Window
     }
     private async Task ShowMessageAsync(string title, string message)
     {
-        var dialog = new Window { Title = title, Width = 700, Height = 420, Content = new Grid { Margin = new Avalonia.Thickness(20), RowDefinitions = RowDefinitions.Parse("*,Auto"), Children = { new TextBox { Text = message, IsReadOnly = true, AcceptsReturn = true, TextWrapping = Avalonia.Media.TextWrapping.Wrap }, new Button { Content = "Close", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Avalonia.Thickness(0,12,0,0) } } } };
-        if (dialog.Content is Grid grid && grid.Children[1] is Button close) { Grid.SetRow(close, 1); close.Click += (_, _) => dialog.Close(); } await dialog.ShowDialog(this);
+        var dialog = new Window { Title = title, Width = 700, Height = 420, Content = new Grid
+        {
+            RowDefinitions = new RowDefinitions("*,Auto"), Margin = new Avalonia.Thickness(16), Children =
+            {
+                new TextBox { Text = message, IsReadOnly = true, AcceptsReturn = true, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new Button { Content = "Close", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Avalonia.Thickness(0, 12, 0, 0), [Grid.RowProperty] = 1 }
+            }
+        }};
+        if (dialog.Content is Grid grid && grid.Children[1] is Button close) close.Click += (_, _) => dialog.Close(); await dialog.ShowDialog(this);
     }
     private static Control BuildDialogContent(string message, string affirmative, out Button yes, out Button no)
     {
-        yes = new Button { Content = affirmative, MinWidth = 90 }; no = new Button { Content = "Cancel", MinWidth = 90 };
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right }; buttons.Children.Add(no); buttons.Children.Add(yes);
-        var panel = new StackPanel { Margin = new Avalonia.Thickness(20), Spacing = 20 }; panel.Children.Add(new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap }); panel.Children.Add(buttons); return panel;
+        yes = new Button { Content = affirmative }; no = new Button { Content = "Cancel" }; var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
+        buttons.Children.Add(no); buttons.Children.Add(yes); var panel = new StackPanel { Margin = new Avalonia.Thickness(18), Spacing = 18 };
+        panel.Children.Add(new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap }); panel.Children.Add(buttons); return panel;
     }
-    private void RefreshRoots() { RootsList.ItemsSource = roots.ToArray(); ScanButton.IsEnabled = roots.Count > 0; RemoveRootButton.IsEnabled = roots.Count > 0; }
-    private void SetRootControlsEnabled(bool enabled) { AddRootButton.IsEnabled = enabled; RemoveRootButton.IsEnabled = enabled && roots.Count > 0; ScanButton.IsEnabled = enabled && roots.Count > 0; }
-    private void BeginProgress(string message, bool indeterminate) { StatusText.Text = message; StatusProgress.IsVisible = true; StatusProgress.IsIndeterminate = indeterminate; if (!indeterminate) StatusProgress.Value = 0; }
-    private void EndProgress(string message) { StatusText.Text = message; StatusProgress.IsVisible = false; StatusProgress.IsIndeterminate = false; }
+    private void SetRootControlsEnabled(bool enabled) { AddRootButton.IsEnabled = enabled; RemoveRootButton.IsEnabled = enabled; ScanButton.IsEnabled = enabled; }
+    private void BeginProgress(string text, bool indeterminate) { StatusText.Text = text; StatusProgress.IsVisible = true; StatusProgress.IsIndeterminate = indeterminate; if (!indeterminate) StatusProgress.Value = 0; }
+    private void EndProgress(string text) { StatusText.Text = text; StatusProgress.IsVisible = false; StatusProgress.IsIndeterminate = false; }
+    private void RefreshRoots() { RootsList.ItemsSource = null; RootsList.ItemsSource = roots.ToArray(); }
+    private void ExitMenu_Click(object? sender, RoutedEventArgs e) => Close();
 }
 
-public sealed class ExplorerNode
+public sealed class ExplorerNode(string label, IReadOnlyList<FileInstance>? files = null)
 {
-    public ExplorerNode(string label, IEnumerable<FileInstance>? files = null)
-    {
-        Label = label;
-        Files = files?.ToArray() ?? [];
-    }
-
-    public string Label { get; }
-    public IReadOnlyList<FileInstance> Files { get; set; }
+    public string Label { get; } = label;
+    public IReadOnlyList<FileInstance> Files { get; set; } = files ?? [];
     public List<ExplorerNode> Children { get; } = [];
 }
