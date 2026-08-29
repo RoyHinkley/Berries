@@ -1,5 +1,6 @@
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Berries.Core.Domain;
 
 namespace Berries.Gui;
 
@@ -151,7 +152,6 @@ public partial class MainWindow
         portraitAnalysisRefresh?.Dispose();
         portraitAnalysisRefresh = new CancellationTokenSource();
         var refresh = portraitAnalysisRefresh;
-
         portraitAnalysisTask = RefreshAnalysisGenerationAsync(refresh, completedMessage);
     }
 
