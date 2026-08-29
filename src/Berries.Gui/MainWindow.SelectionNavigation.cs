@@ -38,8 +38,7 @@ public partial class MainWindow
         var hasSession = controller.Session is not null;
         var canResolveScope = nodes.Count == 1 || (nodes.Count == 0 && currentScope is not null);
 
-        // With no selection, Content means the complete Content projection. With a
-        // selection, it means the Content represented by that selection.
+        PivotCorpusRootsMenu.IsEnabled = hasSession;
         PivotContentMenu.IsEnabled = hasSession;
         PivotDirectoryMenu.IsEnabled = hasSession && canResolveScope;
         PivotBranchMenu.IsEnabled = hasSession && canResolveScope;
@@ -48,6 +47,34 @@ public partial class MainWindow
 
         var suggestions = controller.Counterparts?.Seeds;
         PivotBranchPairMenu.IsEnabled = suggestionIndex >= 0 && suggestions is { Count: > 0 };
+    }
+
+    private void ExplorerNode_ContextRequested(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control { DataContext: ExplorerNode node } control)
+            return;
+
+        var tree = TreeContaining(node);
+        if (tree?.SelectedItems is not null && node.Files.Count > 0)
+        {
+            tree.SelectedItems.Clear();
+            tree.SelectedItems.Add(node);
+        }
+
+        PivotButton_Click(PivotButton, e);
+        PivotButton.Flyout?.ShowAt(control);
+        e.Handled = true;
+    }
+
+    private TreeView? TreeContaining(ExplorerNode node)
+    {
+        if (SingleExplorer.IsVisible && EnumerateNodes(ExplorerTree.ItemsSource).Any(candidate => ReferenceEquals(candidate, node)))
+            return ExplorerTree;
+        if (PairExplorer.IsVisible && EnumerateNodes(LeftTree.ItemsSource).Any(candidate => ReferenceEquals(candidate, node)))
+            return LeftTree;
+        if (PairExplorer.IsVisible && EnumerateNodes(RightTree.ItemsSource).Any(candidate => ReferenceEquals(candidate, node)))
+            return RightTree;
+        return null;
     }
 
     private void PivotContentOrAll_Click(object? sender, RoutedEventArgs e)
