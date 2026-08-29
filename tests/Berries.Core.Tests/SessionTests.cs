@@ -27,6 +27,45 @@ public sealed class SessionTests
     }
 
     [Fact]
+    public void BulkExcludeIsOneUndoStep()
+    {
+        var fs = new TestFileSystem();
+        var first = File("/a.txt", A);
+        var second = File("/b.txt", A);
+        var third = File("/c.txt", A);
+        var session = new BerriesSession(fs, new Portrait([first, second, third]));
+
+        session.Exclude([first, second]);
+
+        Assert.Single(session.Operations);
+        var batch = Assert.IsType<PortraitOperationBatch>(session.Operations[0]);
+        Assert.Equal(2, batch.Operations.Count);
+        Assert.Single(session.WorkingPortrait.Files);
+
+        Assert.True(session.Undo());
+        Assert.Equal(3, session.WorkingPortrait.Files.Count);
+        Assert.Empty(session.Operations);
+    }
+
+    [Fact]
+    public void BulkDeleteIsOneUndoStepAndRebuildsActions()
+    {
+        var fs = new TestFileSystem();
+        var first = File("/a.txt", A);
+        var second = File("/b.txt", A);
+        var third = File("/c.txt", A);
+        var session = new BerriesSession(fs, new Portrait([first, second, third]));
+
+        session.Delete([first, second]);
+
+        Assert.Single(session.Operations);
+        Assert.Equal(2, session.Actions.Count);
+        Assert.True(session.Undo());
+        Assert.Equal(3, session.WorkingPortrait.Files.Count);
+        Assert.Empty(session.Actions);
+    }
+
+    [Fact]
     public void MoveDeletesSourceWhenContentAlreadyExistsWithinDestinationDirectory()
     {
         var fs = new TestFileSystem();
@@ -90,31 +129,19 @@ public sealed class SessionTests
     private sealed class TestFileSystem : IFileSystem
     {
         public FileSystemPath NormalizePath(FileSystemPath path) => new(Normalize(path.Value));
-
         public FileSystemPath? GetParentDirectory(FileSystemPath path)
         {
-            var value = Normalize(path.Value);
-            var index = value.LastIndexOf('/');
+            var value = Normalize(path.Value); var index = value.LastIndexOf('/');
             return index <= 0 ? null : new FileSystemPath(value[..index]);
         }
-
         public FileSystemPath GetRelativePath(FileSystemPath relativeTo, FileSystemPath path)
         {
-            var root = Normalize(relativeTo.Value);
-            var value = Normalize(path.Value);
-            if (value == root) return new FileSystemPath(".");
-            return new FileSystemPath(value[(root.Length + 1)..]);
+            var root = Normalize(relativeTo.Value); var value = Normalize(path.Value);
+            if (value == root) return new FileSystemPath("."); return new FileSystemPath(value[(root.Length + 1)..]);
         }
-
-        public FileSystemPath Combine(FileSystemPath directory, FileSystemPath relativePath) =>
-            new(Normalize(directory.Value) + "/" + relativePath.Value.TrimStart('/'));
-
-        public bool PathsEqual(FileSystemPath left, FileSystemPath right) =>
-            Normalize(left.Value) == Normalize(right.Value);
-
-        public bool IsDescendant(FileSystemPath candidate, FileSystemPath ancestor) =>
-            Normalize(candidate.Value).StartsWith(Normalize(ancestor.Value) + "/", StringComparison.Ordinal);
-
+        public FileSystemPath Combine(FileSystemPath directory, FileSystemPath relativePath) => new(Normalize(directory.Value) + "/" + relativePath.Value.TrimStart('/'));
+        public bool PathsEqual(FileSystemPath left, FileSystemPath right) => Normalize(left.Value) == Normalize(right.Value);
+        public bool IsDescendant(FileSystemPath candidate, FileSystemPath ancestor) => Normalize(candidate.Value).StartsWith(Normalize(ancestor.Value) + "/", StringComparison.Ordinal);
         public IEnumerable<FileSystemFile> EnumerateFiles(FileSystemPath root) => throw Unexpected();
         public Stream OpenRead(FileSystemPath path) => throw Unexpected();
         public bool Exists(FileSystemPath path) => throw Unexpected();
@@ -123,7 +150,6 @@ public sealed class SessionTests
         public void MoveFile(FileSystemPath source, FileSystemPath destination) => throw Unexpected();
         public void DeleteFile(FileSystemPath path) => throw Unexpected();
         public void RemoveDirectory(FileSystemPath path) => throw Unexpected();
-
         private static string Normalize(string value) => value.Replace('\\', '/').TrimEnd('/');
         private static InvalidOperationException Unexpected() => new("Unexpected filesystem call.");
     }
