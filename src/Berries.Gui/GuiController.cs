@@ -60,11 +60,7 @@ public sealed class GuiController
     {
         if (Corpus is null || Session is null) throw new InvalidOperationException("A session must exist before analysis.");
         var corpus = Corpus; var session = Session; var settlements = new DuplicateSettlements(); var duplicateSets = session.DuplicateSets;
-        var engineProgress = new CallbackProgress<OperationProgress>(value =>
-        {
-            progress?.Report(value);
-            AnalysisProgressChanged?.Invoke(value);
-        });
+        var engineProgress = ForwardProgress(progress);
 
         Debug.WriteLine("[Berries] Analyzing directories...");
         var directories = await engine.AnalyzeDirectoriesAsync(session.WorkingPortrait, duplicateSets, settlements, engineProgress, cancellationToken);
@@ -80,6 +76,25 @@ public sealed class GuiController
         DirectoryAnalysis = directories; BranchStatistics = branches; Counterparts = counterparts;
         Debug.WriteLine($"[Berries] Analysis ready: {duplicateSets.Count:N0} duplicate Contents, {counterparts.Seeds.Count:N0} suggested branch seeds.");
     }
+
+    public Task<BestBranchPairResult?> FindBestBranchPairAsync(FileSystemPath scope, CancellationToken cancellationToken = default)
+    {
+        if (Corpus is null || Session is null || BranchStatistics is null)
+            return Task.FromResult<BestBranchPairResult?>(null);
+
+        var corpus = Corpus;
+        var duplicateSets = Session.DuplicateSets;
+        var branches = BranchStatistics.Branches;
+        var progress = ForwardProgress(null);
+        return Task.Run(() => counterpartAnalyzer.FindBestPair(corpus, scope, branches, duplicateSets, cancellationToken, progress), cancellationToken);
+    }
+
+    private IProgress<OperationProgress> ForwardProgress(IProgress<OperationProgress>? progress) =>
+        new CallbackProgress<OperationProgress>(value =>
+        {
+            progress?.Report(value);
+            AnalysisProgressChanged?.Invoke(value);
+        });
 
     private sealed class CallbackProgress<T>(Action<T> callback) : IProgress<T>
     {
