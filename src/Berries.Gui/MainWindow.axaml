@@ -44,17 +44,19 @@
               <Button x:Name="PivotButton" Content="Pivot ▾" Click="PivotButton_Click">
                 <Button.Flyout>
                   <MenuFlyout>
+                    <MenuItem x:Name="PivotCorpusRootsMenu" Header="Corpus Roots" Click="PivotCorpusRoots_Click" IsEnabled="False" />
+                    <MenuItem Header="-" />
                     <MenuItem x:Name="PivotContentMenu" Header="Group" Click="PivotContentOrAll_Click" IsEnabled="False" />
                     <MenuItem x:Name="PivotDirectoryMenu" Header="Containing Directory" Click="PivotDirectory_Click" IsEnabled="False" />
                     <MenuItem x:Name="PivotBranchMenu" Header="Branch" Click="PivotBranch_Click" IsEnabled="False" />
                     <MenuItem x:Name="PivotBestDirectoryPairMenu" Header="Best Directory Pair" Click="PivotBestDirectoryPair_Click" IsEnabled="False" />
                     <MenuItem x:Name="PivotBestBranchPairMenu" Header="Best Branch Pair" Click="PivotBestBranchPair_Click" IsEnabled="False" />
-                    <MenuItem x:Name="PivotBranchPairMenu" Header="Current Suggested Branch Pair" Click="PivotBranchPair_Click" IsEnabled="False" />
+                    <MenuItem x:Name="PivotBranchPairMenu" Header="Current Suggested Branch Pair" Click="PivotSuggestedBranchPairWithBreadcrumbs_Click" IsEnabled="False" />
                   </MenuFlyout>
                 </Button.Flyout>
               </Button>
               <Button x:Name="ForwardButton" Content="Forward" IsEnabled="False" />
-              <Button x:Name="SuggestCaseButton" Content="Suggest" Click="SuggestCaseButton_Click" IsEnabled="False" />
+              <Button x:Name="SuggestCaseButton" Content="Suggest" Click="SuggestCaseWithBreadcrumbs_Click" IsEnabled="False" />
             </StackPanel>
 
             <Button x:Name="InvertButton" Grid.Column="2" Content="Invert Selection" Click="InvertButton_Click" IsEnabled="False" />
@@ -79,7 +81,7 @@
             <TreeView x:Name="ExplorerTree" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged">
               <TreeView.ItemTemplate>
                 <TreeDataTemplate x:DataType="local:ExplorerNode" ItemsSource="{Binding Children}">
-                  <TextBlock Text="{Binding Label}" />
+                  <TextBlock Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" />
                 </TreeDataTemplate>
               </TreeView.ItemTemplate>
             </TreeView>
@@ -91,7 +93,7 @@
               <TreeView x:Name="LeftTree" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged">
                 <TreeView.ItemTemplate>
                   <TreeDataTemplate x:DataType="local:ExplorerNode" ItemsSource="{Binding Children}">
-                    <TextBlock Text="{Binding Label}" />
+                    <TextBlock Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" />
                   </TreeDataTemplate>
                 </TreeView.ItemTemplate>
               </TreeView>
@@ -101,7 +103,7 @@
               <TreeView x:Name="RightTree" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged">
                 <TreeView.ItemTemplate>
                   <TreeDataTemplate x:DataType="local:ExplorerNode" ItemsSource="{Binding Children}">
-                    <TextBlock Text="{Binding Label}" />
+                    <TextBlock Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" />
                   </TreeDataTemplate>
                 </TreeView.ItemTemplate>
               </TreeView>
