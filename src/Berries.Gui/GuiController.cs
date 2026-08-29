@@ -18,6 +18,8 @@ public sealed class GuiController
         this.fileSystem = fileSystem; this.engine = engine; this.branchStatisticsAnalyzer = branchStatisticsAnalyzer; this.counterpartAnalyzer = counterpartAnalyzer;
     }
 
+    public event Action<OperationProgress>? AnalysisProgressChanged;
+
     public Corpus? Corpus { get; private set; }
     public BerriesSession? Session { get; private set; }
     public ScanResult? Scan { get; private set; }
@@ -58,19 +60,30 @@ public sealed class GuiController
     {
         if (Corpus is null || Session is null) throw new InvalidOperationException("A session must exist before analysis.");
         var corpus = Corpus; var session = Session; var settlements = new DuplicateSettlements(); var duplicateSets = session.DuplicateSets;
+        var engineProgress = new CallbackProgress<OperationProgress>(value =>
+        {
+            progress?.Report(value);
+            AnalysisProgressChanged?.Invoke(value);
+        });
+
         Debug.WriteLine("[Berries] Analyzing directories...");
-        var directories = await engine.AnalyzeDirectoriesAsync(session.WorkingPortrait, duplicateSets, settlements, progress, cancellationToken);
+        var directories = await engine.AnalyzeDirectoriesAsync(session.WorkingPortrait, duplicateSets, settlements, engineProgress, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         Debug.WriteLine("[Berries] Analyzing branch statistics...");
         var branches = await Task.Run(() => branchStatisticsAnalyzer.Analyze(corpus, session.WorkingPortrait, duplicateSets,
-            settlements, directories.Directories, cancellationToken, progress), cancellationToken);
+            settlements, directories.Directories, cancellationToken, engineProgress), cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         Debug.WriteLine("[Berries] Finding branch counterparts...");
         var counterparts = await Task.Run(() => counterpartAnalyzer.Analyze(corpus, branches.Branches, duplicateSets,
-            directories.DirectoryPairs, settlements, seedLimit: 25, counterpartLimit: 5, cancellationToken: cancellationToken, progress: progress), cancellationToken);
+            directories.DirectoryPairs, settlements, seedLimit: 25, counterpartLimit: 5, cancellationToken: cancellationToken, progress: engineProgress), cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         DirectoryAnalysis = directories; BranchStatistics = branches; Counterparts = counterparts;
         Debug.WriteLine($"[Berries] Analysis ready: {duplicateSets.Count:N0} duplicate Contents, {counterparts.Seeds.Count:N0} suggested branch seeds.");
+    }
+
+    private sealed class CallbackProgress<T>(Action<T> callback) : IProgress<T>
+    {
+        public void Report(T value) => callback(value);
     }
 }
 
