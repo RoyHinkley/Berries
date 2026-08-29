@@ -87,10 +87,10 @@ public partial class MainWindow : Window
     {
         var session = controller.Session; if (session is null) return;
         leftScope = null; rightScope = null; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true; ProjectionTitle.Text = "Groups";
-        ExplorerTree.ItemsSource = session.DuplicateSets.OrderByDescending(set => set.Files.Count)
+        var nodes = session.DuplicateSets.OrderByDescending(set => set.Files.Count)
             .ThenBy(set => set.Files[0].Path.Value, StringComparer.OrdinalIgnoreCase)
             .Select(set => BuildGroupNode(set.Files)).ToArray();
-        UpdateCapabilities();
+        ExplorerTree.ItemsSource = nodes; UpdateCapabilities();
     }
 
     private void SuggestCaseButton_Click(object? sender, RoutedEventArgs e)
@@ -159,10 +159,8 @@ public partial class MainWindow : Window
         var selectedPaths = selectedFiles.Select(file => file.Path).ToArray();
         var targetFiles = controller.Session.DuplicateSets.Where(set => contents.Contains(set.Content)).SelectMany(set => set.Files)
             .Where(file => !selectedPaths.Any(path => fileSystem.PathsEqual(path, file.Path))).Select(file => file.Path).ToArray();
-        var leaves = EnumerateNodes(tree.ItemsSource)
-            .Where(node => node.Children.Count == 0 && node.Files.Count == 1)
-            .Where(node => targetFiles.Any(path => fileSystem.PathsEqual(path, node.Files[0].Path)))
-            .Cast<object>().ToArray();
+        var leaves = EnumerateNodes(tree.ItemsSource).Where(node => node.Children.Count == 0 && node.Files.Count == 1)
+            .Where(node => targetFiles.Any(path => fileSystem.PathsEqual(path, node.Files[0].Path))).Cast<object>().ToArray();
         tree.SelectedItems.Clear(); foreach (var item in leaves) tree.SelectedItems.Add(item);
     }
 
@@ -306,12 +304,17 @@ public partial class MainWindow : Window
     private void SetRootControlsEnabled(bool enabled) { AddRootButton.IsEnabled = enabled; RemoveRootButton.IsEnabled = enabled && roots.Count > 0; ScanButton.IsEnabled = enabled && roots.Count > 0; }
     private void BeginProgress(string message, bool indeterminate) { StatusText.Text = message; StatusProgress.IsVisible = true; StatusProgress.IsIndeterminate = indeterminate; if (!indeterminate) StatusProgress.Value = 0; }
     private void EndProgress(string message) { StatusText.Text = message; StatusProgress.IsVisible = false; StatusProgress.IsIndeterminate = false; }
+}
 
-    private sealed class ExplorerNode
+public sealed class ExplorerNode
+{
+    public ExplorerNode(string label, IEnumerable<FileInstance>? files = null)
     {
-        public ExplorerNode(string label, IEnumerable<FileInstance>? files = null) { Label = label; Files = files?.ToArray() ?? []; }
-        public string Label { get; }
-        public IReadOnlyList<FileInstance> Files { get; set; }
-        public List<ExplorerNode> Children { get; } = [];
+        Label = label;
+        Files = files?.ToArray() ?? [];
     }
+
+    public string Label { get; }
+    public IReadOnlyList<FileInstance> Files { get; set; }
+    public List<ExplorerNode> Children { get; } = [];
 }
