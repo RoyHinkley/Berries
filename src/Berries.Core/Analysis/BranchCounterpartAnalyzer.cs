@@ -8,6 +8,7 @@ public sealed record BranchCounterpart(BranchRecord Branch, int SharedDuplicateC
     double CounterpartCoverage, double Jaccard, double Score, int DirectDirectoryPairSharedContentCount = 0);
 public sealed record BranchCounterpartSeed(BranchPriorityMetric Seed, IReadOnlyList<BranchCounterpart> Counterparts, int CandidateSeedRank = 0);
 public sealed record BranchCounterpartResult(IReadOnlyList<BranchCounterpartSeed> Seeds, TimeSpan Elapsed);
+public sealed record BestBranchPairResult(FileSystemPath First, FileSystemPath Second, int SharedDuplicateContentCount, double Score);
 
 public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
 {
@@ -72,6 +73,59 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
         }
         timer.Stop(); return new BranchCounterpartResult(selected, timer.Elapsed);
     }
+
+    public BestBranchPairResult? FindBestPair(
+        Corpus corpus,
+        FileSystemPath scope,
+        IReadOnlyList<BranchRecord> branches,
+        IReadOnlyList<DuplicateSet> duplicateSets,
+        CancellationToken cancellationToken = default,
+        IProgress<OperationProgress>? progress = null)
+    {
+        var seed = branches.FirstOrDefault(branch => fileSystem.PathsEqual(branch.Path, scope));
+        if (seed is null || seed.DuplicateContentCount == 0) return null;
+
+        var seedContents = ContentsUnder(scope, duplicateSets);
+        if (seedContents.Count == 0) return null;
+
+        var candidates = branches.Where(candidate =>
+                !fileSystem.PathsEqual(candidate.Path, scope)
+                && !fileSystem.IsDescendant(candidate.Path, scope)
+                && !fileSystem.IsDescendant(scope, candidate.Path)
+                && candidate.DuplicateContentCount > 0)
+            .ToArray();
+
+        progress?.Report(new OperationProgress("Finding best branch pair", 0, candidates.Length));
+        BestBranchPairResult? best = null;
+        double bestScore = 0;
+        long completed = 0;
+
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var candidateContents = ContentsUnder(candidate.Path, duplicateSets);
+            var shared = seedContents.Count(content => candidateContents.Contains(content));
+            if (shared > 0)
+            {
+                var union = seedContents.Count + candidateContents.Count - shared;
+                var score = union == 0 ? 0 : shared * ((double)shared / union);
+                if (best is null || score > bestScore)
+                {
+                    bestScore = score;
+                    best = new BestBranchPairResult(scope, candidate.Path, shared, score);
+                }
+            }
+            progress?.Report(new OperationProgress("Finding best branch pair", ++completed, candidates.Length));
+        }
+
+        return best;
+    }
+
+    private HashSet<ContentId> ContentsUnder(FileSystemPath scope, IReadOnlyList<DuplicateSet> duplicateSets) =>
+        duplicateSets.Where(set => set.Files.Any(file =>
+                fileSystem.PathsEqual(file.ParentDirectory, scope) || fileSystem.IsDescendant(file.ParentDirectory, scope)))
+            .Select(set => set.Content)
+            .ToHashSet();
 
     private IReadOnlyList<BranchCounterpart> FindCounterparts(BranchPriorityMetric seed, IReadOnlyDictionary<FileSystemPath, BranchRecord> byPath,
         IReadOnlyList<IReadOnlySet<FileSystemPath>> touchedByDuplicateSet, IReadOnlyList<FileSystemPath> blockedRoots, int limit)
