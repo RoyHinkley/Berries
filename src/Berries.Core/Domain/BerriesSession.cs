@@ -7,6 +7,7 @@ namespace Berries.Core.Domain;
 /// <summary>
 /// One Berries working session. The InitialPortrait is fixed; WorkingPortrait and the
 /// physical ActionPlan are deterministic products of the ordered portrait operations.
+/// One top-level operation represents one user command and is therefore one Undo step.
 /// </summary>
 public sealed class BerriesSession
 {
@@ -36,16 +37,14 @@ public sealed class BerriesSession
 
     public void Exclude(IEnumerable<FileInstance> files)
     {
-        foreach (var file in DistinctCurrent(files))
-            operations.Add(new ExcludePortraitOperation(file.Path));
-        Rebuild();
+        AddCommand(DistinctCurrent(files).Select(file =>
+            (PortraitOperation)new ExcludePortraitOperation(file.Path)));
     }
 
     public void Delete(IEnumerable<FileInstance> files)
     {
-        foreach (var file in DistinctCurrent(files))
-            operations.Add(new DeletePortraitOperation(file.Path));
-        Rebuild();
+        AddCommand(DistinctCurrent(files).Select(file =>
+            (PortraitOperation)new DeletePortraitOperation(file.Path)));
     }
 
     public MoveResult Move(
@@ -54,13 +53,16 @@ public sealed class BerriesSession
         FileSystemPath destinationScope)
     {
         var collisions = new List<MoveCollision>();
+        var command = new List<PortraitOperation>();
 
+        // Resolve the command against a temporary portrait that includes each earlier
+        // decision in this same Move command. The command is committed to history only
+        // once, so Undo reverses the whole toolbar action.
+        var originalOperationCount = operations.Count;
         foreach (var requested in DistinctCurrent(files))
         {
             var source = FindCurrent(requested.Path);
-            if (source?.Content is null)
-                continue;
-            if (!IsWithinOrEqual(source.ParentDirectory, sourceScope))
+            if (source?.Content is null || !IsWithinOrEqual(source.ParentDirectory, sourceScope))
                 continue;
 
             var relativeDirectory = fileSystem.GetRelativePath(sourceScope, source.ParentDirectory);
@@ -68,16 +70,15 @@ public sealed class BerriesSession
                 ? destinationScope
                 : fileSystem.Combine(destinationScope, relativeDirectory);
 
-            // Destination organization is authoritative. If this Content is already
-            // directly within the intended destination directory, the move has already
-            // been accomplished; only the redundant source instance remains.
             var existingContent = WorkingPortrait.Files.FirstOrDefault(candidate =>
                 candidate.Content == source.Content
                 && fileSystem.PathsEqual(candidate.ParentDirectory, destinationDirectory)
                 && !fileSystem.PathsEqual(candidate.Path, source.Path));
             if (existingContent is not null)
             {
-                operations.Add(new DeletePortraitOperation(source.Path));
+                var operation = new DeletePortraitOperation(source.Path);
+                command.Add(operation);
+                operations.Add(operation);
                 Rebuild();
                 continue;
             }
@@ -91,7 +92,9 @@ public sealed class BerriesSession
             {
                 if (occupant.Content == source.Content)
                 {
-                    operations.Add(new DeletePortraitOperation(source.Path));
+                    var operation = new DeletePortraitOperation(source.Path);
+                    command.Add(operation);
+                    operations.Add(operation);
                     Rebuild();
                 }
                 else
@@ -101,7 +104,16 @@ public sealed class BerriesSession
                 continue;
             }
 
-            operations.Add(new MovePortraitOperation(source.Path, destinationPath));
+            var move = new MovePortraitOperation(source.Path, destinationPath);
+            command.Add(move);
+            operations.Add(move);
+            Rebuild();
+        }
+
+        if (command.Count > 1)
+        {
+            operations.RemoveRange(originalOperationCount, command.Count);
+            operations.Add(new PortraitOperationBatch(command));
             Rebuild();
         }
 
@@ -117,15 +129,22 @@ public sealed class BerriesSession
         return true;
     }
 
+    private void AddCommand(IEnumerable<PortraitOperation> requested)
+    {
+        var command = requested.ToArray();
+        if (command.Length == 0)
+            return;
+        operations.Add(command.Length == 1 ? command[0] : new PortraitOperationBatch(command));
+        Rebuild();
+    }
+
     private IReadOnlyList<FileInstance> DistinctCurrent(IEnumerable<FileInstance> files)
     {
         var result = new List<FileInstance>();
         foreach (var requested in files)
         {
             var current = FindCurrent(requested.Path);
-            if (current is null)
-                continue;
-            if (result.Any(existing => fileSystem.PathsEqual(existing.Path, current.Path)))
+            if (current is null || result.Any(existing => fileSystem.PathsEqual(existing.Path, current.Path)))
                 continue;
             result.Add(current);
         }
@@ -142,49 +161,60 @@ public sealed class BerriesSession
     {
         var files = InitialPortrait.Files.ToList();
         actions.Clear();
-
         foreach (var operation in operations)
+            Apply(operation, files);
+        WorkingPortrait = new Portrait(files);
+    }
+
+    private void Apply(PortraitOperation operation, List<FileInstance> files)
+    {
+        if (operation is PortraitOperationBatch batch)
         {
-            var index = files.FindIndex(file => fileSystem.PathsEqual(file.Path, operation.Source));
-            if (index < 0)
-                continue;
-
-            var file = files[index];
-            switch (operation)
-            {
-                case ExcludePortraitOperation:
-                    files.RemoveAt(index);
-                    break;
-
-                case DeletePortraitOperation:
-                    files.RemoveAt(index);
-                    actions.Add(new DeleteFileAction(file.Path));
-                    break;
-
-                case MovePortraitOperation move:
-                    files[index] = file with
-                    {
-                        Path = move.Destination,
-                        ParentDirectory = fileSystem.GetParentDirectory(move.Destination)
-                            ?? throw new InvalidOperationException($"Destination has no parent: {move.Destination}")
-                    };
-                    actions.Add(new MoveFileAction(file.Path, move.Destination));
-                    break;
-            }
+            foreach (var child in batch.Operations)
+                Apply(child, files);
+            return;
         }
 
-        WorkingPortrait = new Portrait(files);
+        var source = operation switch
+        {
+            ExcludePortraitOperation exclude => exclude.Source,
+            DeletePortraitOperation delete => delete.Source,
+            MovePortraitOperation move => move.Source,
+            _ => throw new InvalidOperationException($"Unknown portrait operation: {operation.GetType().Name}")
+        };
+
+        var index = files.FindIndex(file => fileSystem.PathsEqual(file.Path, source));
+        if (index < 0)
+            return;
+
+        var file = files[index];
+        switch (operation)
+        {
+            case ExcludePortraitOperation:
+                files.RemoveAt(index);
+                break;
+            case DeletePortraitOperation:
+                files.RemoveAt(index);
+                actions.Add(new DeleteFileAction(file.Path));
+                break;
+            case MovePortraitOperation move:
+                files[index] = file with
+                {
+                    Path = move.Destination,
+                    ParentDirectory = fileSystem.GetParentDirectory(move.Destination)
+                        ?? throw new InvalidOperationException($"Destination has no parent: {move.Destination}")
+                };
+                actions.Add(new MoveFileAction(file.Path, move.Destination));
+                break;
+        }
     }
 }
 
-public abstract record PortraitOperation(FileSystemPath Source);
-public sealed record ExcludePortraitOperation(FileSystemPath Source) : PortraitOperation(Source);
-public sealed record DeletePortraitOperation(FileSystemPath Source) : PortraitOperation(Source);
-public sealed record MovePortraitOperation(FileSystemPath Source, FileSystemPath Destination) : PortraitOperation(Source);
+public abstract record PortraitOperation;
+public sealed record PortraitOperationBatch(IReadOnlyList<PortraitOperation> Operations) : PortraitOperation;
+public sealed record ExcludePortraitOperation(FileSystemPath Source) : PortraitOperation;
+public sealed record DeletePortraitOperation(FileSystemPath Source) : PortraitOperation;
+public sealed record MovePortraitOperation(FileSystemPath Source, FileSystemPath Destination) : PortraitOperation;
 
-public sealed record MoveCollision(
-    FileInstance Source,
-    FileSystemPath Destination,
-    FileInstance Occupant);
-
+public sealed record MoveCollision(FileInstance Source, FileSystemPath Destination, FileInstance Occupant);
 public sealed record MoveResult(IReadOnlyList<MoveCollision> Collisions);
