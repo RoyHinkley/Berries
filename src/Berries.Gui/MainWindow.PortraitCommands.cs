@@ -1,6 +1,7 @@
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Berries.Core.Domain;
+using Berries.FileSystem.Abstractions;
 
 namespace Berries.Gui;
 
@@ -12,88 +13,233 @@ public partial class MainWindow
 
     private async void ExcludeImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
-        var files = SelectedFilesFromActiveProjection();
+        var files = FastSelectedFilesFromActiveProjection();
         if (files.Count == 0 || controller.Session is null || portraitCommandBusy) return;
-        await RunPortraitCommandAsync($"Excluding {files.Count:N0} files...", $"Excluded {files.Count:N0} file(s) from the Corpus.", () => controller.Session.Exclude(files));
+        await RunPortraitCommandAsync(
+            $"Excluding {files.Count:N0} files...",
+            $"Excluded {files.Count:N0} file(s) from the Corpus.",
+            () => controller.Session.Exclude(files));
     }
 
     private async void DeleteImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
-        var files = SelectedFilesFromActiveProjection();
+        var files = FastSelectedFilesFromActiveProjection();
         if (files.Count == 0 || controller.Session is null || portraitCommandBusy) return;
-        await RunPortraitCommandAsync($"Scheduling deletion of {files.Count:N0} files...", $"Scheduled deletion of {files.Count:N0} file(s).", () => controller.Session.Delete(files));
+        await RunPortraitCommandAsync(
+            $"Scheduling deletion of {files.Count:N0} files...",
+            $"Scheduled deletion of {files.Count:N0} file(s).",
+            () => controller.Session.Delete(files));
     }
 
     private async void MoveRightImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
         if (leftScope is null || rightScope is null || controller.Session is null || portraitCommandBusy) return;
-        var files = SelectedFiles(LeftTree); if (files.Count == 0) return; MoveResult? result = null;
-        await RunPortraitCommandAsync($"Moving {files.Count:N0} files...", null,
-            () => result = controller.Session.Move(files, leftScope.Value, rightScope.Value), () => MoveStatus(files.Count, result!));
+        var files = FastSelectedFiles(LeftTree);
+        if (files.Count == 0) return;
+        MoveResult? result = null;
+        await RunPortraitCommandAsync(
+            $"Moving {files.Count:N0} files...",
+            null,
+            () => result = controller.Session.Move(files, leftScope.Value, rightScope.Value),
+            () => MoveStatus(files.Count, result!));
     }
 
     private async void MoveLeftImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
         if (leftScope is null || rightScope is null || controller.Session is null || portraitCommandBusy) return;
-        var files = SelectedFiles(RightTree); if (files.Count == 0) return; MoveResult? result = null;
-        await RunPortraitCommandAsync($"Moving {files.Count:N0} files...", null,
-            () => result = controller.Session.Move(files, rightScope.Value, leftScope.Value), () => MoveStatus(files.Count, result!));
+        var files = FastSelectedFiles(RightTree);
+        if (files.Count == 0) return;
+        MoveResult? result = null;
+        await RunPortraitCommandAsync(
+            $"Moving {files.Count:N0} files...",
+            null,
+            () => result = controller.Session.Move(files, rightScope.Value, leftScope.Value),
+            () => MoveStatus(files.Count, result!));
     }
 
     private async void UndoImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
-        if (controller.Session is null || portraitCommandBusy) return; var undone = false;
-        await RunPortraitCommandAsync("Undoing the most recent operation...", null,
-            () => undone = controller.Session.Undo(), () => undone ? "Undid the most recent operation." : "Nothing to undo.");
+        if (controller.Session is null || portraitCommandBusy) return;
+        var undone = false;
+        await RunPortraitCommandAsync(
+            "Undoing the most recent operation...",
+            null,
+            () => undone = controller.Session.Undo(),
+            () => undone ? "Undid the most recent operation." : "Nothing to undo.");
     }
 
-    private async Task RunPortraitCommandAsync(string busyMessage, string? completedMessage, Action command, Func<string>? completedMessageFactory = null)
+    private IReadOnlyList<FileInstance> FastSelectedFilesFromActiveProjection() => PairExplorer.IsVisible
+        ? DistinctFilesFast(FastSelectedFiles(LeftTree).Concat(FastSelectedFiles(RightTree)))
+        : FastSelectedFiles(ExplorerTree);
+
+    private IReadOnlyList<FileInstance> FastSelectedFiles(Avalonia.Controls.TreeView tree)
     {
-        portraitCommandBusy = true; BeginPortraitBusy(busyMessage);
+        if (tree.SelectedItems is null) return [];
+        return DistinctFilesFast(tree.SelectedItems.OfType<ExplorerNode>().SelectMany(node => node.Files));
+    }
+
+    private IReadOnlyList<FileInstance> DistinctFilesFast(IEnumerable<FileInstance> files)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<FileInstance>();
+        foreach (var file in files)
+        {
+            var key = fileSystem.NormalizePath(file.Path).Value;
+            if (seen.Add(key)) result.Add(file);
+        }
+        return result;
+    }
+
+    private async Task RunPortraitCommandAsync(
+        string busyMessage,
+        string? completedMessage,
+        Action command,
+        Func<string>? completedMessageFactory = null)
+    {
+        portraitCommandBusy = true;
+        BeginPortraitBusy(busyMessage);
+
         try
         {
+            // Yield once so the busy state can paint before any potentially expensive
+            // cancellation, model work, or projection reconstruction begins.
+            await Task.Yield();
             await StopBackgroundAnalysisAsync();
             await Task.Run(command);
-            RefreshCurrentProjection(); UpdateCapabilities();
+
+            // Projection model construction can be substantial for a large branch. Build
+            // it away from the UI thread, then publish only the finished node collections.
+            await RefreshCurrentProjectionModelsAsync();
+            UpdateCapabilities();
+
             var message = completedMessageFactory?.Invoke() ?? completedMessage ?? "Operation completed.";
             EndPortraitBusy(message + " Updating analysis in background...");
             StartBackgroundAnalysisRefresh(message);
         }
-        catch (Exception ex) { EndPortraitBusy("Operation failed: " + ex.Message); }
-        finally { portraitCommandBusy = false; }
+        catch (Exception ex)
+        {
+            EndPortraitBusy("Operation failed: " + ex.Message);
+        }
+        finally
+        {
+            portraitCommandBusy = false;
+        }
+    }
+
+    private async Task RefreshCurrentProjectionModelsAsync()
+    {
+        var session = controller.Session;
+        if (session is null) return;
+
+        if (PairExplorer.IsVisible && leftScope is not null && rightScope is not null)
+        {
+            var first = leftScope.Value;
+            var second = rightScope.Value;
+            var isDirectoryPair = ProjectionTitle.Text?.StartsWith("Directory Pair", StringComparison.Ordinal) == true;
+
+            var rebuilt = await Task.Run(() =>
+            {
+                var left = isDirectoryPair ? BuildDirectoryTree(first) : BuildBranchTree(first);
+                var right = isDirectoryPair ? BuildDirectoryTree(second) : BuildBranchTree(second);
+                var shared = CountSharedContents(session, first, second, includeDescendants: !isDirectoryPair);
+                return (Left: left, Right: right, Shared: shared);
+            });
+
+            LeftTree.ItemsSource = new[] { rebuilt.Left };
+            RightTree.ItemsSource = new[] { rebuilt.Right };
+            ProjectionTitle.Text = $"{(isDirectoryPair ? "Directory Pair" : "Branch Pair")} — {rebuilt.Shared:N0} shared Groups";
+            return;
+        }
+
+        if (currentScope is not null)
+        {
+            var scope = currentScope.Value;
+            var includeDescendants = scopeIncludesDescendants;
+            var node = await Task.Run(() => includeDescendants ? BuildBranchTree(scope) : BuildDirectoryTree(scope));
+            ExplorerTree.ItemsSource = new[] { node };
+            return;
+        }
+
+        var groups = await Task.Run(() => session.DuplicateSets
+            .OrderByDescending(set => set.Files.Count)
+            .ThenBy(set => set.Files[0].Path.Value, StringComparer.OrdinalIgnoreCase)
+            .Select(set => BuildGroupNode(set.Files))
+            .ToArray());
+        ExplorerTree.ItemsSource = groups;
+    }
+
+    private int CountSharedContents(BerriesSession session, FileSystemPath first, FileSystemPath second, bool includeDescendants)
+    {
+        static bool InScope(IFileSystem fs, FileInstance file, FileSystemPath scope, bool descendants) =>
+            fs.PathsEqual(file.ParentDirectory, scope) || (descendants && fs.IsDescendant(file.ParentDirectory, scope));
+
+        var count = 0;
+        foreach (var set in session.DuplicateSets)
+        {
+            var inFirst = false;
+            var inSecond = false;
+            foreach (var file in set.Files)
+            {
+                if (!inFirst && InScope(fileSystem, file, first, includeDescendants)) inFirst = true;
+                if (!inSecond && InScope(fileSystem, file, second, includeDescendants)) inSecond = true;
+                if (inFirst && inSecond) break;
+            }
+            if (inFirst && inSecond) count++;
+        }
+        return count;
     }
 
     private void BeginPortraitBusy(string message)
     {
-        StatusText.Text = message; StatusProgress.IsVisible = true; StatusProgress.IsIndeterminate = true;
-        Cursor = new Cursor(StandardCursorType.Wait); ExplorerPanel.IsEnabled = false; MainMenu.IsEnabled = false;
+        StatusText.Text = message;
+        StatusProgress.IsVisible = true;
+        StatusProgress.IsIndeterminate = true;
+        Cursor = new Cursor(StandardCursorType.Wait);
+        ExplorerPanel.IsEnabled = false;
+        MainMenu.IsEnabled = false;
     }
 
     private void EndPortraitBusy(string message)
     {
-        StatusText.Text = message; StatusProgress.IsVisible = false; StatusProgress.IsIndeterminate = false;
-        Cursor = null; ExplorerPanel.IsEnabled = true; MainMenu.IsEnabled = true;
+        StatusText.Text = message;
+        StatusProgress.IsVisible = false;
+        StatusProgress.IsIndeterminate = false;
+        Cursor = null;
+        ExplorerPanel.IsEnabled = true;
+        MainMenu.IsEnabled = true;
     }
 
     private async Task StopBackgroundAnalysisAsync()
     {
-        var refresh = portraitAnalysisRefresh; var task = portraitAnalysisTask; if (refresh is null || task is null) return;
+        var refresh = portraitAnalysisRefresh;
+        var task = portraitAnalysisTask;
+        if (refresh is null || task is null) return;
+
         refresh.Cancel();
-        try { await task; }
-        catch (OperationCanceledException) { }
+        try
+        {
+            await task;
+        }
+        catch (OperationCanceledException)
+        {
+        }
         finally
         {
             if (refresh == portraitAnalysisRefresh)
             {
-                refresh.Dispose(); portraitAnalysisRefresh = null; portraitAnalysisTask = null;
+                refresh.Dispose();
+                portraitAnalysisRefresh = null;
+                portraitAnalysisTask = null;
             }
         }
     }
 
     private void StartBackgroundAnalysisRefresh(string completedMessage)
     {
-        portraitAnalysisRefresh?.Cancel(); portraitAnalysisRefresh?.Dispose();
-        portraitAnalysisRefresh = new CancellationTokenSource(); var refresh = portraitAnalysisRefresh;
+        portraitAnalysisRefresh?.Cancel();
+        portraitAnalysisRefresh?.Dispose();
+        portraitAnalysisRefresh = new CancellationTokenSource();
+        var refresh = portraitAnalysisRefresh;
         portraitAnalysisTask = RefreshAnalysisGenerationAsync(refresh, completedMessage);
     }
 
@@ -103,21 +249,28 @@ public partial class MainWindow
         {
             await Task.Run(() => controller.RefreshAnalysisAsync(refresh.Token), refresh.Token);
             if (refresh != portraitAnalysisRefresh) return;
-            StatusProgress.IsVisible = false; StatusProgress.IsIndeterminate = false;
-            StatusText.Text = completedMessage; UpdateCapabilities();
+            StatusText.Text = completedMessage;
+            StatusProgress.IsVisible = false;
+            StatusProgress.IsIndeterminate = false;
+            UpdateCapabilities();
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+        }
         catch (Exception ex)
         {
             if (refresh != portraitAnalysisRefresh) return;
-            StatusProgress.IsVisible = false; StatusProgress.IsIndeterminate = false;
             StatusText.Text = completedMessage + " Background analysis update failed: " + ex.Message;
+            StatusProgress.IsVisible = false;
+            StatusProgress.IsIndeterminate = false;
         }
         finally
         {
             if (refresh == portraitAnalysisRefresh)
             {
-                refresh.Dispose(); portraitAnalysisRefresh = null; portraitAnalysisTask = null;
+                refresh.Dispose();
+                portraitAnalysisRefresh = null;
+                portraitAnalysisTask = null;
             }
         }
     }
