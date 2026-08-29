@@ -4,6 +4,7 @@
     <AssemblyName>Berries</AssemblyName>
     <RootNamespace>Berries.Gui</RootNamespace>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationIcon>..\..\artwork\berries.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Berries.Core\Berries.Core.csproj" />
