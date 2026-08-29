@@ -8,7 +8,7 @@
         MinHeight="600"
         KeyDown="MainWindow_KeyDown">
   <Grid RowDefinitions="Auto,*,Auto">
-    <Menu Grid.Row="0">
+    <Menu x:Name="MainMenu" Grid.Row="0">
       <MenuItem Header="_File">
         <MenuItem Header="Select Roots..." Click="SelectRootsMenu_Click" />
         <MenuItem Header="-" />
@@ -75,17 +75,35 @@
           </StackPanel>
 
           <Grid x:Name="SingleExplorer" Grid.Row="1">
-            <TreeView x:Name="ExplorerTree" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged" />
+            <TreeView x:Name="ExplorerTree" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged">
+              <TreeView.ItemTemplate>
+                <TreeDataTemplate ItemsSource="{Binding Children}">
+                  <TextBlock Text="{Binding Label}" />
+                </TreeDataTemplate>
+              </TreeView.ItemTemplate>
+            </TreeView>
           </Grid>
 
           <Grid x:Name="PairExplorer" Grid.Row="1" IsVisible="False" ColumnDefinitions="*,*" ColumnSpacing="14">
             <Grid RowDefinitions="Auto,*">
               <TextBlock x:Name="LeftScopeText" FontWeight="SemiBold" TextWrapping="Wrap" Margin="2,0,0,8" />
-              <TreeView x:Name="LeftTree" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged" />
+              <TreeView x:Name="LeftTree" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged">
+                <TreeView.ItemTemplate>
+                  <TreeDataTemplate ItemsSource="{Binding Children}">
+                    <TextBlock Text="{Binding Label}" />
+                  </TreeDataTemplate>
+                </TreeView.ItemTemplate>
+              </TreeView>
             </Grid>
             <Grid Grid.Column="1" RowDefinitions="Auto,*">
               <TextBlock x:Name="RightScopeText" FontWeight="SemiBold" TextWrapping="Wrap" Margin="2,0,0,8" />
-              <TreeView x:Name="RightTree" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged" />
+              <TreeView x:Name="RightTree" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged">
+                <TreeView.ItemTemplate>
+                  <TreeDataTemplate ItemsSource="{Binding Children}">
+                    <TextBlock Text="{Binding Label}" />
+                  </TreeDataTemplate>
+                </TreeView.ItemTemplate>
+              </TreeView>
             </Grid>
           </Grid>
         </Grid>
