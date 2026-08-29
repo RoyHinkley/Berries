@@ -57,13 +57,13 @@
             </StackPanel>
 
             <Button x:Name="InvertButton" Grid.Column="2" Content="Invert Selection" Click="InvertButton_Click" IsEnabled="False" />
-            <Button x:Name="ExcludeButton" Grid.Column="3" Content="Exclude" Click="ExcludeButton_Click" IsEnabled="False" />
-            <Button x:Name="DeleteButton" Grid.Column="4" Content="Delete" Click="DeleteButton_Click" IsEnabled="False" />
+            <Button x:Name="ExcludeButton" Grid.Column="3" Content="Exclude" Click="ExcludeImmediateButton_Click" IsEnabled="False" />
+            <Button x:Name="DeleteButton" Grid.Column="4" Content="Delete" Click="DeleteImmediateButton_Click" IsEnabled="False" />
 
             <StackPanel Grid.Column="6" Orientation="Horizontal" Spacing="7">
-              <Button x:Name="MoveRightButton" Content="Move →" Click="MoveRightButton_Click" IsEnabled="False" />
-              <Button x:Name="MoveLeftButton" Content="← Move" Click="MoveLeftButton_Click" IsEnabled="False" />
-              <Button x:Name="UndoButton" Content="Undo" Click="UndoButton_Click" IsEnabled="False" />
+              <Button x:Name="MoveRightButton" Content="Move →" Click="MoveRightImmediateButton_Click" IsEnabled="False" />
+              <Button x:Name="MoveLeftButton" Content="← Move" Click="MoveLeftImmediateButton_Click" IsEnabled="False" />
+              <Button x:Name="UndoButton" Content="Undo" Click="UndoImmediateButton_Click" IsEnabled="False" />
             </StackPanel>
           </Grid>
         </Border>
