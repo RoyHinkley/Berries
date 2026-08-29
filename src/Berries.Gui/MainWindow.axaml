@@ -89,7 +89,7 @@
 
           <Grid x:Name="PairExplorer" Grid.Row="1" IsVisible="False" ColumnDefinitions="*,*" ColumnSpacing="14">
             <Grid RowDefinitions="Auto,*">
-              <TextBlock x:Name="LeftScopeText" FontWeight="SemiBold" TextWrapping="Wrap" Margin="2,0,0,8" />
+              <StackPanel x:Name="LeftScopeBreadcrumbs" Orientation="Horizontal" Spacing="4" Margin="2,0,0,8" />
               <TreeView x:Name="LeftTree" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged">
                 <TreeView.ItemTemplate>
                   <TreeDataTemplate x:DataType="local:ExplorerNode" ItemsSource="{Binding Children}">
@@ -99,7 +99,7 @@
               </TreeView>
             </Grid>
             <Grid Grid.Column="1" RowDefinitions="Auto,*">
-              <TextBlock x:Name="RightScopeText" FontWeight="SemiBold" TextWrapping="Wrap" Margin="2,0,0,8" />
+              <StackPanel x:Name="RightScopeBreadcrumbs" Orientation="Horizontal" Spacing="4" Margin="2,0,0,8" />
               <TreeView x:Name="RightTree" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged">
                 <TreeView.ItemTemplate>
                   <TreeDataTemplate x:DataType="local:ExplorerNode" ItemsSource="{Binding Children}">
