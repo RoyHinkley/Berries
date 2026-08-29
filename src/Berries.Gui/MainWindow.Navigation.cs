@@ -44,10 +44,11 @@ public partial class MainWindow
     private void UpdatePivotCapabilities()
     {
         var scope = SelectedScope();
+        PivotCorpusRootsMenu.IsEnabled = controller.Session is not null;
         PivotContentMenu.IsEnabled = controller.Session is not null;
         PivotDirectoryMenu.IsEnabled = scope is not null;
         PivotBranchMenu.IsEnabled = scope is not null;
-        PivotBestDirectoryPairMenu.IsEnabled = scope is not null && FindBestDirectoryPair(scope.Value) is not null;
+        PivotBestDirectoryPairMenu.IsEnabled = scope is not null;
         PivotBestBranchPairMenu.IsEnabled = scope is not null && HasBranchPairCandidate(scope.Value);
         var suggestions = controller.Counterparts?.Seeds;
         PivotBranchPairMenu.IsEnabled = suggestionIndex >= 0 && suggestions is { Count: > 0 };
@@ -89,6 +90,29 @@ public partial class MainWindow
 
     private static IEnumerable<object> SelectedObjects(TreeView tree) =>
         tree.SelectedItems?.Cast<object>() ?? [];
+
+    private async void PivotCorpusRoots_Click(object? sender, RoutedEventArgs e)
+    {
+        var corpus = controller.Corpus;
+        if (controller.Session is null || corpus is null) return;
+
+        BeginProgress("Building Corpus Roots view...", true);
+        try
+        {
+            var nodes = await Task.Run(() => corpus.Roots.Select(root => BuildBranchTree(root.Path)).ToArray());
+            currentScope = null; leftScope = null; rightScope = null;
+            PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
+            BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear();
+            ProjectionTitle.Text = "Corpus Roots";
+            ExplorerTree.ItemsSource = nodes;
+            EndProgress("Corpus Roots");
+            UpdateCapabilities();
+        }
+        catch (Exception ex)
+        {
+            EndProgress("Could not build Corpus Roots view: " + ex.Message);
+        }
+    }
 
     private void PivotSelectedContent_Click(object? sender, RoutedEventArgs e)
     {
@@ -139,15 +163,39 @@ public partial class MainWindow
     private void PivotBestDirectoryPair_Click(object? sender, RoutedEventArgs e)
     {
         var scope = SelectedScope(); if (scope is null) return;
-        var pair = FindBestDirectoryPair(scope.Value); if (pair is null) return;
-        ShowDirectoryPair(pair);
+        var pair = FindBestDirectoryPair(scope.Value);
+        if (pair is not null)
+        {
+            ShowDirectoryPair(pair);
+            return;
+        }
+
+        var record = controller.DirectoryAnalysis?.Directories
+            .FirstOrDefault(directory => fileSystem.PathsEqual(directory.Path, scope.Value));
+        StatusText.Text = record is null || record.DuplicateFileCount == 0
+            ? "The selected Directory contains no duplicate files."
+            : "The selected Directory has duplicate files, but none shared with another Directory.";
+        StatusProgress.IsVisible = false;
     }
 
-    private void PivotBestBranchPair_Click(object? sender, RoutedEventArgs e)
+    private async void PivotBestBranchPair_Click(object? sender, RoutedEventArgs e)
     {
         var scope = SelectedScope(); if (scope is null) return;
-        var pair = FindBestBranchPair(scope.Value); if (pair is null) return;
-        ShowAdHocBranchPair(pair.Value.First, pair.Value.Second, pair.Value.SharedContentCount);
+        try
+        {
+            var pair = await controller.FindBestBranchPairAsync(scope.Value);
+            if (pair is null)
+            {
+                EndProgress("No Branch Pair shares duplicate content with the selected Branch.");
+                return;
+            }
+            ShowAdHocBranchPair(pair.First, pair.Second, pair.SharedDuplicateContentCount);
+            EndProgress($"Best Branch Pair — {pair.SharedDuplicateContentCount:N0} shared Groups.");
+        }
+        catch (Exception ex)
+        {
+            EndProgress("Best Branch Pair search failed: " + ex.Message);
+        }
     }
 
     private FileSystemPath? SelectedScope()
@@ -180,42 +228,6 @@ public partial class MainWindow
         controller.DirectoryAnalysis?.DirectoryPairs
             .Where(pair => fileSystem.PathsEqual(pair.First, scope) || fileSystem.PathsEqual(pair.Second, scope))
             .OrderByDescending(pair => pair.SharedContentCount).FirstOrDefault();
-
-    private (FileSystemPath First, FileSystemPath Second, int SharedContentCount)? FindBestBranchPair(FileSystemPath scope)
-    {
-        var session = controller.Session;
-        var branches = controller.BranchStatistics?.Branches;
-        if (session is null || branches is null) return null;
-        var seed = branches.FirstOrDefault(branch => fileSystem.PathsEqual(branch.Path, scope));
-        if (seed is null || seed.DuplicateContentCount == 0) return null;
-        var seedContents = ContentsUnder(scope);
-        if (seedContents.Count == 0) return null;
-        (FileSystemPath First, FileSystemPath Second, int SharedContentCount)? best = null;
-        double bestScore = 0;
-        foreach (var candidate in branches)
-        {
-            if (fileSystem.PathsEqual(candidate.Path, scope)
-                || fileSystem.IsDescendant(candidate.Path, scope)
-                || fileSystem.IsDescendant(scope, candidate.Path)
-                || candidate.DuplicateContentCount == 0) continue;
-            var candidateContents = ContentsUnder(candidate.Path);
-            var shared = seedContents.Count(content => candidateContents.Contains(content));
-            if (shared == 0) continue;
-            var union = seedContents.Count + candidateContents.Count - shared;
-            var score = union == 0 ? 0 : shared * ((double)shared / union);
-            if (best is null || score > bestScore) { bestScore = score; best = (scope, candidate.Path, shared); }
-        }
-        return best;
-    }
-
-    private HashSet<ContentId> ContentsUnder(FileSystemPath scope)
-    {
-        var session = controller.Session ?? throw new InvalidOperationException("No session.");
-        return session.DuplicateSets
-            .Where(set => set.Files.Any(file => fileSystem.PathsEqual(file.ParentDirectory, scope)
-                || fileSystem.IsDescendant(file.ParentDirectory, scope)))
-            .Select(set => set.Content).ToHashSet();
-    }
 
     private void ShowDirectoryPair(DirectoryPair pair)
     {
@@ -250,6 +262,24 @@ public partial class MainWindow
         LeftTree.ItemsSource = new[] { BuildBranchTree(first) };
         RightTree.ItemsSource = new[] { BuildBranchTree(second) };
         UpdateCapabilities();
+    }
+
+    private void SuggestCaseWithBreadcrumbs_Click(object? sender, RoutedEventArgs e)
+    {
+        var suggestions = controller.Counterparts?.Seeds; if (suggestions is null || suggestions.Count == 0) return;
+        suggestionIndex = (suggestionIndex + 1) % suggestions.Count;
+        ShowBranchPair(suggestions[suggestionIndex]);
+        if (leftScope is not null) LeftScopeText.Text = CorpusRelativeDisplay(leftScope.Value);
+        if (rightScope is not null) RightScopeText.Text = CorpusRelativeDisplay(rightScope.Value);
+    }
+
+    private void PivotSuggestedBranchPairWithBreadcrumbs_Click(object? sender, RoutedEventArgs e)
+    {
+        var suggestions = controller.Counterparts?.Seeds;
+        if (suggestions is null || suggestionIndex < 0 || suggestionIndex >= suggestions.Count) return;
+        ShowBranchPair(suggestions[suggestionIndex]);
+        if (leftScope is not null) LeftScopeText.Text = CorpusRelativeDisplay(leftScope.Value);
+        if (rightScope is not null) RightScopeText.Text = CorpusRelativeDisplay(rightScope.Value);
     }
 
     private void ShowScopeProjection(FileSystemPath scope, bool includeDescendants, string title)
