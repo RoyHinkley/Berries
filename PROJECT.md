@@ -23,19 +23,27 @@ Berries deliberately uses a small user-facing vocabulary:
 - **Directory Pair** — two exact Directories sharing one or more Groups directly.
 - **Branch Pair** — two Branches sharing Groups somewhere beneath them.
 - **Corpus Roots** — the selected root trees contributing material to the Corpus.
+- **Suggestion** — a view Berries has found worth the user's attention because its structure indicates that one or a few decisions may resolve a relatively large amount of duplicated material.
 - **Pivot** — change the current projection/focus without changing the Working Portrait.
-- **Suggest** — identify a promising focus for attention.
+- **Suggest** — navigate to the next available Suggestion.
 - **Exclude / Delete / Move** — portrait-changing operations.
 - **Undo** — reverse the most recent portrait-changing user command.
 - **Execute** — attempt the accumulated physical filesystem work.
 
 `ContentId` is an internal technical identity for byte-identical content. It is useful and intentionally narrower than the user-facing word Group: a Group is the current collection of files sharing one ContentId.
 
+Two other technical words describe the current Branch Pair search rather than user workflow:
+
+- **Seed** — a Branch ranked as a good starting point for looking for a strong relationship.
+- **Counterpart** — a Branch scored relative to a Seed; the highest-scoring Counterpart forms that Seed's strongest candidate Branch Pair.
+
+Several Seeds are evaluated before the next Suggestion is chosen. The Suggested Branch Pair is selected by pair quality, not simply by Seed rank, and often does not come from the highest-ranked Seed.
+
 ## Governing principles
 
 1. **Corpus is logical.** Selected roots add material; configuration or interactive Exclude subtracts material from Berries consideration.
 2. **Portrait-first design.** A scan produces a fixed Initial Portrait. The Working Portrait is deterministically reconstructed from that Initial Portrait plus ordered portrait operations.
-3. **The Explorer is primary.** Analysis supplies evidence and suggestions; it does not own the workflow.
+3. **The Explorer is primary.** Analysis supplies evidence and Suggestions; it does not own the workflow.
 4. **Selection has one meaning.** Selection always denotes files. Higher tree nodes are shorthand for the files represented beneath them.
 5. **Projection is navigation.** Group, Directory, Branch, Directory Pair, Branch Pair, and Corpus Roots are organizations of the same Working Portrait.
 6. **Operations are explicit.** Exclude, Delete, and Move immediately change the Working Portrait. There is no separate Keep, Accept, or Apply state.
@@ -59,7 +67,8 @@ For a new session:
         -> construct BerriesSession
         -> Directory analysis
         -> Branch statistics
-        -> targeted Branch counterpart analysis
+        -> targeted Seed/Counterpart search
+        -> construct Suggestions
         -> Groups view becomes ready
 
 The current initial scan path is sequential: `ScanAsync()` does not return until the downstream derived analysis is complete. The Explorer shell and status bar are already present, and portrait operations trigger derived-analysis refresh in the background. Further decoupling of the initial scan/analysis lifecycle is a current design direction, not yet implemented behavior.
@@ -106,7 +115,7 @@ Current controls include:
 
 Back and Forward controls are present but navigation history is not yet implemented.
 
-`Suggest` currently uses targeted Branch counterpart results. A suggestion opens a promising Branch Pair; it is not a queue and does not force a resolution.
+`Suggest` cycles through the current Suggestions. The implemented Suggestion source is the targeted Branch search, so each current Suggestion opens a Branch Pair. A Suggestion is not a queue and does not force a resolution.
 
 ## Move semantics
 
@@ -128,16 +137,18 @@ Group discovery is size grouping followed by SHA-256 hashing of files in non-sin
 
 Directory analysis derives direct Directory records, Directory Pairs, and inexpensive graph diagnostics. Branch statistics aggregate physical and Group information through ancestry without constructing every possible Branch Pair.
 
-Promising Branch seeds are ranked by parent-relative concentration. The current useful seed measure is based on:
+Branch Seeds are ranked by parent-relative concentration. The current useful Seed measure is based on:
 
     D = Branch GroupCount
     C = Group retention / ordinary file retention relative to parent
 
     seed score = D * (1 - 1/C), for C > 1; otherwise 0
 
-Targeted counterpart search then measures actual Branch relationships using shared Groups and Jaccard overlap. The current pair score is:
+For each Seed, targeted Counterpart search measures actual Branch relationships using shared Groups and Jaccard overlap. The current pair score is:
 
     shared Group count * Jaccard overlap
+
+The search evaluates the top 10 currently eligible Seeds, finds the best Counterpart relationship for each, and chooses the strongest resulting Branch Pair as the next Suggestion. Consequently, Seed rank and Suggestion quality are deliberately not the same thing.
 
 Comprehensive ancestor-Cartesian Branch Pair enumeration was abandoned after large-corpus experiments demonstrated severe combinatorial growth without proportional user value.
 
