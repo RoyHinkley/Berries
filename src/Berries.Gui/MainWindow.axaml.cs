@@ -16,7 +16,7 @@ public partial class MainWindow : Window
 {
     private readonly WindowsFileSystem fileSystem = new();
     private readonly BerriesApplication controller;
-    private readonly ActionPlanExecutor actionPlanExecutor;
+    private readonly FileActionExecutor fileActionExecutor;
     private readonly List<string> roots = [];
     private int suggestionIndex = -1;
 
@@ -29,7 +29,7 @@ public partial class MainWindow : Window
             engine,
             new BranchStatisticsAnalyzer(fileSystem),
             new BranchCounterpartAnalyzer(fileSystem));
-        actionPlanExecutor = new ActionPlanExecutor(fileSystem);
+        fileActionExecutor = new FileActionExecutor(fileSystem);
         RefreshRoots();
     }
 
@@ -220,7 +220,7 @@ public partial class MainWindow : Window
         var session = controller.Session;
         if (session is null || session.Actions.Count == 0) return;
 
-        var contentLosses = actionPlanExecutor.CountPhysicalContentLosses(session);
+        var contentLosses = fileActionExecutor.CountPhysicalContentLosses(session);
         var approved = await ConfirmAsync(
             "Execute filesystem changes?",
             $"Planned filesystem actions: {session.Actions.Count:N0}\nGroups with no surviving physical file after the plan: {contentLosses:N0}\n\nBerries will continue past independent failures and report the results.",
@@ -231,7 +231,7 @@ public partial class MainWindow : Window
         try
         {
             await StopBackgroundAnalysisAsync();
-            var result = await actionPlanExecutor.ExecuteAsync(session.Actions);
+            var result = await fileActionExecutor.ExecuteAsync(session.Actions);
             EndPortraitBusy(
                 $"Execution finished — {result.CompletedCount:N0} completed, {result.SkippedCount:N0} dependent action(s) skipped, {result.Failures.Count:N0} failure(s)."
                 + (result.Failures.Count == 0 ? string.Empty : " See the failure summary."));
