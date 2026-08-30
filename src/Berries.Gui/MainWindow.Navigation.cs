@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Berries.Core.Analysis;
 using Berries.Core.Domain;
 using Berries.FileSystem.Abstractions;
+using Berries.Projection;
 
 namespace Berries.Gui;
 
@@ -68,19 +69,18 @@ public partial class MainWindow
         var session = controller.Session; if (session is null) return;
         var groups = Projections.GroupsForSelection(session); if (groups.Count == 0) { ShowContentProjection(); return; }
         currentScope = null; leftScope = null; rightScope = null; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
-        SetProjectionState(ProjectionKind.Groups, groups.SelectMany(set => set.Files));
+        SetProjectionState(ProjectionKind.Groups, groups.SelectMany(group => group.Files));
         BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear();
         ProjectionTitle.Text = groups.Count == 1 ? "Group" : $"Groups — {groups.Count:N0} selected";
-        ExplorerTree.ItemsSource = groups.Select(set => BuildGroupNode(set.Files)).ToArray();
+        ExplorerTree.ItemsSource = groups.Select(BuildGroupNode).ToArray();
         SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
 
-    private ExplorerNode BuildGroupNode(IReadOnlyList<FileInstance> files)
+    private static ExplorerNode BuildGroupNode(GroupProjection projection)
     {
-        var names = files.Select(file => Path.GetFileName(file.Path.Value)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
-        var shownNames = string.Join(", ", names.Take(2)); if (names.Length > 2) shownNames += ", …";
-        var node = new ExplorerNode($"{shownNames} — {files.Count:N0} files", files);
-        foreach (var file in files.OrderBy(file => file.Path.Value, StringComparer.OrdinalIgnoreCase)) node.Children.Add(new ExplorerNode(file.Path.Value, [file], file.ParentDirectory));
+        var node = new ExplorerNode(projection.Label, projection.Files);
+        foreach (var item in projection.Items)
+            node.Children.Add(new ExplorerNode(item.Label, [item.File], item.File.ParentDirectory));
         return node;
     }
 
