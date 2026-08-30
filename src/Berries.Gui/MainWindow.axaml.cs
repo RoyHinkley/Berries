@@ -105,8 +105,8 @@ public partial class MainWindow : Window
         leftScope = suggestion.Seed.Branch.Path; rightScope = suggestion.Counterparts[0].Branch.Path;
         PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
         ProjectionTitle.Text = $"Branch Pair — {suggestion.Counterparts[0].SharedDuplicateContentCount:N0} shared groups";
-        BuildPairBreadcrumbs(leftScope.Value, LeftScopeBreadcrumbs, true, "Branch");
-        BuildPairBreadcrumbs(rightScope.Value, RightScopeBreadcrumbs, true, "Branch");
+        BuildPairBreadcrumbs(leftScope.Value, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
+        BuildPairBreadcrumbs(rightScope.Value, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
         LeftTree.ItemsSource = new[] { BuildBranchTree(leftScope.Value) };
         RightTree.ItemsSource = new[] { BuildBranchTree(rightScope.Value) }; UpdateCapabilities();
     }
@@ -292,14 +292,15 @@ public partial class MainWindow : Window
     }
     private async Task ShowMessageAsync(string title, string message)
     {
-        var dialog = new Window { Title = title, Width = 700, Height = 420, Content = new Grid
+        var dialog = new Window
         {
-            RowDefinitions = new RowDefinitions("*,Auto"), Margin = new Avalonia.Thickness(16), Children =
+            Title = title, Width = 700, Height = 500,
+            Content = new Grid { RowDefinitions = new RowDefinitions("*,Auto"), Margin = new Avalonia.Thickness(16), Children =
             {
-                new TextBox { Text = message, IsReadOnly = true, AcceptsReturn = true, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new ScrollViewer { Content = new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap } },
                 new Button { Content = "Close", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Avalonia.Thickness(0, 12, 0, 0), [Grid.RowProperty] = 1 }
             }
-        }};
+        };
         if (dialog.Content is Grid grid && grid.Children[1] is Button close) close.Click += (_, _) => dialog.Close(); await dialog.ShowDialog(this);
     }
     private static Control BuildDialogContent(string message, string affirmative, out Button yes, out Button no)
