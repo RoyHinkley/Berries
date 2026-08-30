@@ -28,7 +28,7 @@ Current behavior:
         -> scan / Group discovery / derived analysis runs
         -> Groups view opens when ScanAsync completes
 
-The initial engine path is currently sequential through counterpart analysis. The UI architecture does not require this to remain so; derived analysis after portrait operations already refreshes in the background.
+The initial engine path is currently sequential through Suggestion discovery. The UI architecture does not require this to remain so; derived analysis after portrait operations already refreshes in the background.
 
 ## Explorer projections
 
@@ -78,9 +78,13 @@ Availability depends on the current focus and on which derived analysis results 
 
 ### Suggest
 
-`Suggest` cycles through targeted Branch counterpart suggestions and opens the corresponding Branch Pair.
+A Suggestion is a view Berries has identified as worth the user's attention because its structure indicates that one or a few decisions may resolve a relatively large amount of duplicated material.
 
-A suggestion is simply a promising focus. It is not a persistent work item and does not require the user to resolve it.
+The currently implemented Suggestions are Branch Pair views. `Suggest` cycles through them and opens the corresponding Branch Pair.
+
+Seed and Counterpart are internal search concepts used to find these Suggestions. They are not exposed as separate user tasks: a Seed is a promising starting Branch, and its highest-scoring Counterpart forms that Seed's best candidate Branch Pair. Several Seeds are compared before the next Suggestion is chosen, so the Suggested Branch Pair often does not come from the highest-ranked Seed.
+
+A Suggestion is not a persistent work item and does not require the user to resolve it.
 
 ### Breadcrumbs
 
@@ -154,7 +158,7 @@ After a command:
 
 1. the visible projection is rebuilt from the new Working Portrait;
 2. persistent selection is rebound to surviving/moved paths;
-3. derived Directory/Branch/counterpart analysis is invalidated;
+3. derived Directory/Branch/Suggestion analysis is invalidated;
 4. that derived analysis is recomputed in the background;
 5. capability state is refreshed when results arrive.
 
