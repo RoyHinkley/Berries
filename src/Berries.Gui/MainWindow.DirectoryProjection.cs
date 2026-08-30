@@ -102,7 +102,7 @@ public partial class MainWindow
         try
         {
             var nodeTask = BuildDirectoryExplorerNodeAsync(target.Path);
-            var sharedTask = Task.Run(() => CountSharedContents(session, first, second, includeDescendants: false));
+            var sharedTask = Projections.SharedGroupCountAsync(session, first, second, includeDescendants: false);
             await Task.WhenAll(nodeTask, sharedTask);
 
             if (side == PairSide.Left)
