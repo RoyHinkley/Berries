@@ -38,6 +38,22 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
             cancellationToken);
     }
 
+    public async Task<IReadOnlyList<BranchFilePlacement>> DuplicateFilesInBranchWithPlacementAsync(
+        BerriesSession session,
+        FileSystemPath branch,
+        IProgress<Berries.Core.OperationProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        var files = await DuplicateFilesInBranchAsync(session, branch, progress, cancellationToken);
+        var result = new BranchFilePlacement[files.Count];
+        for (var i = 0; i < files.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            result[i] = new BranchFilePlacement(files[i], DirectoryChain(branch, files[i].ParentDirectory));
+        }
+        return result;
+    }
+
     public IReadOnlyList<DuplicateSet> Groups(BerriesSession session) =>
         session.DuplicateSets
             .OrderByDescending(set => set.Files.Count)
@@ -142,6 +158,25 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
 
             return count;
         }, cancellationToken);
+    }
+
+    private IReadOnlyList<FileSystemPath> DirectoryChain(FileSystemPath branch, FileSystemPath directory)
+    {
+        if (fileSystem.PathsEqual(branch, directory)) return [];
+
+        var chain = new List<FileSystemPath>();
+        var current = directory;
+        while (!fileSystem.PathsEqual(current, branch))
+        {
+            chain.Add(current);
+            var parent = fileSystem.GetParentDirectory(current)
+                ?? throw new InvalidOperationException($"Could not reach Branch root {branch} while walking ancestors of {directory}.");
+            if (!fileSystem.PathsEqual(parent.Value, branch) && !fileSystem.IsDescendant(parent.Value, branch))
+                throw new InvalidOperationException($"Directory {directory} is outside Branch {branch}.");
+            current = parent.Value;
+        }
+        chain.Reverse();
+        return chain;
     }
 
     private bool InContext(FileInstance file, FileSystemPath context, bool includeDescendants) =>
