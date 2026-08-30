@@ -19,7 +19,8 @@ public partial class MainWindow
         if (controller.Session is not null && CorpusRootsMatchCurrentSelection())
         {
             RootsPanel.IsVisible = false; ExplorerPanel.IsVisible = true;
-            StatusText.Text = "Returned to the current session."; return;
+            StatusText.Text = "Returned to the current session.";
+            SynchronizeVisibleSelection(); UpdateSelectionSummary(); return;
         }
         ScanButton_Click(sender, e);
     }
@@ -33,8 +34,8 @@ public partial class MainWindow
 
     private void ExplorerSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        var hasSelection = sender is TreeView tree && tree.SelectedItems is { Count: > 0 };
-        InvertButton.IsEnabled = hasSelection; ExcludeButton.IsEnabled = hasSelection; DeleteButton.IsEnabled = hasSelection;
+        if (synchronizingSelection) return;
+        UpdateCapabilities();
     }
 
     private void UpdatePivotCapabilities()
@@ -57,21 +58,12 @@ public partial class MainWindow
                 && !fileSystem.IsDescendant(scope, branch.Path) && branch.DuplicateContentCount > 0);
     }
 
-    private void UpdateSelectionStatus()
-    {
-        if (StatusProgress.IsVisible) return;
-        var nodes = SelectedNodesFromActiveProjection(); if (nodes.Count == 0) return;
-        var files = DistinctFiles(nodes.SelectMany(node => node.Files));
-        var groups = files.Where(file => file.Content is not null).Select(file => file.Content!.Value).Distinct().Count();
-        if (files.Count == 1) StatusText.Text = $"{files[0].Path.Value} — {files[0].Length:N0} bytes";
-        else if (files.Count > 0) StatusText.Text = $"Selection — {files.Count:N0} files, {groups:N0} Groups";
-        else StatusText.Text = nodes.Count == 1 ? nodes[0].Label : $"Selection — {nodes.Count:N0} items";
-    }
+    private void UpdateSelectionStatus() => UpdateSelectionSummary();
 
     private IReadOnlyList<ExplorerNode> SelectedNodesFromActiveProjection()
     {
-        IEnumerable<object> selected = PairExplorer.IsVisible ? SelectedObjects(LeftTree).Concat(SelectedObjects(RightTree)) : SelectedObjects(ExplorerTree);
-        return selected.OfType<ExplorerNode>().Distinct().ToArray();
+        if (focusedNode is not null) return [focusedNode];
+        return [];
     }
 
     private static IEnumerable<object> SelectedObjects(TreeView tree) => tree.SelectedItems?.Cast<object>() ?? [];
@@ -85,7 +77,7 @@ public partial class MainWindow
             var nodes = await Task.Run(() => corpus.Roots.Select(root => BuildBranchTree(root.Path)).ToArray());
             currentScope = null; leftScope = null; rightScope = null; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
             BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear(); ProjectionTitle.Text = "Corpus Roots";
-            ExplorerTree.ItemsSource = nodes; EndProgress("Corpus Roots"); UpdateCapabilities();
+            ExplorerTree.ItemsSource = nodes; EndProgress("Corpus Roots"); SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
         }
         catch (Exception ex) { EndProgress("Could not build Corpus Roots view: " + ex.Message); }
     }
@@ -93,14 +85,15 @@ public partial class MainWindow
     private void PivotSelectedContent_Click(object? sender, RoutedEventArgs e)
     {
         var session = controller.Session; if (session is null) return;
-        var selected = DistinctFiles(SelectedNodesFromActiveProjection().SelectMany(node => node.Files));
+        var selected = session.Selection.Files;
         var contentIds = selected.Where(file => file.Content is not null).Select(file => file.Content!.Value).Distinct().ToHashSet();
         if (contentIds.Count == 0) { ShowContentProjection(); return; }
         currentScope = null; leftScope = null; rightScope = null; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
         BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear();
         ProjectionTitle.Text = contentIds.Count == 1 ? "Group" : $"Groups — {contentIds.Count:N0} selected";
         ExplorerTree.ItemsSource = session.DuplicateSets.Where(set => contentIds.Contains(set.Content)).OrderByDescending(set => set.Files.Count)
-            .Select(set => BuildGroupNode(set.Files)).ToArray(); UpdateCapabilities();
+            .Select(set => BuildGroupNode(set.Files)).ToArray();
+        SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
 
     private ExplorerNode BuildGroupNode(IReadOnlyList<FileInstance> files)
@@ -141,8 +134,8 @@ public partial class MainWindow
 
     private FileSystemPath? SelectedScope()
     {
-        var nodes = SelectedNodesFromActiveProjection(); if (nodes.Count == 1) return InferSelectedScope(nodes[0]);
-        return nodes.Count == 0 ? currentScope : null;
+        if (focusedNode is not null) return InferSelectedScope(focusedNode);
+        return currentScope;
     }
 
     private FileSystemPath? InferSelectedScope(ExplorerNode node)
@@ -167,7 +160,8 @@ public partial class MainWindow
         currentScope = null; leftScope = pair.First; rightScope = pair.Second; PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
         BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear(); ProjectionTitle.Text = $"Directory Pair — {pair.SharedContentCount:N0} shared Groups";
         BuildPairBreadcrumbs(pair.First, LeftScopeBreadcrumbs, false, "Directory"); BuildPairBreadcrumbs(pair.Second, RightScopeBreadcrumbs, false, "Directory");
-        LeftTree.ItemsSource = new[] { BuildDirectoryTree(pair.First) }; RightTree.ItemsSource = new[] { BuildDirectoryTree(pair.Second) }; UpdateCapabilities();
+        LeftTree.ItemsSource = new[] { BuildDirectoryTree(pair.First) }; RightTree.ItemsSource = new[] { BuildDirectoryTree(pair.Second) };
+        SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
 
     private ExplorerNode BuildDirectoryTree(FileSystemPath scope)
@@ -183,7 +177,8 @@ public partial class MainWindow
         currentScope = null; leftScope = first; rightScope = second; PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
         BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear(); ProjectionTitle.Text = $"Branch Pair — {sharedContentCount:N0} shared Groups";
         BuildPairBreadcrumbs(first, LeftScopeBreadcrumbs, true, "Branch"); BuildPairBreadcrumbs(second, RightScopeBreadcrumbs, true, "Branch");
-        LeftTree.ItemsSource = new[] { BuildBranchTree(first) }; RightTree.ItemsSource = new[] { BuildBranchTree(second) }; UpdateCapabilities();
+        LeftTree.ItemsSource = new[] { BuildBranchTree(first) }; RightTree.ItemsSource = new[] { BuildBranchTree(second) };
+        SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
 
     private void SuggestCaseWithBreadcrumbs_Click(object? sender, RoutedEventArgs e)
@@ -192,6 +187,7 @@ public partial class MainWindow
         suggestionIndex = (suggestionIndex + 1) % suggestions.Count; ShowBranchPair(suggestions[suggestionIndex]);
         if (leftScope is not null) BuildPairBreadcrumbs(leftScope.Value, LeftScopeBreadcrumbs, true, "Branch");
         if (rightScope is not null) BuildPairBreadcrumbs(rightScope.Value, RightScopeBreadcrumbs, true, "Branch");
+        SynchronizeVisibleSelection(); UpdateSelectionSummary();
     }
 
     private void PivotSuggestedBranchPairWithBreadcrumbs_Click(object? sender, RoutedEventArgs e)
@@ -200,6 +196,7 @@ public partial class MainWindow
         ShowBranchPair(suggestions[suggestionIndex]);
         if (leftScope is not null) BuildPairBreadcrumbs(leftScope.Value, LeftScopeBreadcrumbs, true, "Branch");
         if (rightScope is not null) BuildPairBreadcrumbs(rightScope.Value, RightScopeBreadcrumbs, true, "Branch");
+        SynchronizeVisibleSelection(); UpdateSelectionSummary();
     }
 
     private void ShowScopeProjection(FileSystemPath scope, bool includeDescendants, string title)
@@ -208,7 +205,7 @@ public partial class MainWindow
         currentScope = scope; scopeIncludesDescendants = includeDescendants; scopeProjectionTitle = title; leftScope = null; rightScope = null;
         PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true; ProjectionTitle.Text = title; BuildBreadcrumbs(scope);
         ExplorerTree.ItemsSource = includeDescendants ? new[] { BuildBranchTree(scope) } : new[] { BuildDirectoryTree(scope) };
-        UpdateCapabilities(); UpdatePivotCapabilities();
+        SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
     }
 
     private void BuildBreadcrumbs(FileSystemPath scope)
