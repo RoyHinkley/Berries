@@ -7,6 +7,6 @@ public sealed record BranchRecord(
     FileSystemPath? ParentPath,
     int FileCount,
     int DirectoryCount,
-    int DuplicateFileCount,
-    int DuplicateContentCount,
-    int DuplicateDirectoryCount);
+    int GroupedFileCount,
+    int GroupCount,
+    int GroupedDirectoryCount);
