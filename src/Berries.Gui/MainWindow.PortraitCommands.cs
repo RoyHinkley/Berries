@@ -137,25 +137,42 @@ public partial class MainWindow
             var second = rightScope.Value;
             var isDirectoryPair = ProjectionTitle.Text?.StartsWith("Directory Pair", StringComparison.Ordinal) == true;
 
+            if (isDirectoryPair)
+            {
+                var leftTask = BuildDirectoryExplorerNodeAsync(first);
+                var rightTask = BuildDirectoryExplorerNodeAsync(second);
+                var sharedTask = Task.Run(() => CountSharedContents(session, first, second, includeDescendants: false));
+                await Task.WhenAll(leftTask, rightTask, sharedTask);
+                LeftTree.ItemsSource = new[] { await leftTask };
+                RightTree.ItemsSource = new[] { await rightTask };
+                ProjectionTitle.Text = $"Directory Pair — {(await sharedTask):N0} shared Groups";
+                return;
+            }
+
             var rebuilt = await Task.Run(() =>
             {
-                var left = isDirectoryPair ? BuildDirectoryTree(first) : BuildBranchTree(first);
-                var right = isDirectoryPair ? BuildDirectoryTree(second) : BuildBranchTree(second);
-                var shared = CountSharedContents(session, first, second, includeDescendants: !isDirectoryPair);
+                var left = BuildBranchTree(first);
+                var right = BuildBranchTree(second);
+                var shared = CountSharedContents(session, first, second, includeDescendants: true);
                 return (Left: left, Right: right, Shared: shared);
             });
 
             LeftTree.ItemsSource = new[] { rebuilt.Left };
             RightTree.ItemsSource = new[] { rebuilt.Right };
-            ProjectionTitle.Text = $"{(isDirectoryPair ? "Directory Pair" : "Branch Pair")} — {rebuilt.Shared:N0} shared Groups";
+            ProjectionTitle.Text = $"Branch Pair — {rebuilt.Shared:N0} shared Groups";
             return;
         }
 
         if (currentScope is not null)
         {
             var scope = currentScope.Value;
-            var includeDescendants = scopeIncludesDescendants;
-            var node = await Task.Run(() => includeDescendants ? BuildBranchTree(scope) : BuildDirectoryTree(scope));
+            if (!scopeIncludesDescendants)
+            {
+                ExplorerTree.ItemsSource = new[] { await BuildDirectoryExplorerNodeAsync(scope) };
+                return;
+            }
+
+            var node = await Task.Run(() => BuildBranchTree(scope));
             ExplorerTree.ItemsSource = new[] { node };
             return;
         }
