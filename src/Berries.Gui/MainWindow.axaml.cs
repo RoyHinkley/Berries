@@ -292,16 +292,39 @@ public partial class MainWindow : Window
     }
     private async Task ShowMessageAsync(string title, string message)
     {
+        var close = new Button
+        {
+            Content = "Close",
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Avalonia.Thickness(0, 12, 0, 0)
+        };
+        Grid.SetRow(close, 1);
+
         var dialog = new Window
         {
-            Title = title, Width = 700, Height = 500,
-            Content = new Grid { RowDefinitions = new RowDefinitions("*,Auto"), Margin = new Avalonia.Thickness(16), Children =
+            Title = title,
+            Width = 700,
+            Height = 500,
+            Content = new Grid
             {
-                new ScrollViewer { Content = new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap } },
-                new Button { Content = "Close", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Avalonia.Thickness(0, 12, 0, 0), [Grid.RowProperty] = 1 }
+                RowDefinitions = new RowDefinitions("*,Auto"),
+                Margin = new Avalonia.Thickness(16),
+                Children =
+                {
+                    new ScrollViewer
+                    {
+                        Content = new TextBlock
+                        {
+                            Text = message,
+                            TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                        }
+                    },
+                    close
+                }
             }
         };
-        if (dialog.Content is Grid grid && grid.Children[1] is Button close) close.Click += (_, _) => dialog.Close(); await dialog.ShowDialog(this);
+        close.Click += (_, _) => dialog.Close();
+        await dialog.ShowDialog(this);
     }
     private static Control BuildDialogContent(string message, string affirmative, out Button yes, out Button no)
     {
