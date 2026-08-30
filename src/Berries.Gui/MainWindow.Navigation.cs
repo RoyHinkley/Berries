@@ -54,12 +54,7 @@ public partial class MainWindow
 
     private void UpdateSelectionStatus() => UpdateSelectionSummary();
 
-    private IReadOnlyList<ExplorerNode> SelectedNodesFromActiveProjection()
-    {
-        if (focusedNode is not null) return [focusedNode];
-        return [];
-    }
-
+    private IReadOnlyList<ExplorerNode> SelectedNodesFromActiveProjection() => focusedNode is not null ? [focusedNode] : [];
     private static IEnumerable<object> SelectedObjects(TreeView tree) => tree.SelectedItems?.Cast<object>() ?? [];
 
     private async void PivotCorpusRoots_Click(object? sender, RoutedEventArgs e)
@@ -81,14 +76,12 @@ public partial class MainWindow
     private void PivotSelectedContent_Click(object? sender, RoutedEventArgs e)
     {
         var session = controller.Session; if (session is null) return;
-        var selected = session.Selection.Files;
-        var contentIds = selected.Where(file => file.Content is not null).Select(file => file.Content!.Value).Distinct().ToHashSet();
-        if (contentIds.Count == 0) { ShowContentProjection(); return; }
+        var groups = Projections.GroupsForSelection(session);
+        if (groups.Count == 0) { ShowContentProjection(); return; }
         currentScope = null; leftScope = null; rightScope = null; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
         BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear();
-        ProjectionTitle.Text = contentIds.Count == 1 ? "Group" : $"Groups — {contentIds.Count:N0} selected";
-        ExplorerTree.ItemsSource = session.DuplicateSets.Where(set => contentIds.Contains(set.Content)).OrderByDescending(set => set.Files.Count)
-            .Select(set => BuildGroupNode(set.Files)).ToArray();
+        ProjectionTitle.Text = groups.Count == 1 ? "Group" : $"Groups — {groups.Count:N0} selected";
+        ExplorerTree.ItemsSource = groups.Select(set => BuildGroupNode(set.Files)).ToArray();
         SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
 
@@ -104,14 +97,12 @@ public partial class MainWindow
 
     private async void PivotDirectory_Click(object? sender, RoutedEventArgs e)
     {
-        var scope = SelectedScope();
-        if (scope is not null) await ShowDirectoryProjectionAsync(scope.Value);
+        var scope = SelectedScope(); if (scope is not null) await ShowDirectoryProjectionAsync(scope.Value);
     }
 
     private async void PivotBranch_Click(object? sender, RoutedEventArgs e)
     {
-        var scope = SelectedScope();
-        if (scope is not null) await ShowBranchProjectionAsync(scope.Value);
+        var scope = SelectedScope(); if (scope is not null) await ShowBranchProjectionAsync(scope.Value);
     }
 
     private async void PivotBestDirectoryPair_Click(object? sender, RoutedEventArgs e)
@@ -119,11 +110,7 @@ public partial class MainWindow
         var scope = SelectedScope(); if (scope is null) return;
         var pairs = controller.DirectoryAnalysis?.DirectoryPairs;
         var pair = pairs is null ? null : Projections.BestDirectoryPair(pairs, scope.Value);
-        if (pair is not null)
-        {
-            await ShowDirectoryPairProjectionAsync(pair);
-            return;
-        }
+        if (pair is not null) { await ShowDirectoryPairProjectionAsync(pair); return; }
         var record = controller.DirectoryAnalysis?.Directories.FirstOrDefault(directory => fileSystem.PathsEqual(directory.Path, scope.Value));
         StatusText.Text = record is null || record.DuplicateFileCount == 0 ? "The selected Directory contains no duplicate files."
             : "The selected Directory has duplicate files, but none shared with another Directory.";
@@ -168,8 +155,7 @@ public partial class MainWindow
         BeginProgress("Opening Branch Pair...", true);
         try
         {
-            var leftTask = BuildBranchExplorerNodeAsync(first);
-            var rightTask = BuildBranchExplorerNodeAsync(second);
+            var leftTask = BuildBranchExplorerNodeAsync(first); var rightTask = BuildBranchExplorerNodeAsync(second);
             await Task.WhenAll(leftTask, rightTask);
             currentScope = null; leftScope = first; rightScope = second; PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
             BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear(); ProjectionTitle.Text = $"Branch Pair — {sharedContentCount:N0} shared Groups";
@@ -209,14 +195,9 @@ public partial class MainWindow
 
     private void BuildBreadcrumbs(FileSystemPath scope, StackPanel panel, bool includeDescendants, string title, PairSide? side)
     {
-        panel.Children.Clear(); var root = CorpusRootFor(scope); if (root is null) return;
-        var chain = new List<FileSystemPath>(); var current = scope;
-        while (true)
-        {
-            chain.Add(current); if (fileSystem.PathsEqual(current, root.Value)) break;
-            var parent = fileSystem.GetParentDirectory(current); if (parent is null) break; current = parent.Value;
-        }
-        chain.Reverse();
+        panel.Children.Clear();
+        var corpus = controller.Corpus; if (corpus is null) return;
+        var chain = Projections.Breadcrumbs(corpus, scope);
         for (var i = 0; i < chain.Count; i++)
         {
             if (i > 0) panel.Children.Add(new TextBlock { Text = "›", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
@@ -235,15 +216,10 @@ public partial class MainWindow
         if (sender is not Button { Tag: BreadcrumbTarget target }) return;
         if (target.Side is null)
         {
-            if (target.IncludeDescendants) await ShowBranchProjectionAsync(target.Path);
-            else await ShowDirectoryProjectionAsync(target.Path);
+            if (target.IncludeDescendants) await ShowBranchProjectionAsync(target.Path); else await ShowDirectoryProjectionAsync(target.Path);
             return;
         }
-        if (!target.IncludeDescendants)
-        {
-            await NavigateDirectoryPairBreadcrumbAsync(target);
-            return;
-        }
+        if (!target.IncludeDescendants) { await NavigateDirectoryPairBreadcrumbAsync(target); return; }
         await NavigatePairBreadcrumbAsync(target);
     }
 
@@ -251,7 +227,6 @@ public partial class MainWindow
     {
         var session = controller.Session;
         if (session is null || leftScope is null || rightScope is null || target.Side is null) return;
-
         var side = target.Side.Value;
         var first = side == PairSide.Left ? target.Path : leftScope.Value;
         var second = side == PairSide.Right ? target.Path : rightScope.Value;
@@ -264,14 +239,12 @@ public partial class MainWindow
 
             if (side == PairSide.Left)
             {
-                leftScope = target.Path;
-                LeftTree.ItemsSource = new[] { await nodeTask };
+                leftScope = target.Path; LeftTree.ItemsSource = new[] { await nodeTask };
                 BuildPairBreadcrumbs(target.Path, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
             }
             else
             {
-                rightScope = target.Path;
-                RightTree.ItemsSource = new[] { await nodeTask };
+                rightScope = target.Path; RightTree.ItemsSource = new[] { await nodeTask };
                 BuildPairBreadcrumbs(target.Path, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
             }
 
@@ -280,17 +253,7 @@ public partial class MainWindow
             EndProgress($"Branch Pair — {shared:N0} shared Groups.");
             SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
         }
-        catch (Exception ex)
-        {
-            EndProgress("Could not open Branch: " + ex.Message);
-        }
-    }
-
-    private FileSystemPath? CorpusRootFor(FileSystemPath path)
-    {
-        var corpus = controller.Corpus; if (corpus is null) return null;
-        foreach (var root in corpus.Roots.Select(item => item.Path)) if (fileSystem.PathsEqual(path, root) || fileSystem.IsDescendant(path, root)) return root;
-        return null;
+        catch (Exception ex) { EndProgress("Could not open Branch: " + ex.Message); }
     }
 
     private enum PairSide { Left, Right }
