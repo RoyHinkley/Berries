@@ -38,13 +38,59 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
             cancellationToken);
     }
 
+    public IReadOnlyList<DuplicateSet> Groups(BerriesSession session) =>
+        session.DuplicateSets
+            .OrderByDescending(set => set.Files.Count)
+            .ThenBy(set => set.Files[0].Path.Value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    public IReadOnlyList<DuplicateSet> GroupsForSelection(BerriesSession session)
+    {
+        var contents = session.Selection.Files
+            .Where(file => file.Content is not null)
+            .Select(file => file.Content!.Value)
+            .ToHashSet();
+        return Groups(session).Where(set => contents.Contains(set.Content)).ToArray();
+    }
+
+    public IReadOnlyList<FileInstance> SelectedFilesInContext(
+        BerriesSession session,
+        FileSystemPath context,
+        bool includeDescendants) =>
+        session.Selection.Files.Where(file => InContext(file, context, includeDescendants)).ToArray();
+
+    public FileSystemPath? CorpusRootFor(Corpus corpus, FileSystemPath path)
+    {
+        foreach (var root in corpus.Roots.Select(item => item.Path))
+            if (fileSystem.PathsEqual(path, root) || fileSystem.IsDescendant(path, root))
+                return root;
+        return null;
+    }
+
+    public IReadOnlyList<FileSystemPath> AncestorsWithinCorpus(Corpus corpus, FileSystemPath path)
+    {
+        var root = CorpusRootFor(corpus, path);
+        if (root is null) return [];
+
+        var chain = new List<FileSystemPath>();
+        var current = path;
+        while (true)
+        {
+            chain.Add(current);
+            if (fileSystem.PathsEqual(current, root.Value)) break;
+            var parent = fileSystem.GetParentDirectory(current);
+            if (parent is null) break;
+            current = parent.Value;
+        }
+        chain.Reverse();
+        return chain;
+    }
+
     public DirectoryPair? BestDirectoryPair(
         IReadOnlyList<DirectoryPair> pairs,
         FileSystemPath directory) =>
         pairs
-            .Where(pair =>
-                fileSystem.PathsEqual(pair.First, directory) ||
-                fileSystem.PathsEqual(pair.Second, directory))
+            .Where(pair => fileSystem.PathsEqual(pair.First, directory) || fileSystem.PathsEqual(pair.Second, directory))
             .OrderByDescending(pair => pair.SharedContentCount)
             .FirstOrDefault();
 
@@ -53,8 +99,7 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
         FileSystemPath branch)
     {
         var selected = branches.FirstOrDefault(candidate => fileSystem.PathsEqual(candidate.Path, branch));
-        if (selected is null || selected.DuplicateContentCount == 0)
-            return false;
+        if (selected is null || selected.DuplicateContentCount == 0) return false;
 
         return branches.Any(candidate =>
             candidate.DuplicateContentCount > 0 &&
@@ -123,8 +168,7 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 foreach (var file in sets[i].Files)
-                    if (includes(file) && paths.Add(file.Path))
-                        files.Add(file);
+                    if (includes(file) && paths.Add(file.Path)) files.Add(file);
 
                 if ((i & 0xff) == 0 || i + 1 == sets.Count)
                     progress?.Report(new Berries.Core.OperationProgress(progressMessage, i + 1, sets.Count));
