@@ -267,7 +267,7 @@ public partial class MainWindow
         try
         {
             var nodeTask = BuildBranchExplorerNodeAsync(target.Path);
-            var sharedTask = Task.Run(() => CountSharedContents(session, first, second, includeDescendants: true));
+            var sharedTask = Projections.SharedGroupCountAsync(session, first, second, includeDescendants: true);
             await Task.WhenAll(nodeTask, sharedTask);
 
             if (side == PairSide.Left)
