@@ -14,27 +14,27 @@ public sealed class BranchPriorityMetricsTests
             null,
             FileCount: 1000,
             DirectoryCount: 100,
-            DuplicateFileCount: 500,
-            DuplicateContentCount: 100,
-            DuplicateDirectoryCount: 50);
+            GroupedFileCount: 500,
+            GroupCount: 100,
+            GroupedDirectoryCount: 50);
 
         var child = new BranchRecord(
             Path(@"X:\Corpus\Focused"),
             parent.Path,
             FileCount: 100,
             DirectoryCount: 10,
-            DuplicateFileCount: 80,
-            DuplicateContentCount: 80,
-            DuplicateDirectoryCount: 8);
+            GroupedFileCount: 80,
+            GroupCount: 80,
+            GroupedDirectoryCount: 8);
 
         var metric = Assert.Single(BranchPriorityMetrics.Calculate(new[] { parent, child }));
 
-        Assert.Equal(0.8, metric.DuplicateContentRetention, 12);
+        Assert.Equal(0.8, metric.GroupRetention, 12);
         Assert.Equal(0.1, metric.FileRetention, 12);
         Assert.Equal(8.0, metric.Concentration, 12);
-        Assert.Equal(640.0, metric.ContentTimesConcentration, 12);
-        Assert.Equal(80 * Math.Log(8), metric.ContentTimesLogConcentration, 12);
-        Assert.Equal(70.0, metric.ExcessConcentratedContent, 12);
+        Assert.Equal(640.0, metric.GroupsTimesConcentration, 12);
+        Assert.Equal(80 * Math.Log(8), metric.GroupsTimesLogConcentration, 12);
+        Assert.Equal(70.0, metric.ExcessConcentratedGroups, 12);
     }
 
     [Fact]
@@ -48,8 +48,8 @@ public sealed class BranchPriorityMetricsTests
         var metric = Assert.Single(BranchPriorityMetrics.Calculate(new[] { parent, child }));
 
         Assert.Equal(0.4, metric.Concentration, 12);
-        Assert.Equal(0.0, metric.ContentTimesLogConcentration, 12);
-        Assert.Equal(0.0, metric.ExcessConcentratedContent, 12);
+        Assert.Equal(0.0, metric.GroupsTimesLogConcentration, 12);
+        Assert.Equal(0.0, metric.ExcessConcentratedGroups, 12);
     }
 
     private static FileSystemPath Path(string value) => new(value);
