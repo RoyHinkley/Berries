@@ -43,12 +43,14 @@ public partial class MainWindow
 
     private async void PivotCorpusRoots_Click(object? sender, RoutedEventArgs e)
     {
-        var corpus = controller.Corpus; if (controller.Session is null || corpus is null) return;
+        var corpus = controller.Corpus;
+        var session = controller.Session;
+        if (session is null || corpus is null) return;
         BeginProgress("Building Corpus Roots view...", true);
         try
         {
-            var tasks = corpus.Roots.Select(root => BuildBranchExplorerNodeAsync(root.Path)).ToArray(); await Task.WhenAll(tasks);
-            var nodes = tasks.Select(task => task.Result).ToArray();
+            var projections = await Projections.CorpusRootsAsync(session, corpus);
+            var nodes = projections.Select(projection => BuildBranchExplorerNode(projection.Root)).ToArray();
             PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
             SetProjectionState(ProjectionKind.CorpusRoots, nodes.SelectMany(node => node.Files));
             BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear(); ProjectionTitle.Text = "Corpus Roots"; ExplorerTree.ItemsSource = nodes;
