@@ -22,8 +22,11 @@ public sealed class ActionPlanExecutor(IFileSystem fileSystem)
     public Task<ActionPlanExecutionResult> ExecuteAsync(
         IReadOnlyList<FileAction> actions,
         IProgress<OperationProgress>? progress = null,
-        CancellationToken cancellationToken = default) =>
-        Task.Run(() => Execute(actions, progress, cancellationToken), cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        var snapshot = actions.ToArray();
+        return Task.Run(() => Execute(snapshot, progress, cancellationToken), cancellationToken);
+    }
 
     private ActionPlanExecutionResult Execute(
         IReadOnlyList<FileAction> actions,
