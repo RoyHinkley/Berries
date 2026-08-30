@@ -43,6 +43,8 @@ public sealed class BerriesApplication
         IProgress<OperationProgress>? analysisProgress = null,
         CancellationToken cancellationToken = default)
     {
+        ClearSessionState();
+
         var totalTimer = Stopwatch.StartNew();
         var phaseTimer = Stopwatch.StartNew();
         Debug.WriteLine("[Berries] Normalizing corpus roots...");
@@ -151,16 +153,36 @@ public sealed class BerriesApplication
             corpus, branch, branches, duplicateSets, cancellationToken, progress), cancellationToken);
     }
 
-    private Task RunSessionCommandAsync(Action<BerriesSession> command, CancellationToken cancellationToken)
+    private async Task RunSessionCommandAsync(Action<BerriesSession> command, CancellationToken cancellationToken)
     {
         var session = Session ?? throw new InvalidOperationException("A session must exist before a portrait operation.");
-        return Task.Run(() => command(session), cancellationToken);
+        var operationCount = session.Operations.Count;
+        await Task.Run(() => command(session), cancellationToken);
+        if (session.Operations.Count != operationCount) InvalidateAnalysis();
     }
 
-    private Task<T> RunSessionCommandAsync<T>(Func<BerriesSession, T> command, CancellationToken cancellationToken)
+    private async Task<T> RunSessionCommandAsync<T>(Func<BerriesSession, T> command, CancellationToken cancellationToken)
     {
         var session = Session ?? throw new InvalidOperationException("A session must exist before a portrait operation.");
-        return Task.Run(() => command(session), cancellationToken);
+        var operationCount = session.Operations.Count;
+        var result = await Task.Run(() => command(session), cancellationToken);
+        if (session.Operations.Count != operationCount) InvalidateAnalysis();
+        return result;
+    }
+
+    private void ClearSessionState()
+    {
+        Corpus = null;
+        Session = null;
+        Scan = null;
+        InvalidateAnalysis();
+    }
+
+    private void InvalidateAnalysis()
+    {
+        DirectoryAnalysis = null;
+        BranchStatistics = null;
+        Counterparts = null;
     }
 
     private IProgress<OperationProgress> ForwardProgress(IProgress<OperationProgress>? progress) =>
