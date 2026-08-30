@@ -1,3 +1,4 @@
+using Berries.Core.Analysis;
 using Berries.Core.Domain;
 using Berries.FileSystem.Abstractions;
 
@@ -35,6 +36,31 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
             "Finding duplicate files in branch",
             progress,
             cancellationToken);
+    }
+
+    public DirectoryPair? BestDirectoryPair(
+        IReadOnlyList<DirectoryPair> pairs,
+        FileSystemPath directory) =>
+        pairs
+            .Where(pair =>
+                fileSystem.PathsEqual(pair.First, directory) ||
+                fileSystem.PathsEqual(pair.Second, directory))
+            .OrderByDescending(pair => pair.SharedContentCount)
+            .FirstOrDefault();
+
+    public bool HasBranchPairCandidate(
+        IReadOnlyList<BranchRecord> branches,
+        FileSystemPath branch)
+    {
+        var selected = branches.FirstOrDefault(candidate => fileSystem.PathsEqual(candidate.Path, branch));
+        if (selected is null || selected.DuplicateContentCount == 0)
+            return false;
+
+        return branches.Any(candidate =>
+            candidate.DuplicateContentCount > 0 &&
+            !fileSystem.PathsEqual(candidate.Path, branch) &&
+            !fileSystem.IsDescendant(candidate.Path, branch) &&
+            !fileSystem.IsDescendant(branch, candidate.Path));
     }
 
     public Task<int> SharedGroupCountAsync(
