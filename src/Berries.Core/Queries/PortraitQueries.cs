@@ -127,6 +127,11 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
         return chain;
     }
 
+    public DirectoryRecord? DirectoryRecord(
+        IReadOnlyList<DirectoryRecord> directories,
+        FileSystemPath directory) =>
+        directories.FirstOrDefault(record => fileSystem.PathsEqual(record.Path, directory));
+
     public DirectoryPair? BestDirectoryPair(
         IReadOnlyList<DirectoryPair> pairs,
         FileSystemPath directory) =>
