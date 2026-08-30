@@ -8,22 +8,13 @@ public partial class MainWindow
 {
     private void MainWindow_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Escape || !ExplorerPanel.IsVisible)
+        if (e.Key != Key.Escape || !ExplorerPanel.IsVisible || controller.Session is not { } session)
             return;
 
-        if (PairExplorer.IsVisible)
-        {
-            ClearTreeSelection(LeftTree);
-            ClearTreeSelection(RightTree);
-        }
-        else
-        {
-            ClearTreeSelection(ExplorerTree);
-        }
-
-        InvertButton.IsEnabled = false;
-        ExcludeButton.IsEnabled = false;
-        DeleteButton.IsEnabled = false;
+        session.Selection.Clear();
+        SynchronizeVisibleSelection();
+        UpdateSelectionSummary();
+        UpdateCapabilities();
         e.Handled = true;
     }
 
@@ -32,11 +23,10 @@ public partial class MainWindow
 
     private void PivotButton_Click(object? sender, RoutedEventArgs e)
     {
-        // Keep opening the Pivot menu cheap. Resolve descendant files and counterpart
-        // analyses only after the user chooses an operation.
-        var nodes = SelectedNodesFromActiveProjection();
+        // Selection is persistent Core state; focus identifies the particular Explorer
+        // object from which a location-oriented pivot should be resolved.
         var hasSession = controller.Session is not null;
-        var canResolveScope = nodes.Count == 1 || (nodes.Count == 0 && currentScope is not null);
+        var canResolveScope = focusedNode is not null || currentScope is not null;
 
         PivotCorpusRootsMenu.IsEnabled = hasSession;
         PivotContentMenu.IsEnabled = hasSession;
@@ -54,13 +44,7 @@ public partial class MainWindow
         if (sender is not Control { DataContext: ExplorerNode node } control)
             return;
 
-        var tree = TreeContaining(node);
-        if (tree?.SelectedItems is not null && node.Files.Count > 0)
-        {
-            tree.SelectedItems.Clear();
-            tree.SelectedItems.Add(node);
-        }
-
+        focusedNode = node;
         PivotButton_Click(PivotButton, e);
         PivotButton.Flyout?.ShowAt(control);
         e.Handled = true;
@@ -82,7 +66,7 @@ public partial class MainWindow
         if (controller.Session is null)
             return;
 
-        if (SelectedNodesFromActiveProjection().Count > 0)
+        if (!controller.Session.Selection.IsEmpty)
         {
             PivotSelectedContent_Click(sender, e);
             return;
