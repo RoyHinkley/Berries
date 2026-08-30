@@ -6,7 +6,7 @@ using Berries.FileSystem.Abstractions;
 
 namespace Berries.Projection;
 
-public sealed class ProjectionService(PortraitQueries queries, IFileSystem fileSystem)
+public sealed class ProjectionService(PortraitQueries queries)
 {
     public async Task<DirectoryProjection> DirectoryAsync(
         BerriesSession session,
@@ -25,41 +25,38 @@ public sealed class ProjectionService(PortraitQueries queries, IFileSystem fileS
         IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        var files = await queries.DuplicateFilesInBranchAsync(session, branch, progress, cancellationToken);
+        var placements = await queries.DuplicateFilesInBranchWithPlacementAsync(session, branch, progress, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
         var root = new BranchProjectionNode(branch.Value, branch);
-        foreach (var file in files)
+        foreach (var placement in placements)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var relative = fileSystem.GetRelativePath(branch, file.Path).Value;
-            var parts = relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
             var current = root;
-            var currentDirectory = branch;
-
-            for (var i = 0; i < parts.Length - 1; i++)
+            foreach (var directory in placement.Directories)
             {
-                currentDirectory = new FileSystemPath(Path.Combine(currentDirectory.Value, parts[i]));
-                var directory = currentDirectory;
                 var child = current.Children.FirstOrDefault(node =>
-                    node.Directory is not null && fileSystem.PathsEqual(node.Directory.Value, directory));
+                    node.Directory is not null && StringComparer.OrdinalIgnoreCase.Equals(node.Directory.Value.Value, directory.Value));
                 if (child is null)
                 {
-                    child = new BranchProjectionNode(parts[i], directory);
+                    child = new BranchProjectionNode(Path.GetFileName(directory.Value), directory);
                     current.Children.Add(child);
                 }
                 current = child;
             }
 
-            current.Children.Add(new BranchProjectionNode(parts.Length == 0 ? file.Path.Value : parts[^1], file: file));
+            current.Children.Add(new BranchProjectionNode(Path.GetFileName(placement.File.Path.Value), file: placement.File));
         }
 
         PopulateFiles(root, cancellationToken);
         return new BranchProjection(branch, root);
     }
 
-    public IReadOnlyList<DuplicateSet> Groups(BerriesSession session) => queries.Groups(session);
-    public IReadOnlyList<DuplicateSet> GroupsForSelection(BerriesSession session) => queries.GroupsForSelection(session);
+    public IReadOnlyList<GroupProjection> Groups(BerriesSession session) =>
+        queries.Groups(session).Select(ProjectGroup).ToArray();
+
+    public IReadOnlyList<GroupProjection> GroupsForSelection(BerriesSession session) =>
+        queries.GroupsForSelection(session).Select(ProjectGroup).ToArray();
 
     public IReadOnlyList<FileInstance> SelectedFilesInContext(BerriesSession session, FileSystemPath context, bool includeDescendants) =>
         queries.SelectedFilesInContext(session, context, includeDescendants);
@@ -81,6 +78,21 @@ public sealed class ProjectionService(PortraitQueries queries, IFileSystem fileS
         IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default) =>
         queries.SharedGroupCountAsync(session, first, second, includeDescendants, progress, cancellationToken);
+
+    private static GroupProjection ProjectGroup(DuplicateSet group)
+    {
+        var names = group.Files.Select(file => Path.GetFileName(file.Path.Value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var shownNames = string.Join(", ", names.Take(2));
+        if (names.Length > 2) shownNames += ", …";
+        return new GroupProjection(
+            $"{shownNames} — {group.Files.Count:N0} files",
+            group.Files,
+            group.Files.OrderBy(file => file.Path.Value, StringComparer.OrdinalIgnoreCase)
+                .Select(file => new GroupProjectionFile(file.Path.Value, file)).ToArray());
+    }
 
     private static IReadOnlyList<FileInstance> PopulateFiles(BranchProjectionNode node, CancellationToken cancellationToken)
     {
