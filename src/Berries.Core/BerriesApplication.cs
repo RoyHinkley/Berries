@@ -83,6 +83,22 @@ public sealed class BerriesApplication
         return Scan;
     }
 
+    public Task ExcludeAsync(IReadOnlyList<FileInstance> files, CancellationToken cancellationToken = default) =>
+        RunSessionCommandAsync(session => session.Exclude(files), cancellationToken);
+
+    public Task DeleteAsync(IReadOnlyList<FileInstance> files, CancellationToken cancellationToken = default) =>
+        RunSessionCommandAsync(session => session.Delete(files), cancellationToken);
+
+    public Task<MoveResult> MoveAsync(
+        IReadOnlyList<FileInstance> files,
+        FileSystemPath source,
+        FileSystemPath destination,
+        CancellationToken cancellationToken = default) =>
+        RunSessionCommandAsync(session => session.Move(files, source, destination), cancellationToken);
+
+    public Task<bool> UndoAsync(CancellationToken cancellationToken = default) =>
+        RunSessionCommandAsync(session => session.Undo(), cancellationToken);
+
     public Task RefreshAnalysisAsync(CancellationToken cancellationToken = default) =>
         RefreshAnalysisAsync(null, cancellationToken);
 
@@ -133,6 +149,18 @@ public sealed class BerriesApplication
         var progress = ForwardProgress(null);
         return Task.Run(() => counterpartAnalyzer.FindBestPair(
             corpus, branch, branches, duplicateSets, cancellationToken, progress), cancellationToken);
+    }
+
+    private Task RunSessionCommandAsync(Action<BerriesSession> command, CancellationToken cancellationToken)
+    {
+        var session = Session ?? throw new InvalidOperationException("A session must exist before a portrait operation.");
+        return Task.Run(() => command(session), cancellationToken);
+    }
+
+    private Task<T> RunSessionCommandAsync<T>(Func<BerriesSession, T> command, CancellationToken cancellationToken)
+    {
+        var session = Session ?? throw new InvalidOperationException("A session must exist before a portrait operation.");
+        return Task.Run(() => command(session), cancellationToken);
     }
 
     private IProgress<OperationProgress> ForwardProgress(IProgress<OperationProgress>? progress) =>
