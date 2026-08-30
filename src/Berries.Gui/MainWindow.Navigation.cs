@@ -49,7 +49,7 @@ public partial class MainWindow
         PivotBestBranchPairMenu.IsEnabled = scope is not null
             && branches is not null
             && Projections.HasBranchPairCandidate(branches, scope.Value);
-        var suggestions = controller.Counterparts?.Seeds;
+        var suggestions = controller.Suggestions?.Suggestions;
         PivotBranchPairMenu.IsEnabled = suggestionIndex >= 0 && suggestions is { Count: > 0 };
     }
 
@@ -207,7 +207,7 @@ public partial class MainWindow
 
     private async void Suggest_Click(object? sender, RoutedEventArgs e)
     {
-        var suggestions = controller.Counterparts?.Seeds;
+        var suggestions = controller.Suggestions?.Suggestions;
         if (suggestions is null || suggestions.Count == 0) return;
         suggestionIndex = (suggestionIndex + 1) % suggestions.Count;
         await ShowBranchPairAsync(suggestions[suggestionIndex]);
@@ -218,7 +218,7 @@ public partial class MainWindow
 
     private async void PivotSuggestedBranchPair_Click(object? sender, RoutedEventArgs e)
     {
-        var suggestions = controller.Counterparts?.Seeds;
+        var suggestions = controller.Suggestions?.Suggestions;
         if (suggestions is null || suggestionIndex < 0 || suggestionIndex >= suggestions.Count) return;
         await ShowBranchPairAsync(suggestions[suggestionIndex]);
         RebuildCurrentPairBreadcrumbs();
@@ -241,12 +241,7 @@ public partial class MainWindow
         BreadcrumbPanel.IsVisible = BreadcrumbPanel.Children.Count > 0;
     }
 
-    private void BuildPairBreadcrumbs(
-        FileSystemPath path,
-        StackPanel panel,
-        bool includeDescendants,
-        string title,
-        PairSide side) =>
+    private void BuildPairBreadcrumbs(FileSystemPath path, StackPanel panel, bool includeDescendants, string title, PairSide side) =>
         BuildBreadcrumbs(path, panel, includeDescendants, title, side);
 
     private void BuildBreadcrumbs(
