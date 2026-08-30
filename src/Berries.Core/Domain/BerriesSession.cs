@@ -37,6 +37,10 @@ public sealed class BerriesSession
         .Select(group => new DuplicateSet(group.Key, group.ToArray()))
         .ToArray();
 
+    public int SelectedGroupCount => Selection.CountGroups(DuplicateSets);
+
+    public void InvertSelectedCopies() => Selection.InvertSelectedCopies(DuplicateSets);
+
     public void Exclude(IEnumerable<FileInstance> files) =>
         AddCommand(DistinctCurrent(files).Select(file =>
             (PortraitOperation)new ExcludePortraitOperation(file.Path)));
