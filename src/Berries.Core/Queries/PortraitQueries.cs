@@ -69,6 +69,18 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
         return Groups(session).Where(set => contents.Contains(set.Content)).ToArray();
     }
 
+    public IReadOnlyList<FileInstance> DistinctFiles(IEnumerable<FileInstance> files)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<FileInstance>();
+        foreach (var file in files)
+        {
+            var key = fileSystem.NormalizePath(file.Path).Value;
+            if (seen.Add(key)) result.Add(file);
+        }
+        return result;
+    }
+
     public IReadOnlyList<FileInstance> FilesInContext(
         IEnumerable<FileInstance> files,
         FileSystemPath context,
@@ -80,6 +92,13 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
         FileSystemPath context,
         bool includeDescendants) =>
         FilesInContext(session.Selection.Files, context, includeDescendants);
+
+    public bool CorpusRootsMatch(Corpus corpus, IEnumerable<FileSystemPath> roots)
+    {
+        var requested = roots.ToArray();
+        if (corpus.Roots.Count != requested.Length) return false;
+        return requested.All(root => corpus.Roots.Any(existing => fileSystem.PathsEqual(existing.Path, root)));
+    }
 
     public FileSystemPath? CorpusRootFor(Corpus corpus, FileSystemPath path)
     {
@@ -191,7 +210,7 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
 
     private bool InBranch(FileInstance file, FileSystemPath branch) => InContext(file, branch, true);
 
-    private static Task<IReadOnlyList<FileInstance>> FindDuplicateFilesAsync(
+    private Task<IReadOnlyList<FileInstance>> FindDuplicateFilesAsync(
         BerriesSession session,
         Func<FileInstance, bool> includes,
         string progressMessage,
@@ -202,14 +221,17 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
         {
             var sets = session.DuplicateSets;
             var files = new List<FileInstance>();
-            var paths = new HashSet<FileSystemPath>();
+            var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             progress?.Report(new Berries.Core.OperationProgress(progressMessage, 0, sets.Count));
 
             for (var i = 0; i < sets.Count; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 foreach (var file in sets[i].Files)
-                    if (includes(file) && paths.Add(file.Path)) files.Add(file);
+                {
+                    var key = fileSystem.NormalizePath(file.Path).Value;
+                    if (includes(file) && paths.Add(key)) files.Add(file);
+                }
 
                 if ((i & 0xff) == 0 || i + 1 == sets.Count)
                     progress?.Report(new Berries.Core.OperationProgress(progressMessage, i + 1, sets.Count));
