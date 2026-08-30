@@ -14,7 +14,7 @@ public sealed class BerriesSession
     private readonly IFileSystem fileSystem;
     private readonly List<PortraitOperation> operations = [];
     private readonly List<FileAction> actions = [];
-    private IReadOnlyList<DuplicateSet> duplicateSets = [];
+    private IReadOnlyList<Group> groups = [];
 
     public BerriesSession(IFileSystem fileSystem, Portrait initialPortrait)
     {
@@ -22,7 +22,7 @@ public sealed class BerriesSession
         InitialPortrait = initialPortrait;
         WorkingPortrait = initialPortrait;
         Selection = new BerriesSelection(fileSystem, initialPortrait);
-        duplicateSets = BuildDuplicateSets(initialPortrait);
+        groups = BuildGroups(initialPortrait);
     }
 
     public Portrait InitialPortrait { get; }
@@ -30,11 +30,11 @@ public sealed class BerriesSession
     public BerriesSelection Selection { get; }
     public IReadOnlyList<PortraitOperation> Operations => operations;
     public IReadOnlyList<FileAction> Actions => actions;
-    public IReadOnlyList<DuplicateSet> DuplicateSets => duplicateSets;
+    public IReadOnlyList<Group> Groups => groups;
 
-    public int SelectedGroupCount => Selection.CountGroups(DuplicateSets);
+    public int SelectedGroupCount => Selection.CountGroups(Groups);
 
-    public void InvertSelectedCopies() => Selection.InvertSelectedCopies(DuplicateSets);
+    public void InvertSelectedCopies() => Selection.InvertSelectedCopies(Groups);
 
     public void Exclude(IEnumerable<FileInstance> files) =>
         AddCommand(DistinctCurrent(files).Select(file =>
@@ -160,16 +160,16 @@ public sealed class BerriesSession
             Apply(operation, files);
 
         WorkingPortrait = new Portrait(files.Values.ToArray());
-        duplicateSets = BuildDuplicateSets(WorkingPortrait);
+        groups = BuildGroups(WorkingPortrait);
         Selection.Refresh(WorkingPortrait);
     }
 
-    private static IReadOnlyList<DuplicateSet> BuildDuplicateSets(Portrait portrait) =>
+    private static IReadOnlyList<Group> BuildGroups(Portrait portrait) =>
         portrait.Files
             .Where(file => file.Content is not null)
             .GroupBy(file => file.Content!.Value)
             .Where(group => group.Count() > 1)
-            .Select(group => new DuplicateSet(group.Key, group.ToArray()))
+            .Select(group => new Group(group.Key, group.ToArray()))
             .ToArray();
 
     private void Apply(PortraitOperation operation, Dictionary<string, FileInstance> files)
