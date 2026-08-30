@@ -50,9 +50,6 @@ public sealed class BerriesEngine
         DuplicateSettlements settlements, IProgress<OperationProgress>? progress, CancellationToken cancellationToken = default) =>
         Task.Run(() => AnalyzeDirectories(portrait, duplicateSets, settlements, progress, cancellationToken), cancellationToken);
 
-    public Task<BranchAnalysisResult> AnalyzeBranchesAsync(Corpus corpus, IReadOnlyList<DirectoryPair> directoryPairs, CancellationToken cancellationToken = default) =>
-        Task.Run(() => AnalyzeBranches(corpus, directoryPairs, cancellationToken), cancellationToken);
-
     private Portrait BuildInitialPortrait(Corpus corpus, Func<FileSystemPath, bool>? ignorePath, IProgress<ScanProgress>? progress, CancellationToken cancellationToken)
     {
         var files = new List<FileInstance>(); long filesExamined = 0; long bytesExamined = 0;
@@ -164,68 +161,14 @@ public sealed class BerriesEngine
         contents.Add(content);
     }
 
-    private BranchAnalysisResult AnalyzeBranches(Corpus corpus, IReadOnlyList<DirectoryPair> directoryPairs, CancellationToken cancellationToken)
-    {
-        var totalTimer = Stopwatch.StartNew(); var phaseTimer = Stopwatch.StartNew();
-        var evidence = directoryPairs.Where(pair => pair.Leverage > 0).ToArray(); phaseTimer.Stop(); var evidenceElapsed = phaseTimer.Elapsed;
-        phaseTimer.Restart();
-        var ancestorsByDirectory = new Dictionary<FileSystemPath, IReadOnlyList<FileSystemPath>>();
-        var accumulators = new Dictionary<(FileSystemPath First, FileSystemPath Second), BranchAccumulator>();
-        foreach (var edge in evidence)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var firstAncestors = GetAncestorsWithinCorpus(edge.First, corpus, ancestorsByDirectory);
-            var secondAncestors = GetAncestorsWithinCorpus(edge.Second, corpus, ancestorsByDirectory);
-            var directPair = CanonicalPair(edge.First, edge.Second);
-            foreach (var firstRoot in firstAncestors)
-            foreach (var secondRoot in secondAncestors)
-            {
-                if (fileSystem.PathsEqual(firstRoot, secondRoot)) continue;
-                var roots = CanonicalPair(firstRoot, secondRoot);
-                if (!CrossesEffectiveSides(edge.First, edge.Second, roots.First, roots.Second)) continue;
-                if (!accumulators.TryGetValue(roots, out var accumulator)) { accumulator = new BranchAccumulator(); accumulators[roots] = accumulator; }
-                if (accumulator.DirectoryPairs.Add(directPair)) accumulator.Leverage += edge.Leverage;
-            }
-        }
-        phaseTimer.Stop(); var aggregationElapsed = phaseTimer.Elapsed; phaseTimer.Restart();
-        var branchPairs = accumulators.Select(item => new BranchPair(item.Key.First, item.Key.Second, item.Value.Leverage, item.Value.DirectoryPairs.Count))
-            .OrderByDescending(pair => pair.Leverage).ThenByDescending(pair => pair.DirectoryPairCount)
-            .ThenBy(pair => pair.FirstRoot.Value, StringComparer.Ordinal).ThenBy(pair => pair.SecondRoot.Value, StringComparer.Ordinal).ToArray();
-        phaseTimer.Stop(); var resultElapsed = phaseTimer.Elapsed; totalTimer.Stop();
-        return new BranchAnalysisResult(branchPairs, new BranchAnalysisTiming(evidenceElapsed, aggregationElapsed, resultElapsed, totalTimer.Elapsed));
-    }
-
-    private IReadOnlyList<FileSystemPath> GetAncestorsWithinCorpus(FileSystemPath directory, Corpus corpus, IDictionary<FileSystemPath, IReadOnlyList<FileSystemPath>> cache)
-    {
-        if (cache.TryGetValue(directory, out var cached)) return cached;
-        var corpusRoot = corpus.Roots.Select(root => root.Path).SingleOrDefault(root => fileSystem.PathsEqual(directory, root) || fileSystem.IsDescendant(directory, root));
-        if (corpusRoot.Value is null) throw new InvalidOperationException($"Directory is outside the corpus: {directory}");
-        var ancestors = new List<FileSystemPath>(); var current = directory;
-        while (true)
-        {
-            ancestors.Add(current); if (fileSystem.PathsEqual(current, corpusRoot)) break;
-            current = fileSystem.GetParentDirectory(current) ?? throw new InvalidOperationException($"Could not reach corpus root {corpusRoot} while walking ancestors of {directory}.");
-        }
-        cache[directory] = ancestors; return ancestors;
-    }
-
-    private bool CrossesEffectiveSides(FileSystemPath firstDirectory, FileSystemPath secondDirectory, FileSystemPath firstRoot, FileSystemPath secondRoot) =>
-        (IsInEffectiveSide(firstDirectory, firstRoot, secondRoot) && IsInEffectiveSide(secondDirectory, secondRoot, firstRoot)) ||
-        (IsInEffectiveSide(secondDirectory, firstRoot, secondRoot) && IsInEffectiveSide(firstDirectory, secondRoot, firstRoot));
-    private bool IsInEffectiveSide(FileSystemPath directory, FileSystemPath ownRoot, FileSystemPath otherRoot)
-    {
-        if (!Contains(ownRoot, directory)) return false;
-        if (fileSystem.IsDescendant(otherRoot, ownRoot) && Contains(otherRoot, directory)) return false;
-        return true;
-    }
-    private bool Contains(FileSystemPath root, FileSystemPath path) => fileSystem.PathsEqual(root, path) || fileSystem.IsDescendant(path, root);
     private static (FileSystemPath First, FileSystemPath Second) CanonicalPair(FileSystemPath first, FileSystemPath second) =>
         StringComparer.Ordinal.Compare(first.Value, second.Value) <= 0 ? (first, second) : (second, first);
+
     private static bool TryAccessFile<T>(FileInstance file, string operation, Func<T> access, ICollection<FileEviction> evictions, out T result)
     {
         try { result = access(); return true; }
         catch (Exception ex) when (IsFileAccessFailure(ex)) { evictions.Add(new FileEviction(file, operation, ex.Message)); result = default!; return false; }
     }
+
     private static bool IsFileAccessFailure(Exception exception) => exception is IOException or UnauthorizedAccessException or SecurityException;
-    private sealed class BranchAccumulator { public int Leverage { get; set; } public HashSet<(FileSystemPath First, FileSystemPath Second)> DirectoryPairs { get; } = []; }
 }
