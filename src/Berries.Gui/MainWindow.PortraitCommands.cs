@@ -149,17 +149,13 @@ public partial class MainWindow
                 return;
             }
 
-            var rebuilt = await Task.Run(() =>
-            {
-                var left = BuildBranchTree(first);
-                var right = BuildBranchTree(second);
-                var shared = CountSharedContents(session, first, second, includeDescendants: true);
-                return (Left: left, Right: right, Shared: shared);
-            });
-
-            LeftTree.ItemsSource = new[] { rebuilt.Left };
-            RightTree.ItemsSource = new[] { rebuilt.Right };
-            ProjectionTitle.Text = $"Branch Pair — {rebuilt.Shared:N0} shared Groups";
+            var branchLeftTask = BuildBranchExplorerNodeAsync(first);
+            var branchRightTask = BuildBranchExplorerNodeAsync(second);
+            var branchSharedTask = Task.Run(() => CountSharedContents(session, first, second, includeDescendants: true));
+            await Task.WhenAll(branchLeftTask, branchRightTask, branchSharedTask);
+            LeftTree.ItemsSource = new[] { await branchLeftTask };
+            RightTree.ItemsSource = new[] { await branchRightTask };
+            ProjectionTitle.Text = $"Branch Pair — {(await branchSharedTask):N0} shared Groups";
             return;
         }
 
@@ -172,8 +168,7 @@ public partial class MainWindow
                 return;
             }
 
-            var node = await Task.Run(() => BuildBranchTree(scope));
-            ExplorerTree.ItemsSource = new[] { node };
+            ExplorerTree.ItemsSource = new[] { await BuildBranchExplorerNodeAsync(scope) };
             return;
         }
 
