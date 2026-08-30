@@ -20,11 +20,13 @@ public sealed class BerriesSession
         this.fileSystem = fileSystem;
         InitialPortrait = initialPortrait;
         WorkingPortrait = initialPortrait;
+        Selection = new BerriesSelection(fileSystem, initialPortrait);
         Rebuild();
     }
 
     public Portrait InitialPortrait { get; }
     public Portrait WorkingPortrait { get; private set; }
+    public BerriesSelection Selection { get; }
     public IReadOnlyList<PortraitOperation> Operations => operations;
     public IReadOnlyList<FileAction> Actions => actions;
 
@@ -50,6 +52,7 @@ public sealed class BerriesSession
     {
         var collisions = new List<MoveCollision>();
         var command = new List<PortraitOperation>();
+        var selectionMoves = new List<(FileSystemPath Source, FileSystemPath Destination)>();
         var working = WorkingPortrait.Files.ToDictionary(file => PathKey(file.Path), StringComparer.OrdinalIgnoreCase);
 
         foreach (var requested in DistinctCurrent(files))
@@ -94,6 +97,7 @@ public sealed class BerriesSession
             }
 
             command.Add(new MovePortraitOperation(source.Path, destinationPath));
+            selectionMoves.Add((source.Path, destinationPath));
             working.Remove(PathKey(source.Path));
             working[destinationKey] = source with
             {
@@ -103,6 +107,7 @@ public sealed class BerriesSession
             };
         }
 
+        foreach (var move in selectionMoves) Selection.MovePath(move.Source, move.Destination);
         AddCommand(command);
         return new MoveResult(collisions);
     }
@@ -156,6 +161,7 @@ public sealed class BerriesSession
             Apply(operation, files);
 
         WorkingPortrait = new Portrait(files.Values.ToArray());
+        Selection.Refresh(WorkingPortrait);
     }
 
     private void Apply(PortraitOperation operation, Dictionary<string, FileInstance> files)
