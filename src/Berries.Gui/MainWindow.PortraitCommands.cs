@@ -33,29 +33,31 @@ public partial class MainWindow
 
     private async void MoveRightImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
-        if (leftScope is null || rightScope is null || controller.Session is null || portraitCommandBusy) return;
-        var descendants = currentProjection?.Kind == ProjectionKind.BranchPair;
-        var files = SemanticSelectionInScope(leftScope.Value, descendants);
+        if (currentProjection is not { IsPair: true, Primary: { } first, Secondary: { } second }
+            || controller.Session is null || portraitCommandBusy) return;
+        var descendants = currentProjection.Kind == ProjectionKind.BranchPair;
+        var files = SemanticSelectionInScope(first, descendants);
         if (files.Count == 0) return;
         MoveResult? result = null;
         await RunPortraitCommandAsync(
             $"Moving {files.Count:N0} files...",
             null,
-            async () => { result = await controller.MoveAsync(files, leftScope.Value, rightScope.Value); },
+            async () => { result = await controller.MoveAsync(files, first, second); },
             () => MoveStatus(files.Count, result!));
     }
 
     private async void MoveLeftImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
-        if (leftScope is null || rightScope is null || controller.Session is null || portraitCommandBusy) return;
-        var descendants = currentProjection?.Kind == ProjectionKind.BranchPair;
-        var files = SemanticSelectionInScope(rightScope.Value, descendants);
+        if (currentProjection is not { IsPair: true, Primary: { } first, Secondary: { } second }
+            || controller.Session is null || portraitCommandBusy) return;
+        var descendants = currentProjection.Kind == ProjectionKind.BranchPair;
+        var files = SemanticSelectionInScope(second, descendants);
         if (files.Count == 0) return;
         MoveResult? result = null;
         await RunPortraitCommandAsync(
             $"Moving {files.Count:N0} files...",
             null,
-            async () => { result = await controller.MoveAsync(files, rightScope.Value, leftScope.Value); },
+            async () => { result = await controller.MoveAsync(files, second, first); },
             () => MoveStatus(files.Count, result!));
     }
 
@@ -102,47 +104,45 @@ public partial class MainWindow
         var session = controller.Session;
         if (session is null || currentProjection is null) return;
 
-        if (currentProjection.Kind == ProjectionKind.DirectoryPair && leftScope is not null && rightScope is not null)
+        if (currentProjection is { Kind: ProjectionKind.DirectoryPair, Primary: { } firstDirectory, Secondary: { } secondDirectory })
         {
-            var first = leftScope.Value; var second = rightScope.Value;
-            var leftTask = BuildDirectoryExplorerNodeAsync(first);
-            var rightTask = BuildDirectoryExplorerNodeAsync(second);
-            var sharedTask = Projections.SharedGroupCountAsync(session, first, second, includeDescendants: false);
+            var leftTask = BuildDirectoryExplorerNodeAsync(firstDirectory);
+            var rightTask = BuildDirectoryExplorerNodeAsync(secondDirectory);
+            var sharedTask = Projections.SharedGroupCountAsync(session, firstDirectory, secondDirectory, includeDescendants: false);
             await Task.WhenAll(leftTask, rightTask, sharedTask);
             var left = await leftTask; var right = await rightTask;
             LeftTree.ItemsSource = new[] { left }; RightTree.ItemsSource = new[] { right };
-            SetPairProjectionState(ProjectionKind.DirectoryPair, first, left.Files, second, right.Files);
+            SetPairProjectionState(ProjectionKind.DirectoryPair, firstDirectory, left.Files, secondDirectory, right.Files);
             ProjectionTitle.Text = $"Directory Pair — {(await sharedTask):N0} shared Groups";
             return;
         }
 
-        if (currentProjection.Kind == ProjectionKind.BranchPair && leftScope is not null && rightScope is not null)
+        if (currentProjection is { Kind: ProjectionKind.BranchPair, Primary: { } firstBranch, Secondary: { } secondBranch })
         {
-            var first = leftScope.Value; var second = rightScope.Value;
-            var leftTask = BuildBranchExplorerNodeAsync(first);
-            var rightTask = BuildBranchExplorerNodeAsync(second);
-            var sharedTask = Projections.SharedGroupCountAsync(session, first, second, includeDescendants: true);
+            var leftTask = BuildBranchExplorerNodeAsync(firstBranch);
+            var rightTask = BuildBranchExplorerNodeAsync(secondBranch);
+            var sharedTask = Projections.SharedGroupCountAsync(session, firstBranch, secondBranch, includeDescendants: true);
             await Task.WhenAll(leftTask, rightTask, sharedTask);
             var left = await leftTask; var right = await rightTask;
             LeftTree.ItemsSource = new[] { left }; RightTree.ItemsSource = new[] { right };
-            SetPairProjectionState(ProjectionKind.BranchPair, first, left.Files, second, right.Files);
+            SetPairProjectionState(ProjectionKind.BranchPair, firstBranch, left.Files, secondBranch, right.Files);
             ProjectionTitle.Text = $"Branch Pair — {(await sharedTask):N0} shared Groups";
             return;
         }
 
-        if (currentProjection.Kind == ProjectionKind.Directory && currentScope is not null)
+        if (currentProjection is { Kind: ProjectionKind.Directory, Primary: { } directory })
         {
-            var node = await BuildDirectoryExplorerNodeAsync(currentScope.Value);
+            var node = await BuildDirectoryExplorerNodeAsync(directory);
             ExplorerTree.ItemsSource = new[] { node };
-            SetProjectionState(ProjectionKind.Directory, node.Files, currentScope);
+            SetProjectionState(ProjectionKind.Directory, node.Files, directory);
             return;
         }
 
-        if (currentProjection.Kind == ProjectionKind.Branch && currentScope is not null)
+        if (currentProjection is { Kind: ProjectionKind.Branch, Primary: { } branch })
         {
-            var node = await BuildBranchExplorerNodeAsync(currentScope.Value);
+            var node = await BuildBranchExplorerNodeAsync(branch);
             ExplorerTree.ItemsSource = new[] { node };
-            SetProjectionState(ProjectionKind.Branch, node.Files, currentScope);
+            SetProjectionState(ProjectionKind.Branch, node.Files, branch);
             return;
         }
 
