@@ -4,7 +4,7 @@ namespace Berries.Gui;
 
 public partial class MainWindow
 {
-    private void PreviousCaseButton_Click(object? sender, RoutedEventArgs e)
+    private async void PreviousCaseButton_Click(object? sender, RoutedEventArgs e)
     {
         var suggestions = controller.Counterparts?.Seeds;
         if (suggestions is null || suggestions.Count == 0)
@@ -14,6 +14,6 @@ public partial class MainWindow
             ? suggestions.Count - 1
             : suggestionIndex - 1;
 
-        ShowBranchPair(suggestions[suggestionIndex]);
+        await ShowBranchPairAsync(suggestions[suggestionIndex]);
     }
 }
