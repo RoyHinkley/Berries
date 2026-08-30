@@ -14,7 +14,7 @@ public sealed class ProjectionService(PortraitQueries queries)
         IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        var files = await queries.DuplicateFilesInDirectoryAsync(session, directory, progress, cancellationToken);
+        var files = await queries.GroupedFilesInDirectoryAsync(session, directory, progress, cancellationToken);
         return new DirectoryProjection(directory,
             files.Select(file => new DirectoryProjectionFile(Path.GetFileName(file.Path.Value), file)).ToArray());
     }
@@ -25,7 +25,7 @@ public sealed class ProjectionService(PortraitQueries queries)
         IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        var placements = await queries.DuplicateFilesInBranchWithPlacementAsync(session, branch, progress, cancellationToken);
+        var placements = await queries.GroupedFilesInBranchWithPlacementAsync(session, branch, progress, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return BuildBranch(branch, placements, cancellationToken);
     }
@@ -36,7 +36,7 @@ public sealed class ProjectionService(PortraitQueries queries)
         IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        var roots = await queries.DuplicateFilesInCorpusRootsWithPlacementAsync(session, corpus, progress, cancellationToken);
+        var roots = await queries.GroupedFilesInCorpusRootsWithPlacementAsync(session, corpus, progress, cancellationToken);
         return roots.Select(root => BuildBranch(root.Root, root.Files, cancellationToken)).ToArray();
     }
 
@@ -70,7 +70,10 @@ public sealed class ProjectionService(PortraitQueries queries)
         bool includeDescendants) =>
         queries.FilesInContext(files, context, includeDescendants);
 
-    public IReadOnlyList<FileInstance> SelectedFilesInContext(BerriesSession session, FileSystemPath context, bool includeDescendants) =>
+    public IReadOnlyList<FileInstance> SelectedFilesInContext(
+        BerriesSession session,
+        FileSystemPath context,
+        bool includeDescendants) =>
         queries.SelectedFilesInContext(session, context, includeDescendants);
 
     public bool CorpusRootsMatch(Corpus corpus, IEnumerable<FileSystemPath> roots) =>
@@ -79,13 +82,19 @@ public sealed class ProjectionService(PortraitQueries queries)
     public IReadOnlyList<FileSystemPath> Breadcrumbs(Corpus corpus, FileSystemPath path) =>
         queries.AncestorsWithinCorpus(corpus, path);
 
-    public DirectoryRecord? DirectoryRecord(IReadOnlyList<DirectoryRecord> directories, FileSystemPath directory) =>
+    public DirectoryRecord? DirectoryRecord(
+        IReadOnlyList<DirectoryRecord> directories,
+        FileSystemPath directory) =>
         queries.DirectoryRecord(directories, directory);
 
-    public DirectoryPair? BestDirectoryPair(IReadOnlyList<DirectoryPair> pairs, FileSystemPath directory) =>
+    public DirectoryPair? BestDirectoryPair(
+        IReadOnlyList<DirectoryPair> pairs,
+        FileSystemPath directory) =>
         queries.BestDirectoryPair(pairs, directory);
 
-    public bool HasBranchPairCandidate(IReadOnlyList<BranchRecord> branches, FileSystemPath branch) =>
+    public bool HasBranchPairCandidate(
+        IReadOnlyList<BranchRecord> branches,
+        FileSystemPath branch) =>
         queries.HasBranchPairCandidate(branches, branch);
 
     public Task<int> SharedGroupCountAsync(
@@ -110,7 +119,8 @@ public sealed class ProjectionService(PortraitQueries queries)
             foreach (var directory in placement.Directories)
             {
                 var child = current.Children.FirstOrDefault(node =>
-                    node.Directory is not null && StringComparer.OrdinalIgnoreCase.Equals(node.Directory.Value.Value, directory.Value));
+                    node.Directory is not null
+                    && StringComparer.OrdinalIgnoreCase.Equals(node.Directory.Value.Value, directory.Value));
                 if (child is null)
                 {
                     child = new BranchProjectionNode(Path.GetFileName(directory.Value), directory);
@@ -119,19 +129,24 @@ public sealed class ProjectionService(PortraitQueries queries)
                 current = child;
             }
 
-            current.Children.Add(new BranchProjectionNode(Path.GetFileName(placement.File.Path.Value), file: placement.File));
+            current.Children.Add(new BranchProjectionNode(
+                Path.GetFileName(placement.File.Path.Value),
+                file: placement.File));
         }
 
         PopulateFiles(root, cancellationToken);
         return new BranchProjection(branch, root);
     }
 
-    private static IReadOnlyList<FileInstance> PopulateFiles(BranchProjectionNode node, CancellationToken cancellationToken)
+    private static IReadOnlyList<FileInstance> PopulateFiles(
+        BranchProjectionNode node,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (node.Children.Count == 0) return node.Files;
         var files = new List<FileInstance>();
-        foreach (var child in node.Children) files.AddRange(PopulateFiles(child, cancellationToken));
+        foreach (var child in node.Children)
+            files.AddRange(PopulateFiles(child, cancellationToken));
         node.Files = files;
         return files;
     }
