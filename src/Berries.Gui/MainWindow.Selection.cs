@@ -12,64 +12,44 @@ public partial class MainWindow
 
     private void ExplorerNode_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (sender is not Control { DataContext: ExplorerNode node } || controller.Session is not { } session)
-            return;
-
+        if (sender is not Control { DataContext: ExplorerNode node } || controller.Session is not { } session) return;
         focusedNode = node;
         session.Selection.Toggle(node.Files);
-        SynchronizeVisibleSelection();
-        UpdateSelectionSummary();
-        UpdateCapabilities();
+        SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
         e.Handled = true;
     }
 
     private void ClearSelectionButton_Click(object? sender, RoutedEventArgs e)
     {
         if (controller.Session is not { } session) return;
-        session.Selection.Clear();
-        SynchronizeVisibleSelection();
-        UpdateSelectionSummary();
-        UpdateCapabilities();
+        session.Selection.Clear(); SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
 
     private void InvertSelectedCopies_Click(object? sender, RoutedEventArgs e)
     {
         if (controller.Session is not { } session || session.Selection.IsEmpty) return;
         session.Selection.InvertSelectedCopies(session.DuplicateSets);
-        SynchronizeVisibleSelection();
-        UpdateSelectionSummary();
-        UpdateCapabilities();
+        SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
 
     private void InvertAllGroups_Click(object? sender, RoutedEventArgs e)
     {
         if (controller.Session is not { } session || !IsGroupsProjection()) return;
         session.Selection.Invert(RepresentedFiles());
-        SynchronizeVisibleSelection();
-        UpdateSelectionSummary();
-        UpdateCapabilities();
+        SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
 
-    private bool IsGroupsProjection() =>
-        !PairExplorer.IsVisible && currentScope is null
+    private bool IsGroupsProjection() => !PairExplorer.IsVisible && currentScope is null
         && ProjectionTitle.Text?.StartsWith("Group", StringComparison.Ordinal) == true;
 
-    private IReadOnlyList<FileInstance> RepresentedFiles() =>
-        DistinctFilesFast(ActiveTrees().SelectMany(tree => EnumerateNodes(tree.ItemsSource))
-            .Where(node => node.Children.Count == 0 && node.Files.Count == 1)
-            .SelectMany(node => node.Files));
+    private IReadOnlyList<FileInstance> RepresentedFiles() => DistinctFilesFast(
+        ActiveTrees().SelectMany(tree => EnumerateNodes(tree.ItemsSource))
+            .Where(node => node.Children.Count == 0 && node.Files.Count == 1).SelectMany(node => node.Files));
 
     private IEnumerable<TreeView> ActiveTrees()
     {
-        if (PairExplorer.IsVisible)
-        {
-            yield return LeftTree;
-            yield return RightTree;
-        }
-        else
-        {
-            yield return ExplorerTree;
-        }
+        if (PairExplorer.IsVisible) { yield return LeftTree; yield return RightTree; }
+        else yield return ExplorerTree;
     }
 
     private void SynchronizeVisibleSelection()
@@ -87,43 +67,37 @@ public partial class MainWindow
                     tree.SelectedItems.Add(leaf);
             }
         }
-        finally
-        {
-            synchronizingSelection = false;
-        }
+        finally { synchronizingSelection = false; }
     }
 
     private void UpdateSelectionSummary()
     {
         var session = controller.Session;
-        if (session is null)
+        if (session is null || session.Selection.IsEmpty)
         {
-            SelectionText.Text = "Selected: none";
-            ClearSelectionButton.IsEnabled = false;
-            return;
+            SelectionText.Text = "Selected: none"; SetSelectionCapabilities(false); return;
         }
 
         var selection = session.Selection;
-        if (selection.IsEmpty)
-        {
-            SelectionText.Text = "Selected: none";
-            ClearSelectionButton.IsEnabled = false;
-            return;
-        }
-
         var groups = selection.CountGroups(session.DuplicateSets);
         var outside = selection.CountOutside(RepresentedFiles());
         SelectionText.Text = $"Selected: {selection.Count:N0} files · {groups:N0} groups · {outside:N0} outside view";
-        ClearSelectionButton.IsEnabled = true;
+        SetSelectionCapabilities(true);
     }
 
-    private IReadOnlyList<FileInstance> SemanticSelection() =>
-        controller.Session?.Selection.Files ?? [];
-
-    private IReadOnlyList<FileInstance> SemanticSelectionInScope(Berries.FileSystem.Abstractions.FileSystemPath scope, bool descendants)
+    private void SetSelectionCapabilities(bool hasSelection)
     {
-        var files = SemanticSelection();
-        return files.Where(file => fileSystem.PathsEqual(file.ParentDirectory, scope)
-            || (descendants && fileSystem.IsDescendant(file.ParentDirectory, scope))).ToArray();
+        ClearSelectionButton.IsEnabled = hasSelection;
+        InvertButton.IsEnabled = hasSelection;
+        InvertSelectedCopiesMenu.IsEnabled = hasSelection;
+        InvertAllGroupsMenu.IsEnabled = hasSelection && IsGroupsProjection();
+        ExcludeButton.IsEnabled = hasSelection;
+        DeleteButton.IsEnabled = hasSelection;
     }
+
+    private IReadOnlyList<FileInstance> SemanticSelection() => controller.Session?.Selection.Files ?? [];
+
+    private IReadOnlyList<FileInstance> SemanticSelectionInScope(Berries.FileSystem.Abstractions.FileSystemPath scope, bool descendants) =>
+        SemanticSelection().Where(file => fileSystem.PathsEqual(file.ParentDirectory, scope)
+            || (descendants && fileSystem.IsDescendant(file.ParentDirectory, scope))).ToArray();
 }
