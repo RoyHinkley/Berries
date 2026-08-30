@@ -8,6 +8,7 @@ using Berries.Core.Domain;
 using Berries.Core.Planning;
 using Berries.FileSystem.Abstractions;
 using Berries.FileSystem.Windows;
+using Berries.Projection;
 
 namespace Berries.Gui;
 
