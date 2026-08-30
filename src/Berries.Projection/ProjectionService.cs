@@ -27,29 +27,17 @@ public sealed class ProjectionService(PortraitQueries queries)
     {
         var placements = await queries.DuplicateFilesInBranchWithPlacementAsync(session, branch, progress, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
+        return BuildBranch(branch, placements, cancellationToken);
+    }
 
-        var root = new BranchProjectionNode(branch.Value, branch);
-        foreach (var placement in placements)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var current = root;
-            foreach (var directory in placement.Directories)
-            {
-                var child = current.Children.FirstOrDefault(node =>
-                    node.Directory is not null && StringComparer.OrdinalIgnoreCase.Equals(node.Directory.Value.Value, directory.Value));
-                if (child is null)
-                {
-                    child = new BranchProjectionNode(Path.GetFileName(directory.Value), directory);
-                    current.Children.Add(child);
-                }
-                current = child;
-            }
-
-            current.Children.Add(new BranchProjectionNode(Path.GetFileName(placement.File.Path.Value), file: placement.File));
-        }
-
-        PopulateFiles(root, cancellationToken);
-        return new BranchProjection(branch, root);
+    public async Task<IReadOnlyList<BranchProjection>> CorpusRootsAsync(
+        BerriesSession session,
+        Corpus corpus,
+        IProgress<OperationProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        var roots = await queries.DuplicateFilesInCorpusRootsWithPlacementAsync(session, corpus, progress, cancellationToken);
+        return roots.Select(root => BuildBranch(root.Root, root.Files, cancellationToken)).ToArray();
     }
 
     public IReadOnlyList<GroupProjection> Groups(BerriesSession session) =>
@@ -108,6 +96,35 @@ public sealed class ProjectionService(PortraitQueries queries)
         IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default) =>
         queries.SharedGroupCountAsync(session, first, second, includeDescendants, progress, cancellationToken);
+
+    private static BranchProjection BuildBranch(
+        FileSystemPath branch,
+        IReadOnlyList<BranchFilePlacement> placements,
+        CancellationToken cancellationToken)
+    {
+        var root = new BranchProjectionNode(branch.Value, branch);
+        foreach (var placement in placements)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var current = root;
+            foreach (var directory in placement.Directories)
+            {
+                var child = current.Children.FirstOrDefault(node =>
+                    node.Directory is not null && StringComparer.OrdinalIgnoreCase.Equals(node.Directory.Value.Value, directory.Value));
+                if (child is null)
+                {
+                    child = new BranchProjectionNode(Path.GetFileName(directory.Value), directory);
+                    current.Children.Add(child);
+                }
+                current = child;
+            }
+
+            current.Children.Add(new BranchProjectionNode(Path.GetFileName(placement.File.Path.Value), file: placement.File));
+        }
+
+        PopulateFiles(root, cancellationToken);
+        return new BranchProjection(branch, root);
+    }
 
     private static IReadOnlyList<FileInstance> PopulateFiles(BranchProjectionNode node, CancellationToken cancellationToken)
     {
