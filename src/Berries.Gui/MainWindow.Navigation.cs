@@ -45,17 +45,11 @@ public partial class MainWindow
         PivotContentMenu.IsEnabled = controller.Session is not null;
         PivotDirectoryMenu.IsEnabled = scope is not null; PivotBranchMenu.IsEnabled = scope is not null;
         PivotBestDirectoryPairMenu.IsEnabled = scope is not null;
-        PivotBestBranchPairMenu.IsEnabled = scope is not null && HasBranchPairCandidate(scope.Value);
+        var branches = controller.BranchStatistics?.Branches;
+        PivotBestBranchPairMenu.IsEnabled = scope is not null && branches is not null
+            && Projections.HasBranchPairCandidate(branches, scope.Value);
         var suggestions = controller.Counterparts?.Seeds;
         PivotBranchPairMenu.IsEnabled = suggestionIndex >= 0 && suggestions is { Count: > 0 };
-    }
-
-    private bool HasBranchPairCandidate(FileSystemPath scope)
-    {
-        var branches = controller.BranchStatistics?.Branches; if (branches is null) return false;
-        return branches.Any(branch => fileSystem.PathsEqual(branch.Path, scope) && branch.DuplicateContentCount > 0)
-            && branches.Any(branch => !fileSystem.PathsEqual(branch.Path, scope) && !fileSystem.IsDescendant(branch.Path, scope)
-                && !fileSystem.IsDescendant(scope, branch.Path) && branch.DuplicateContentCount > 0);
     }
 
     private void UpdateSelectionStatus() => UpdateSelectionSummary();
@@ -123,7 +117,8 @@ public partial class MainWindow
     private async void PivotBestDirectoryPair_Click(object? sender, RoutedEventArgs e)
     {
         var scope = SelectedScope(); if (scope is null) return;
-        var pair = FindBestDirectoryPair(scope.Value);
+        var pairs = controller.DirectoryAnalysis?.DirectoryPairs;
+        var pair = pairs is null ? null : Projections.BestDirectoryPair(pairs, scope.Value);
         if (pair is not null)
         {
             await ShowDirectoryPairProjectionAsync(pair);
@@ -167,9 +162,6 @@ public partial class MainWindow
         }
         return null;
     }
-
-    private DirectoryPair? FindBestDirectoryPair(FileSystemPath scope) => controller.DirectoryAnalysis?.DirectoryPairs
-        .Where(pair => fileSystem.PathsEqual(pair.First, scope) || fileSystem.PathsEqual(pair.Second, scope)).OrderByDescending(pair => pair.SharedContentCount).FirstOrDefault();
 
     private async Task ShowAdHocBranchPairAsync(FileSystemPath first, FileSystemPath second, int sharedContentCount)
     {
