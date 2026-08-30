@@ -1,3 +1,4 @@
+using Berries.Core.Analysis;
 using Berries.FileSystem.Abstractions;
 
 namespace Berries.Core.Domain;
