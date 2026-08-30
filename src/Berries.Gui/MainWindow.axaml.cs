@@ -24,62 +24,90 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         var engine = new BerriesEngine(fileSystem);
-        controller = new BerriesApplication(fileSystem, engine, new BranchStatisticsAnalyzer(fileSystem), new BranchCounterpartAnalyzer(fileSystem));
+        controller = new BerriesApplication(
+            fileSystem,
+            engine,
+            new BranchStatisticsAnalyzer(fileSystem),
+            new BranchCounterpartAnalyzer(fileSystem));
         actionPlanExecutor = new ActionPlanExecutor(fileSystem);
         RefreshRoots();
     }
 
     private async void AddRootButton_Click(object? sender, RoutedEventArgs e)
     {
-        var directories = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Select corpus root", AllowMultiple = false });
+        var directories = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Select corpus root",
+            AllowMultiple = false
+        });
         if (directories.Count == 0) return;
         var path = directories[0].TryGetLocalPath();
-        if (path is null) { StatusText.Text = "The selected directory does not have a local filesystem path."; return; }
+        if (path is null)
+        {
+            StatusText.Text = "The selected directory does not have a local filesystem path.";
+            return;
+        }
         var normalized = controller.NormalizeRoots(roots.Append(path));
-        roots.Clear(); roots.AddRange(normalized); RefreshRoots();
+        roots.Clear();
+        roots.AddRange(normalized);
+        RefreshRoots();
         StatusText.Text = "Corpus changed; scan required.";
     }
 
     private void RemoveRootButton_Click(object? sender, RoutedEventArgs e)
     {
         if (RootsList.SelectedItem is not string selectedRoot) return;
-        roots.Remove(selectedRoot); RefreshRoots();
-        StatusText.Text = roots.Count == 0 ? "Select corpus roots to begin." : "Corpus changed; scan required.";
+        roots.Remove(selectedRoot);
+        RefreshRoots();
+        StatusText.Text = roots.Count == 0
+            ? "Select corpus roots to begin."
+            : "Corpus changed; scan required.";
     }
 
     private void SelectRootsMenu_Click(object? sender, RoutedEventArgs e)
     {
-        RootsPanel.IsVisible = true; ExplorerPanel.IsVisible = false;
-        StatusText.Text = roots.Count == 0 ? "Select corpus roots to begin." : "Edit corpus roots, then Explore to start a new session.";
+        RootsPanel.IsVisible = true;
+        ExplorerPanel.IsVisible = false;
+        StatusText.Text = roots.Count == 0
+            ? "Select corpus roots to begin."
+            : "Edit corpus roots, then Explore to start a new session.";
     }
 
     private async void ScanButton_Click(object? sender, RoutedEventArgs e)
     {
         if (roots.Count == 0) return;
-        SetRootControlsEnabled(false); ShowExplorerWithRoots(); BeginProgress("Scanning corpus...", true);
+        SetRootControlsEnabled(false);
+        ShowExplorerWithRoots();
+        BeginProgress("Scanning corpus...", true);
         try
         {
             await StopBackgroundAnalysisAsync();
             suggestionIndex = -1;
 
             var config = BerriesConfig.Load(Path.Combine(AppContext.BaseDirectory, "Berries.config"));
-            var scanProgress = new Progress<ScanProgress>(p => StatusText.Text = $"Scanning corpus — {p.FilesExamined:N0} files");
-            var duplicateProgress = new Progress<DuplicateDiscoveryProgress>(p =>
+            var scanProgress = new Progress<ScanProgress>(p =>
+                StatusText.Text = $"Scanning corpus — {p.FilesExamined:N0} files");
+            var groupProgress = new Progress<GroupDiscoveryProgress>(p =>
             {
-                StatusText.Text = $"Hashing duplicate candidates — {p.FilesHashed:N0} / {p.CandidateFiles:N0}";
+                StatusText.Text = $"Hashing Group candidates — {p.FilesHashed:N0} / {p.CandidateFiles:N0}";
                 StatusProgress.IsIndeterminate = false;
-                StatusProgress.Value = p.CandidateFiles == 0 ? 0 : 100.0 * p.FilesHashed / p.CandidateFiles;
+                StatusProgress.Value = p.CandidateFiles == 0
+                    ? 0
+                    : 100.0 * p.FilesHashed / p.CandidateFiles;
             });
 
-            var scanTask = controller.ScanAsync(roots, config.IsExcluded, scanProgress, duplicateProgress);
+            var scanTask = controller.ScanAsync(roots, config.IsExcluded, scanProgress, groupProgress);
             UpdateSelectionSummary();
             UpdateCapabilities();
             UpdatePivotCapabilities();
 
             var scan = await scanTask;
             ShowContentProjection();
-            EndProgress($"Ready — {scan.FileCount:N0} files, with {scan.DuplicateFileCount:N0} files in {scan.DuplicateSetCount:N0} groups."
-                + (scan.EvictionCount == 0 ? string.Empty : $" {scan.EvictionCount:N0} inaccessible file(s) omitted."));
+            EndProgress(
+                $"Ready — {scan.FileCount:N0} files, with {scan.GroupedFileCount:N0} files in {scan.GroupCount:N0} Groups."
+                + (scan.EvictionCount == 0
+                    ? string.Empty
+                    : $" {scan.EvictionCount:N0} inaccessible file(s) omitted."));
             UpdateCapabilities();
         }
         catch (Exception ex)
@@ -89,22 +117,34 @@ public partial class MainWindow : Window
             UpdatePivotCapabilities();
             EndProgress(ex.Message);
         }
-        finally { SetRootControlsEnabled(true); }
+        finally
+        {
+            SetRootControlsEnabled(true);
+        }
     }
 
     private void ShowExplorerWithRoots()
     {
-        RootsPanel.IsVisible = false; ExplorerPanel.IsVisible = true; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
-        SetProjectionState(ProjectionKind.Corpus, []); ProjectionTitle.Text = "Corpus";
-        ExplorerTree.ItemsSource = roots.Select(root => new ExplorerNode(root, semanticPath: new FileSystemPath(root))).ToArray();
+        RootsPanel.IsVisible = false;
+        ExplorerPanel.IsVisible = true;
+        PairExplorer.IsVisible = false;
+        SingleExplorer.IsVisible = true;
+        SetProjectionState(ProjectionKind.Corpus, []);
+        ProjectionTitle.Text = "Corpus";
+        ExplorerTree.ItemsSource = roots
+            .Select(root => new ExplorerNode(root, semanticPath: new FileSystemPath(root)))
+            .ToArray();
     }
 
     private void ShowContentProjection()
     {
-        var session = controller.Session; if (session is null) return;
+        var session = controller.Session;
+        if (session is null) return;
         var groups = Projections.Groups(session);
-        PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
-        SetProjectionState(ProjectionKind.Groups, groups.SelectMany(group => group.Files)); ProjectionTitle.Text = "Groups";
+        PairExplorer.IsVisible = false;
+        SingleExplorer.IsVisible = true;
+        SetProjectionState(ProjectionKind.Groups, groups.SelectMany(group => group.Files));
+        ProjectionTitle.Text = "Groups";
         ExplorerTree.ItemsSource = groups.Select(BuildGroupNode).ToArray();
         UpdateCapabilities();
     }
@@ -122,17 +162,24 @@ public partial class MainWindow : Window
             await Task.WhenAll(leftTask, rightTask);
             var left = await leftTask;
             var right = await rightTask;
-            PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
+            PairExplorer.IsVisible = true;
+            SingleExplorer.IsVisible = false;
             SetPairProjectionState(ProjectionKind.BranchPair, first, left.Files, second, right.Files);
-            ProjectionTitle.Text = $"Branch Pair — {suggestion.Counterparts[0].SharedDuplicateContentCount:N0} shared groups";
+            ProjectionTitle.Text = $"Branch Pair — {suggestion.Counterparts[0].SharedGroupCount:N0} shared Groups";
             BuildPairBreadcrumbs(first, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
             BuildPairBreadcrumbs(second, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
             LeftTree.ItemsSource = new[] { left };
             RightTree.ItemsSource = new[] { right };
-            EndProgress($"Branch Pair — {suggestion.Counterparts[0].SharedDuplicateContentCount:N0} shared Groups.");
-            SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
+            EndProgress($"Branch Pair — {suggestion.Counterparts[0].SharedGroupCount:N0} shared Groups.");
+            SynchronizeVisibleSelection();
+            UpdateSelectionSummary();
+            UpdateCapabilities();
+            UpdatePivotCapabilities();
         }
-        catch (Exception ex) { EndProgress("Could not open Branch Pair: " + ex.Message); }
+        catch (Exception ex)
+        {
+            EndProgress("Could not open Branch Pair: " + ex.Message);
+        }
     }
 
     private static IEnumerable<ExplorerNode> EnumerateNodes(System.Collections.IEnumerable? items)
@@ -164,7 +211,7 @@ public partial class MainWindow : Window
         UndoButton.IsEnabled = hasSession && session!.Operations.Count > 0;
         ExecuteMenu.IsEnabled = hasSession && session!.Actions.Count > 0;
         var suggestions = controller.Counterparts?.Seeds;
-        SuggestCaseButton.IsEnabled = suggestions is { Count: > 0 };
+        SuggestButton.IsEnabled = suggestions is { Count: > 0 };
         PivotBranchPairMenu.IsEnabled = suggestionIndex >= 0 && suggestions is { Count: > 0 };
     }
 
@@ -185,16 +232,22 @@ public partial class MainWindow : Window
         {
             await StopBackgroundAnalysisAsync();
             var result = await actionPlanExecutor.ExecuteAsync(session.Actions);
-            EndPortraitBusy($"Execution finished — {result.CompletedCount:N0} completed, {result.SkippedCount:N0} dependent action(s) skipped, {result.Failures.Count:N0} failure(s)."
+            EndPortraitBusy(
+                $"Execution finished — {result.CompletedCount:N0} completed, {result.SkippedCount:N0} dependent action(s) skipped, {result.Failures.Count:N0} failure(s)."
                 + (result.Failures.Count == 0 ? string.Empty : " See the failure summary."));
             if (result.Failures.Count > 0)
             {
                 var failures = result.Failures.Take(50)
                     .Select(failure => $"{DescribeAction(failure.Action)} — {failure.Message}");
-                await ShowMessageAsync("Execution failures", string.Join(Environment.NewLine + Environment.NewLine, failures));
+                await ShowMessageAsync(
+                    "Execution failures",
+                    string.Join(Environment.NewLine + Environment.NewLine, failures));
             }
         }
-        catch (Exception ex) { EndPortraitBusy("Execution failed: " + ex.Message); }
+        catch (Exception ex)
+        {
+            EndPortraitBusy("Execution failed: " + ex.Message);
+        }
     }
 
     private static string DescribeAction(FileAction action) => action switch
@@ -242,7 +295,11 @@ public partial class MainWindow : Window
                 {
                     new ScrollViewer
                     {
-                        Content = new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap }
+                        Content = new TextBlock
+                        {
+                            Text = message,
+                            TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                        }
                     },
                     close
                 }
@@ -252,7 +309,11 @@ public partial class MainWindow : Window
         await dialog.ShowDialog(this);
     }
 
-    private static Control BuildDialogContent(string message, string affirmative, out Button yes, out Button no)
+    private static Control BuildDialogContent(
+        string message,
+        string affirmative,
+        out Button yes,
+        out Button no)
     {
         yes = new Button { Content = affirmative };
         no = new Button { Content = "Cancel" };
@@ -264,8 +325,16 @@ public partial class MainWindow : Window
         };
         buttons.Children.Add(no);
         buttons.Children.Add(yes);
-        var panel = new StackPanel { Margin = new Avalonia.Thickness(18), Spacing = 18 };
-        panel.Children.Add(new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap });
+        var panel = new StackPanel
+        {
+            Margin = new Avalonia.Thickness(18),
+            Spacing = 18
+        };
+        panel.Children.Add(new TextBlock
+        {
+            Text = message,
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap
+        });
         panel.Children.Add(buttons);
         return panel;
     }
@@ -301,7 +370,10 @@ public partial class MainWindow : Window
     private void ExitMenu_Click(object? sender, RoutedEventArgs e) => Close();
 }
 
-public sealed class ExplorerNode(string label, IReadOnlyList<FileInstance>? files = null, FileSystemPath? semanticPath = null)
+public sealed class ExplorerNode(
+    string label,
+    IReadOnlyList<FileInstance>? files = null,
+    FileSystemPath? semanticPath = null)
 {
     public string Label { get; } = label;
     public IReadOnlyList<FileInstance> Files { get; set; } = files ?? [];
