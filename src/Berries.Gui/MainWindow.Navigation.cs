@@ -159,7 +159,7 @@ public partial class MainWindow
     {
         currentScope = null; leftScope = pair.First; rightScope = pair.Second; PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
         BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear(); ProjectionTitle.Text = $"Directory Pair — {pair.SharedContentCount:N0} shared Groups";
-        BuildPairBreadcrumbs(pair.First, LeftScopeBreadcrumbs, false, "Directory"); BuildPairBreadcrumbs(pair.Second, RightScopeBreadcrumbs, false, "Directory");
+        BuildPairBreadcrumbs(pair.First, LeftScopeBreadcrumbs, false, "Directory", PairSide.Left); BuildPairBreadcrumbs(pair.Second, RightScopeBreadcrumbs, false, "Directory", PairSide.Right);
         LeftTree.ItemsSource = new[] { BuildDirectoryTree(pair.First) }; RightTree.ItemsSource = new[] { BuildDirectoryTree(pair.Second) };
         SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
@@ -176,7 +176,7 @@ public partial class MainWindow
     {
         currentScope = null; leftScope = first; rightScope = second; PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
         BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear(); ProjectionTitle.Text = $"Branch Pair — {sharedContentCount:N0} shared Groups";
-        BuildPairBreadcrumbs(first, LeftScopeBreadcrumbs, true, "Branch"); BuildPairBreadcrumbs(second, RightScopeBreadcrumbs, true, "Branch");
+        BuildPairBreadcrumbs(first, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left); BuildPairBreadcrumbs(second, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
         LeftTree.ItemsSource = new[] { BuildBranchTree(first) }; RightTree.ItemsSource = new[] { BuildBranchTree(second) };
         SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
@@ -185,8 +185,8 @@ public partial class MainWindow
     {
         var suggestions = controller.Counterparts?.Seeds; if (suggestions is null || suggestions.Count == 0) return;
         suggestionIndex = (suggestionIndex + 1) % suggestions.Count; ShowBranchPair(suggestions[suggestionIndex]);
-        if (leftScope is not null) BuildPairBreadcrumbs(leftScope.Value, LeftScopeBreadcrumbs, true, "Branch");
-        if (rightScope is not null) BuildPairBreadcrumbs(rightScope.Value, RightScopeBreadcrumbs, true, "Branch");
+        if (leftScope is not null) BuildPairBreadcrumbs(leftScope.Value, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
+        if (rightScope is not null) BuildPairBreadcrumbs(rightScope.Value, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
         SynchronizeVisibleSelection(); UpdateSelectionSummary();
     }
 
@@ -194,8 +194,8 @@ public partial class MainWindow
     {
         var suggestions = controller.Counterparts?.Seeds; if (suggestions is null || suggestionIndex < 0 || suggestionIndex >= suggestions.Count) return;
         ShowBranchPair(suggestions[suggestionIndex]);
-        if (leftScope is not null) BuildPairBreadcrumbs(leftScope.Value, LeftScopeBreadcrumbs, true, "Branch");
-        if (rightScope is not null) BuildPairBreadcrumbs(rightScope.Value, RightScopeBreadcrumbs, true, "Branch");
+        if (leftScope is not null) BuildPairBreadcrumbs(leftScope.Value, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
+        if (rightScope is not null) BuildPairBreadcrumbs(rightScope.Value, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
         SynchronizeVisibleSelection(); UpdateSelectionSummary();
     }
 
@@ -210,13 +210,14 @@ public partial class MainWindow
 
     private void BuildBreadcrumbs(FileSystemPath scope)
     {
-        BuildBreadcrumbs(scope, BreadcrumbPanel, scopeIncludesDescendants, scopeProjectionTitle);
+        BuildBreadcrumbs(scope, BreadcrumbPanel, scopeIncludesDescendants, scopeProjectionTitle, null);
         BreadcrumbPanel.IsVisible = BreadcrumbPanel.Children.Count > 0;
     }
 
-    private void BuildPairBreadcrumbs(FileSystemPath scope, StackPanel panel, bool includeDescendants, string title) => BuildBreadcrumbs(scope, panel, includeDescendants, title);
+    private void BuildPairBreadcrumbs(FileSystemPath scope, StackPanel panel, bool includeDescendants, string title, PairSide side) =>
+        BuildBreadcrumbs(scope, panel, includeDescendants, title, side);
 
-    private void BuildBreadcrumbs(FileSystemPath scope, StackPanel panel, bool includeDescendants, string title)
+    private void BuildBreadcrumbs(FileSystemPath scope, StackPanel panel, bool includeDescendants, string title, PairSide? side)
     {
         panel.Children.Clear(); var root = CorpusRootFor(scope); if (root is null) return;
         var chain = new List<FileSystemPath>(); var current = scope;
@@ -233,15 +234,58 @@ public partial class MainWindow
             var button = new Button
             {
                 Content = i == 0 ? path.Value : Path.GetFileName(path.Value), Padding = new Avalonia.Thickness(4, 1),
-                Tag = new BreadcrumbTarget(path, includeDescendants, title), Cursor = new Cursor(StandardCursorType.Hand)
+                Tag = new BreadcrumbTarget(path, includeDescendants, title, side), Cursor = new Cursor(StandardCursorType.Hand)
             };
             button.Click += Breadcrumb_Click; panel.Children.Add(button);
         }
     }
 
-    private void Breadcrumb_Click(object? sender, RoutedEventArgs e)
+    private async void Breadcrumb_Click(object? sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: BreadcrumbTarget target }) ShowScopeProjection(target.Path, target.IncludeDescendants, target.Title);
+        if (sender is not Button { Tag: BreadcrumbTarget target }) return;
+        if (target.Side is null) { ShowScopeProjection(target.Path, target.IncludeDescendants, target.Title); return; }
+        await NavigatePairBreadcrumbAsync(target);
+    }
+
+    private async Task NavigatePairBreadcrumbAsync(BreadcrumbTarget target)
+    {
+        var session = controller.Session;
+        if (session is null || leftScope is null || rightScope is null || target.Side is null) return;
+
+        var side = target.Side.Value;
+        var first = side == PairSide.Left ? target.Path : leftScope.Value;
+        var second = side == PairSide.Right ? target.Path : rightScope.Value;
+        BeginProgress($"Opening {target.Title}...", true);
+        try
+        {
+            var rebuilt = await Task.Run(() =>
+            {
+                var node = target.IncludeDescendants ? BuildBranchTree(target.Path) : BuildDirectoryTree(target.Path);
+                var shared = CountSharedContents(session, first, second, target.IncludeDescendants);
+                return (Node: node, Shared: shared);
+            });
+
+            if (side == PairSide.Left)
+            {
+                leftScope = target.Path;
+                LeftTree.ItemsSource = new[] { rebuilt.Node };
+                BuildPairBreadcrumbs(target.Path, LeftScopeBreadcrumbs, target.IncludeDescendants, target.Title, PairSide.Left);
+            }
+            else
+            {
+                rightScope = target.Path;
+                RightTree.ItemsSource = new[] { rebuilt.Node };
+                BuildPairBreadcrumbs(target.Path, RightScopeBreadcrumbs, target.IncludeDescendants, target.Title, PairSide.Right);
+            }
+
+            ProjectionTitle.Text = $"{target.Title} Pair — {rebuilt.Shared:N0} shared Groups";
+            EndProgress($"{target.Title} Pair — {rebuilt.Shared:N0} shared Groups.");
+            SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
+        }
+        catch (Exception ex)
+        {
+            EndProgress($"Could not open {target.Title}: {ex.Message}");
+        }
     }
 
     private FileSystemPath? CorpusRootFor(FileSystemPath path)
@@ -251,5 +295,6 @@ public partial class MainWindow
         return null;
     }
 
-    private sealed record BreadcrumbTarget(FileSystemPath Path, bool IncludeDescendants, string Title);
+    private enum PairSide { Left, Right }
+    private sealed record BreadcrumbTarget(FileSystemPath Path, bool IncludeDescendants, string Title, PairSide? Side);
 }
