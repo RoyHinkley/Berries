@@ -1,283 +1,184 @@
-# Berries Situation Catalogue
+# Berries Situation Catalogue — Retained Semantic Research
 
-This document defines the user-facing Situation catalogue and its relationship to Cases, Resolutions, and Dispositions. Core terminology and invariants are in `MODEL.md`.
+This document preserves semantic research from earlier Berries design work. It is **not** the current required application workflow.
 
-## Situation rules
+The present Explorer lets the user work directly with Groups, Directories, Branches, Directory Pairs, Branch Pairs, and the explicit operations Exclude/Delete/Move. It does not require the user to classify a Situation, choose a named Resolution, or compile a Disposition before acting.
 
-A Situation is the asserted semantic context of a Case. It explains the Case's defining duplication pattern; it is not required for Case discovery and need not be provable from filesystem evidence.
+The terminology below is retained because the research remains useful for understanding recurring real-world causes of duplication and may inform future suggestion/explanation features. Current domain and UI terminology is defined in `MODEL.md` and `WORKFLOW.md`.
 
-Berries may use objective Case characteristics to constrain or rank the Situations it offers. It should avoid presenting Situations that could not plausibly have produced the Case at hand.
+## Historical vocabulary
 
-Once the user identifies a Situation, Berries treats that Situation as the operative semantic context for proposing Resolutions. It does not compete with the user's assertion by presenting unrelated Resolutions merely because another explanation is conceivable.
+### Situation
 
-A useful Situation evokes one or more natural Resolutions that can be mapped to fully parameterized Dispositions.
+A human explanation for why a duplication pattern exists: backup, migration, reorganization, staging residue, and so forth.
 
-A Resolution must address the duplication pattern that caused the Case to exist. It may legitimately leave unrelated internal duplication untouched for other Cases.
+Filesystem evidence can make a Situation plausible but generally cannot prove it. The user remains the semantic authority.
 
-Situation identification is optional. A user may work directly from applicable Resolutions when that is sufficient.
+### Resolution
 
-The catalogue is pragmatic rather than mathematically complete. Situations may be added, merged, split, reordered, or refined as real-case experience reveals useful user concepts.
+In the earlier research model, a natural user intention appropriate to a Situation, such as retiring a backup or completing a migration.
+
+### Disposition
+
+In the earlier research model, a fully parameterized operational realization of a Resolution.
+
+The current Explorer no longer exposes this Situation -> Resolution -> Disposition chain. Where the user's intent is already clear, ordinary Exclude/Delete/Move expresses it directly.
+
+## Governing research criterion
+
+The most useful surviving criterion is:
+
+    A useful Situation evokes one or more natural resolutions that can be
+    mapped to fully specified operations/outcomes.
+
+This remains a useful test for whether a semantic label is worth preserving, even though those labels are not required by the live UI.
 
 ## Unneeded copy
 
-Situation text:
-
-    It looks like these are unneeded copies of the same content.
-
 Meaning:
 
-Multiple instances contain identical Content and one or more instances have no independent reason to remain.
+Multiple files contain identical content and one or more copies have no independent reason to remain.
 
-Applicable Case types:
-
-    DuplicateSet Case only
-
-Natural Resolutions:
-
-    Keep this instance.
-    Keep these instances.
-    Keep all as-is.
-
-Disposition information:
-
-Selected surviving instance(s). Other Case instances are implicitly removable.
-
-Examples subsumed here:
+Typical examples:
 
     accidental copy
     rename residue
     simple obsolete copy
     obsolete generated/exported output
 
-At structural scale, more informative Situations normally apply.
+Natural historical resolutions:
+
+    retain one or more chosen copies
+    leave all copies unchanged
+
+Current Explorer expression:
+
+    inspect the Group
+    select expendable copies
+    Delete or Exclude as appropriate
+
+At larger structural scale, a more informative Situation often explains the duplication better.
 
 ## Move residue
 
-Situation text:
-
-    It looks like D has moved to C, but duplicate files remain at D.
-
 Meaning:
 
-Material formerly located under one branch now belongs under another, but duplicate instances remain at the former location.
+Material formerly located under one Branch now belongs under another, but duplicate files remain at the former location.
 
-Applicable Case types:
+Historical semantic roles:
 
-    DirectoryPair
-    BranchPair
+    former location
+    current location
 
-Semantic roles:
+Natural historical resolution:
 
-    Former location = D
-    Current location = C
+    merge/retire the former location into the current location
 
-Natural Resolutions:
+Current Explorer expression:
 
-    Merge the former location into the current location.
-    Leave the relationship unchanged.
+    inspect an appropriate Branch Pair or Directory Pair
+    establish the intended source/destination scopes
+    Move in the intended direction
 
-The reverse orientation should also be available when plausible. Approved directory mappings supply detailed Disposition parameters.
+The current Move operation, rather than a separate Merge command, handles destination-authoritative duplicate collapse.
 
 ## Reorganization
 
-Situation text:
-
-    It looks like D has been reorganized under C.
-
-or:
-
-    It looks like the material under D is now organized differently under C.
-
 Meaning:
 
-Two branches represent substantially overlapping Content, but their internal directory organizations differ.
+Two Branches contain substantially overlapping Groups but their internal directory organization differs.
 
-Applicable Case types:
+Historical semantic roles:
 
-    Primarily BranchPair
-    A simple DirectoryPair may reduce to Move residue
+    former organization
+    preferred/current organization
 
-Semantic roles:
+Natural historical resolution:
 
-    Former organization
-    Preferred/current organization
+    move material from the former organization into explicitly chosen
+    corresponding scopes in the preferred organization
 
-Natural Resolutions:
+Current Explorer expression:
 
-    Merge the former organization into the preferred organization using
-    proposed mappings.
-    Leave the organizations as they are.
-
-The reverse orientation should also be available.
-
-Observed descendant DirectoryPairs can suggest non-identity mappings such as:
-
-    OldPhotos\Family -> Photos\Family
-    OldPhotos\Trips  -> Photos\Travel
-
-Move residue and Reorganization remain separate because "I moved this" and "I reorganized this" are natural and meaningfully different semantic contexts.
+A reorganization may require several explicit Move operations at different scopes. Berries does not infer that differently named directories correspond merely because they share content.
 
 ## Backup
 
-Situation text:
-
-    It looks like E is a backup of D.
-
 Meaning:
 
-E intentionally duplicates material in D for recovery or preservation.
+One Branch intentionally duplicates material in another for recovery or preservation.
 
-Applicable Case types:
+Historical semantic roles:
 
-    DirectoryPair
-    BranchPair
+    primary
+    backup
 
-Semantic roles:
+Natural historical outcomes:
 
-    Primary = D
-    Backup = E
+    retain the backup
+    retire the backup
 
-Natural Resolutions:
+Current Explorer implication:
 
-    Keep the backup.
-    Retire the backup.
-
-If the backup is retired, unique Content in it may intentionally be lost. Such loss must be highlighted before Execute.
-
-The reverse orientation may apply. Backup is intentional duplication, so preserving duplication is a valid completed outcome.
+Intentional duplication is legitimate. Berries should not assume that duplicated backup files are expendable. If the user chooses to retire material, Delete/Move operations express that decision and Execute summarizes any physical content loss.
 
 ## Migration
 
-Situation text:
-
-    It looks like D is being migrated to C.
-
 Meaning:
 
-Content is being transferred from an old location or organization to a new one, but the migration is incomplete or the old location has continued to accumulate Content.
+Content is being transferred from an old location or organization to a new one, but the migration is incomplete or the old side has continued to accumulate files.
 
-Applicable Case types:
+Historical semantic roles:
 
-    DirectoryPair
-    BranchPair
+    old/source
+    new/destination
 
-Semantic roles:
+Natural historical resolution:
 
-    Old/source = D
-    New/destination = C
+    complete the migration
 
-Natural Resolutions:
-
-    Complete the migration from D to C.
-    Leave the migration incomplete for now.
-
-The reverse orientation may apply.
-
-Migration differs from Move residue because unique Files remaining on the old side may represent unfinished migration rather than expendable residue. Migration may overlap structurally with Reorganization while evoking different natural Resolutions.
+Migration differs from simple Move residue because unique files on the old side may represent unfinished migration rather than expendable residue. The current duplicate-oriented Explorer does not perform general unique-file migration automatically.
 
 ## Snapshot
 
-Situation text:
-
-    It looks like E is a temporary snapshot of D.
-
 Meaning:
 
-E is an intentionally retained copy of D, or of some prior state of D, created for temporary preservation rather than permanent backup.
+One Branch is an intentionally retained copy of another Branch, or of a prior state of it, created for temporary preservation.
 
-Applicable Case types:
+Historical semantic roles:
 
-    DirectoryPair
-    BranchPair
+    working/current
+    snapshot
 
-Semantic roles:
+Natural historical outcomes:
 
-    Working/current = D
-    Snapshot = E
+    retire the snapshot
+    retain it for now
 
-Natural Resolutions, suggested order:
-
-    Retire the snapshot.
-    Keep the snapshot for now.
-
-An alternate interpretation is that the snapshot represents the desired state and the working tree represents a temporary excursion; this can lead to a rollback-like Resolution.
-
-Backup and Snapshot may produce similar Dispositions but differ semantically:
-
-    Backup
-        Redundancy is expected to persist.
-
-    Snapshot
-        Redundancy is expected to be temporary.
+The key semantic distinction from Backup is expectation: backup redundancy may be long-lived, while snapshot redundancy is often temporary.
 
 ## Archive
 
-Situation text:
-
-    It looks like E is an archive of D.
-
 Meaning:
 
-E is an intentionally retained historical or preservation-oriented collection related to D. Duplication between D and E may be desirable. Unique archive Content may be especially important to preserve.
+One Branch is an intentionally retained historical or preservation-oriented collection related to another working collection.
 
-Applicable Case types:
+Historical semantic roles:
 
-    DirectoryPair
-    BranchPair
+    working/current
+    archive
 
-Semantic roles:
+Potential historical resolutions included updating the archive, removing already archived working copies, retiring duplicate archive copies, or deleting the archive.
 
-    Working/current = D
-    Archive = E
+Current boundary:
 
-Natural Resolutions may include:
-
-    Update the archive.
-        Add material missing from the archive while retaining working instances.
-
-    Remove archived items from the working side.
-        Remove working instances already represented in the archive.
-
-    Update the archive, then remove archived items from the working side.
-
-    Remove duplicates from the archive.
-        Remove archive instances represented on the working side while
-        preserving archive-only Content.
-
-    Delete the archive.
-        This may intentionally destroy unique Content.
-
-    Keep as-is.
-
-Internal duplication wholly within the archive should normally be exposed as separate Cases. Applying one Archive Resolution need not hide the Case; further useful work on the relationship may remain.
-
-Archive demonstrates that a useful Disposition may intentionally create or preserve duplication.
+Berries can use duplicate evidence to support explicit Move/Delete decisions, but it is not a general archive synchronizer. Unique archive content is not an ordinary duplicate-resolution target and must not be silently removed.
 
 ## Staging / Import
 
-Situation text:
-
-    It looks like E is a staging or import area for D.
-
 Meaning:
 
-E is a temporary collection whose contents may have been copied or incorporated into D.
-
-Applicable Case types:
-
-    DirectoryPair
-    BranchPair
-
-Semantic roles:
-
-    Collection/destination = D
-    Staging/import area = E
-
-Natural Resolution:
-
-    Remove from E the items already represented in D.
-
-Unique Files in E remain untouched. The Resolution deliberately stops at deduplication; organizing or importing unique staging Content is outside the initial application scope.
+A temporary collection contains files that may already have been incorporated elsewhere.
 
 Examples:
 
@@ -287,88 +188,41 @@ Examples:
     temporary intake directory
     manually collected staging directory
 
+Natural duplicate-resolution behavior:
+
+    remove staging copies already represented in the retained collection
+
+Current Explorer expression:
+
+Use Group or structural views to identify those duplicates and Delete/Exclude them. Unique staging files remain outside ordinary duplicate cleanup.
+
 ## Downloads
-
-Situation text:
-
-    It looks like E is a download/staging area for D.
 
 Meaning:
 
-E contains downloaded Files, some of which are already represented elsewhere and may no longer need to remain in E.
+A downloads/staging area contains files already represented elsewhere and the download copy may no longer be useful.
 
-Applicable Case types:
+Natural duplicate-resolution behavior:
 
-    DirectoryPair
-    BranchPair
+    remove download copies already retained elsewhere
 
-Semantic roles:
-
-    Filed/retained location = D
-    Downloads = E
-
-Natural Resolutions:
-
-    Remove from E the Files already represented in D.
-    Remove E Files duplicated anywhere else in the Portrait.
-
-For the second Resolution, external duplicate instances provide evidence that the E instance is redundant. Those external instances remain outside Disposition authority and are not modified.
-
-Unique Files in E remain untouched.
-
-Downloads remains distinct from Staging / Import because a downloaded instance is commonly expendable once identical Content has been deliberately retained elsewhere.
+Downloads remains semantically distinct from generic staging because a downloaded copy is commonly expendable once an identical file has deliberately been retained elsewhere.
 
 ## Mirror
 
-Situation text:
-
-    It looks like D and E are intended to mirror each other.
-
-or, for a directional mirror:
-
-    It looks like E is intended to mirror D.
-
 Meaning:
 
-D and E are intended to contain corresponding Content. Differences between them represent divergence from the intended relationship.
+Two Branches are intended to correspond, either symmetrically or with one authoritative side.
 
-Applicable Case types:
+Historical resolutions included making one side match the other or synchronizing both sides.
 
-    DirectoryPair
-    BranchPair
+Current boundary:
 
-Semantic roles:
-
-    Mirror side D
-    Mirror side E
-
-For a directional mirror:
-
-    Authoritative side
-    Mirrored side
-
-Natural Resolutions:
-
-    Make E match D.
-        Add to E what is missing there.
-        Remove from E what is absent from D.
-
-    Make D match E.
-
-    Synchronize D and E.
-        Preserve Content found on either side by adding it to the other.
-
-    Keep as-is.
-
-Mirror differs from Backup because correspondence/symmetry is part of its semantics.
-
-In a Backup, missing backup Content may mean the backup needs updating and extra backup Content is not necessarily wrong. In a Mirror, missing or extra Content represents asymmetry.
-
-Making one side authoritative may intentionally destroy unique Content on the other side. Such loss must be highlighted before Execute.
+Berries is not presently a general synchronization tool. Duplicate evidence may still help the user identify redundant mirror copies, but unique-file propagation/deletion needed for full mirroring lies outside current duplicate-resolution scope.
 
 ## Rejected or subsumed candidates
 
-These scenarios are retained so useful reasoning is not lost.
+These ideas are retained so earlier reasoning is not lost.
 
 **Accidental copy** — subsumed by Unneeded copy.
 
@@ -376,22 +230,25 @@ These scenarios are retained so useful reasoning is not lost.
 
 **Download residue** — developed into Downloads.
 
-**Generated output** — retained as an example under Unneeded copy. It is real, but ordinary filesystem evidence may not establish that generated copies are expendable. Structural analysis can nevertheless identify characteristic diffuse/high-degree generated-output patterns as evidence.
+**Generated output** — a real source of duplicate noise, but filesystem evidence alone does not prove generated copies are expendable. Persistent `[exclude]` configuration or interactive Exclude is often more appropriate than semantic inference.
 
-**Template / shared resource** — not currently a distinct Situation. True templates normally become modified derivatives and cease to be duplicates; identical shared-resource copies may be independently required. Structural graph evidence can identify repeated standardized Content without authorizing removal.
+**Template / shared resource** — not retained as a distinct Situation. Identical copies may be independently required.
 
-**Intentional deployment** — not currently a distinct Situation. Distributed identical copies may be independently required by applications or directory structures. Duplicate detection alone provides insufficient evidence that any is expendable.
+**Intentional deployment** — not retained as a distinct Situation. Distributed identical copies can be required by application structure.
 
-**Intentional copies** — not retained as a generic Situation. Meaningful intentional duplication is better represented by specific Situations such as Backup, Snapshot, Archive, and Mirror.
+**Intentional copies** — better represented by specific semantic contexts such as Backup, Snapshot, Archive, and Mirror.
 
-**Intentional mirror** — developed into Mirror.
+**Aggregation residue** — real but not retained as a separate Situation. Structural exploration may reduce it to several explicit Move/reorganization operations.
 
-**Aggregation residue** — a real scenario, but not currently a distinct Situation. Pairwise exposure may reduce it naturally to Move residue or Reorganization; a sufficiently broad BranchPair may encompass several original source locations.
+## Empirical lessons
 
-## Empirical refinement
+The catalogue remains useful as a record of semantic possibilities, but current Berries development established several stronger product rules:
 
-The catalogue is expected to evolve from real Cases.
+- duplicate identity is objective; the reason for duplication usually is not;
+- the user should not be forced to classify a Situation before acting;
+- practical structural analysis should suggest attention, not pretend to infer semantic truth;
+- Exclude/Delete/Move are sufficient to express many intentions directly;
+- application-specific artifact knowledge should not be hard-coded merely to manufacture semantic confidence;
+- a Situation is worth retaining only when it corresponds to recognizable, useful user intentions.
 
-Objective structural characteristics can eliminate incompatible Situations or alter presentation order, but they do not establish semantic truth autonomously. When several Situations remain plausible, the user identifies the applicable one.
-
-Likewise, a structural phenotype may turn out not to discriminate Situations at all. That is acceptable; the program should ask rather than pretend to know.
+Future semantic features should build on these lessons without reintroducing a mandatory classification workflow.
