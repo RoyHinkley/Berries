@@ -62,6 +62,16 @@ public sealed class ProjectionService(PortraitQueries queries, IFileSystem fileS
         return new BranchProjection(branch, root);
     }
 
+    public Task<int> SharedGroupCountAsync(
+        BerriesSession session,
+        FileSystemPath first,
+        FileSystemPath second,
+        bool includeDescendants,
+        IProgress<OperationProgress>? progress = null,
+        CancellationToken cancellationToken = default) =>
+        queries.SharedGroupCountAsync(
+            session, first, second, includeDescendants, progress, cancellationToken);
+
     private static IReadOnlyList<FileInstance> PopulateFiles(
         BranchProjectionNode node,
         CancellationToken cancellationToken)
