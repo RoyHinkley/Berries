@@ -18,8 +18,7 @@ public partial class MainWindow
     {
         if (controller.Session is not null && CorpusRootsMatchCurrentSelection())
         {
-            RootsPanel.IsVisible = false; ExplorerPanel.IsVisible = true;
-            StatusText.Text = "Returned to the current session.";
+            RootsPanel.IsVisible = false; ExplorerPanel.IsVisible = true; StatusText.Text = "Returned to the current session.";
             SynchronizeVisibleSelection(); UpdateSelectionSummary(); return;
         }
         ScanButton_Click(sender, e);
@@ -34,26 +33,21 @@ public partial class MainWindow
 
     private void ExplorerSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (synchronizingSelection) return;
-        UpdateCapabilities();
+        if (synchronizingSelection) return; UpdateCapabilities();
     }
 
     private void UpdatePivotCapabilities()
     {
         var scope = SelectedScope();
-        PivotCorpusRootsMenu.IsEnabled = controller.Session is not null;
-        PivotContentMenu.IsEnabled = controller.Session is not null;
-        PivotDirectoryMenu.IsEnabled = scope is not null; PivotBranchMenu.IsEnabled = scope is not null;
-        PivotBestDirectoryPairMenu.IsEnabled = scope is not null;
+        PivotCorpusRootsMenu.IsEnabled = controller.Session is not null; PivotContentMenu.IsEnabled = controller.Session is not null;
+        PivotDirectoryMenu.IsEnabled = scope is not null; PivotBranchMenu.IsEnabled = scope is not null; PivotBestDirectoryPairMenu.IsEnabled = scope is not null;
         var branches = controller.BranchStatistics?.Branches;
-        PivotBestBranchPairMenu.IsEnabled = scope is not null && branches is not null
-            && Projections.HasBranchPairCandidate(branches, scope.Value);
+        PivotBestBranchPairMenu.IsEnabled = scope is not null && branches is not null && Projections.HasBranchPairCandidate(branches, scope.Value);
         var suggestions = controller.Counterparts?.Seeds;
         PivotBranchPairMenu.IsEnabled = suggestionIndex >= 0 && suggestions is { Count: > 0 };
     }
 
     private void UpdateSelectionStatus() => UpdateSelectionSummary();
-
     private IReadOnlyList<ExplorerNode> SelectedNodesFromActiveProjection() => focusedNode is not null ? [focusedNode] : [];
     private static IEnumerable<object> SelectedObjects(TreeView tree) => tree.SelectedItems?.Cast<object>() ?? [];
 
@@ -63,12 +57,11 @@ public partial class MainWindow
         BeginProgress("Building Corpus Roots view...", true);
         try
         {
-            var tasks = corpus.Roots.Select(root => BuildBranchExplorerNodeAsync(root.Path)).ToArray();
-            await Task.WhenAll(tasks);
-            var nodes = tasks.Select(task => task.Result).ToArray();
+            var tasks = corpus.Roots.Select(root => BuildBranchExplorerNodeAsync(root.Path)).ToArray(); await Task.WhenAll(tasks);
             currentScope = null; leftScope = null; rightScope = null; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
             BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear(); ProjectionTitle.Text = "Corpus Roots";
-            ExplorerTree.ItemsSource = nodes; EndProgress("Corpus Roots"); SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
+            ExplorerTree.ItemsSource = tasks.Select(task => task.Result).ToArray();
+            EndProgress("Corpus Roots"); SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
         }
         catch (Exception ex) { EndProgress("Could not build Corpus Roots view: " + ex.Message); }
     }
@@ -76,8 +69,7 @@ public partial class MainWindow
     private void PivotSelectedContent_Click(object? sender, RoutedEventArgs e)
     {
         var session = controller.Session; if (session is null) return;
-        var groups = Projections.GroupsForSelection(session);
-        if (groups.Count == 0) { ShowContentProjection(); return; }
+        var groups = Projections.GroupsForSelection(session); if (groups.Count == 0) { ShowContentProjection(); return; }
         currentScope = null; leftScope = null; rightScope = null; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
         BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear();
         ProjectionTitle.Text = groups.Count == 1 ? "Group" : $"Groups — {groups.Count:N0} selected";
@@ -91,25 +83,18 @@ public partial class MainWindow
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
         var shownNames = string.Join(", ", names.Take(2)); if (names.Length > 2) shownNames += ", …";
         var node = new ExplorerNode($"{shownNames} — {files.Count:N0} files", files);
-        foreach (var file in files.OrderBy(file => file.Path.Value, StringComparer.OrdinalIgnoreCase)) node.Children.Add(new ExplorerNode(file.Path.Value, [file]));
+        foreach (var file in files.OrderBy(file => file.Path.Value, StringComparer.OrdinalIgnoreCase))
+            node.Children.Add(new ExplorerNode(file.Path.Value, [file], file.ParentDirectory));
         return node;
     }
 
-    private async void PivotDirectory_Click(object? sender, RoutedEventArgs e)
-    {
-        var scope = SelectedScope(); if (scope is not null) await ShowDirectoryProjectionAsync(scope.Value);
-    }
-
-    private async void PivotBranch_Click(object? sender, RoutedEventArgs e)
-    {
-        var scope = SelectedScope(); if (scope is not null) await ShowBranchProjectionAsync(scope.Value);
-    }
+    private async void PivotDirectory_Click(object? sender, RoutedEventArgs e) { var scope = SelectedScope(); if (scope is not null) await ShowDirectoryProjectionAsync(scope.Value); }
+    private async void PivotBranch_Click(object? sender, RoutedEventArgs e) { var scope = SelectedScope(); if (scope is not null) await ShowBranchProjectionAsync(scope.Value); }
 
     private async void PivotBestDirectoryPair_Click(object? sender, RoutedEventArgs e)
     {
         var scope = SelectedScope(); if (scope is null) return;
-        var pairs = controller.DirectoryAnalysis?.DirectoryPairs;
-        var pair = pairs is null ? null : Projections.BestDirectoryPair(pairs, scope.Value);
+        var pairs = controller.DirectoryAnalysis?.DirectoryPairs; var pair = pairs is null ? null : Projections.BestDirectoryPair(pairs, scope.Value);
         if (pair is not null) { await ShowDirectoryPairProjectionAsync(pair); return; }
         var record = controller.DirectoryAnalysis?.Directories.FirstOrDefault(directory => fileSystem.PathsEqual(directory.Path, scope.Value));
         StatusText.Text = record is null || record.DuplicateFileCount == 0 ? "The selected Directory contains no duplicate files."
@@ -130,33 +115,14 @@ public partial class MainWindow
         catch (Exception ex) { EndProgress("Best Branch Pair search failed: " + ex.Message); }
     }
 
-    private FileSystemPath? SelectedScope()
-    {
-        if (focusedNode is not null) return InferSelectedScope(focusedNode);
-        return currentScope;
-    }
-
-    private FileSystemPath? InferSelectedScope(ExplorerNode node)
-    {
-        var files = DistinctFiles(node.Files); if (files.Count == 0) return null; if (files.Count == 1) return files[0].ParentDirectory;
-        FileSystemPath? candidate = files[0].ParentDirectory;
-        while (candidate is not null)
-        {
-            var path = candidate.Value;
-            var labelMatches = string.Equals(path.Value, node.Label, StringComparison.OrdinalIgnoreCase) || string.Equals(Path.GetFileName(path.Value), node.Label, StringComparison.OrdinalIgnoreCase);
-            var containsAll = files.All(file => fileSystem.PathsEqual(file.ParentDirectory, path) || fileSystem.IsDescendant(file.ParentDirectory, path));
-            if (labelMatches && containsAll) return path; candidate = fileSystem.GetParentDirectory(path);
-        }
-        return null;
-    }
+    private FileSystemPath? SelectedScope() => focusedNode?.SemanticPath ?? currentScope;
 
     private async Task ShowAdHocBranchPairAsync(FileSystemPath first, FileSystemPath second, int sharedContentCount)
     {
         BeginProgress("Opening Branch Pair...", true);
         try
         {
-            var leftTask = BuildBranchExplorerNodeAsync(first); var rightTask = BuildBranchExplorerNodeAsync(second);
-            await Task.WhenAll(leftTask, rightTask);
+            var leftTask = BuildBranchExplorerNodeAsync(first); var rightTask = BuildBranchExplorerNodeAsync(second); await Task.WhenAll(leftTask, rightTask);
             currentScope = null; leftScope = first; rightScope = second; PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
             BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear(); ProjectionTitle.Text = $"Branch Pair — {sharedContentCount:N0} shared Groups";
             BuildPairBreadcrumbs(first, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left); BuildPairBreadcrumbs(second, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
@@ -189,14 +155,11 @@ public partial class MainWindow
         BuildBreadcrumbs(scope, BreadcrumbPanel, scopeIncludesDescendants, scopeProjectionTitle, null);
         BreadcrumbPanel.IsVisible = BreadcrumbPanel.Children.Count > 0;
     }
-
-    private void BuildPairBreadcrumbs(FileSystemPath scope, StackPanel panel, bool includeDescendants, string title, PairSide side) =>
-        BuildBreadcrumbs(scope, panel, includeDescendants, title, side);
+    private void BuildPairBreadcrumbs(FileSystemPath scope, StackPanel panel, bool includeDescendants, string title, PairSide side) => BuildBreadcrumbs(scope, panel, includeDescendants, title, side);
 
     private void BuildBreadcrumbs(FileSystemPath scope, StackPanel panel, bool includeDescendants, string title, PairSide? side)
     {
-        panel.Children.Clear();
-        var corpus = controller.Corpus; if (corpus is null) return;
+        panel.Children.Clear(); var corpus = controller.Corpus; if (corpus is null) return;
         var chain = Projections.Breadcrumbs(corpus, scope);
         for (var i = 0; i < chain.Count; i++)
         {
@@ -214,44 +177,30 @@ public partial class MainWindow
     private async void Breadcrumb_Click(object? sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: BreadcrumbTarget target }) return;
-        if (target.Side is null)
-        {
-            if (target.IncludeDescendants) await ShowBranchProjectionAsync(target.Path); else await ShowDirectoryProjectionAsync(target.Path);
-            return;
-        }
+        if (target.Side is null) { if (target.IncludeDescendants) await ShowBranchProjectionAsync(target.Path); else await ShowDirectoryProjectionAsync(target.Path); return; }
         if (!target.IncludeDescendants) { await NavigateDirectoryPairBreadcrumbAsync(target); return; }
         await NavigatePairBreadcrumbAsync(target);
     }
 
     private async Task NavigatePairBreadcrumbAsync(BreadcrumbTarget target)
     {
-        var session = controller.Session;
-        if (session is null || leftScope is null || rightScope is null || target.Side is null) return;
-        var side = target.Side.Value;
-        var first = side == PairSide.Left ? target.Path : leftScope.Value;
-        var second = side == PairSide.Right ? target.Path : rightScope.Value;
+        var session = controller.Session; if (session is null || leftScope is null || rightScope is null || target.Side is null) return;
+        var side = target.Side.Value; var first = side == PairSide.Left ? target.Path : leftScope.Value; var second = side == PairSide.Right ? target.Path : rightScope.Value;
         BeginProgress($"Opening {target.Title}...", true);
         try
         {
-            var nodeTask = BuildBranchExplorerNodeAsync(target.Path);
-            var sharedTask = Projections.SharedGroupCountAsync(session, first, second, includeDescendants: true);
+            var nodeTask = BuildBranchExplorerNodeAsync(target.Path); var sharedTask = Projections.SharedGroupCountAsync(session, first, second, includeDescendants: true);
             await Task.WhenAll(nodeTask, sharedTask);
-
             if (side == PairSide.Left)
             {
-                leftScope = target.Path; LeftTree.ItemsSource = new[] { await nodeTask };
-                BuildPairBreadcrumbs(target.Path, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
+                leftScope = target.Path; LeftTree.ItemsSource = new[] { await nodeTask }; BuildPairBreadcrumbs(target.Path, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
             }
             else
             {
-                rightScope = target.Path; RightTree.ItemsSource = new[] { await nodeTask };
-                BuildPairBreadcrumbs(target.Path, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
+                rightScope = target.Path; RightTree.ItemsSource = new[] { await nodeTask }; BuildPairBreadcrumbs(target.Path, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
             }
-
-            var shared = await sharedTask;
-            ProjectionTitle.Text = $"Branch Pair — {shared:N0} shared Groups";
-            EndProgress($"Branch Pair — {shared:N0} shared Groups.");
-            SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
+            var shared = await sharedTask; ProjectionTitle.Text = $"Branch Pair — {shared:N0} shared Groups";
+            EndProgress($"Branch Pair — {shared:N0} shared Groups."); SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
         }
         catch (Exception ex) { EndProgress("Could not open Branch: " + ex.Message); }
     }
