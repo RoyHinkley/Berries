@@ -177,9 +177,9 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
             chain.Add(current);
             var parent = fileSystem.GetParentDirectory(current)
                 ?? throw new InvalidOperationException($"Could not reach Branch root {branch} while walking ancestors of {directory}.");
-            if (!fileSystem.PathsEqual(parent.Value, branch) && !fileSystem.IsDescendant(parent.Value, branch))
+            if (!fileSystem.PathsEqual(parent, branch) && !fileSystem.IsDescendant(parent, branch))
                 throw new InvalidOperationException($"Directory {directory} is outside Branch {branch}.");
-            current = parent.Value;
+            current = parent;
         }
         chain.Reverse();
         return chain;
