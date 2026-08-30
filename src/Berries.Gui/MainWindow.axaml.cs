@@ -149,7 +149,7 @@ public partial class MainWindow : Window
         UpdateCapabilities();
     }
 
-    private async Task ShowBranchPairAsync(BranchCounterpartSeed suggestion)
+    private async Task ShowBranchPairAsync(BranchPairSuggestion suggestion)
     {
         if (controller.Session is null || suggestion.Counterparts.Count == 0) return;
         var first = suggestion.Seed.Branch.Path;
@@ -210,7 +210,7 @@ public partial class MainWindow : Window
         MoveLeftButton.IsEnabled = hasPair;
         UndoButton.IsEnabled = hasSession && session!.Operations.Count > 0;
         ExecuteMenu.IsEnabled = hasSession && session!.Actions.Count > 0;
-        var suggestions = controller.Counterparts?.Seeds;
+        var suggestions = controller.Suggestions?.Suggestions;
         SuggestButton.IsEnabled = suggestions is { Count: > 0 };
         PivotBranchPairMenu.IsEnabled = suggestionIndex >= 0 && suggestions is { Count: > 0 };
     }
