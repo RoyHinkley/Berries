@@ -16,7 +16,7 @@ public partial class MainWindow
 
     private static ExplorerNode BuildBranchExplorerNode(BranchProjectionNode projection)
     {
-        var node = new ExplorerNode(projection.Label, projection.Files);
+        var node = new ExplorerNode(projection.Label, projection.Files, projection.Directory);
         foreach (var child in projection.Children)
             node.Children.Add(BuildBranchExplorerNode(child));
         return node;
@@ -40,14 +40,8 @@ public partial class MainWindow
             BuildBreadcrumbs(branch);
             ExplorerTree.ItemsSource = new[] { node };
             EndProgress("Branch");
-            SynchronizeVisibleSelection();
-            UpdateSelectionSummary();
-            UpdateCapabilities();
-            UpdatePivotCapabilities();
+            SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
         }
-        catch (Exception ex)
-        {
-            EndProgress("Could not open Branch: " + ex.Message);
-        }
+        catch (Exception ex) { EndProgress("Could not open Branch: " + ex.Message); }
     }
 }
