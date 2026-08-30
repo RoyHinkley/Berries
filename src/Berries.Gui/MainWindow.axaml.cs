@@ -180,11 +180,12 @@ public partial class MainWindow : Window
             "Execute");
         if (!approved) return;
 
-        BeginProgress("Executing filesystem actions...", true);
+        BeginPortraitBusy("Executing filesystem actions...");
         try
         {
+            await StopBackgroundAnalysisAsync();
             var result = await actionPlanExecutor.ExecuteAsync(session.Actions);
-            EndProgress($"Execution finished — {result.CompletedCount:N0} completed, {result.SkippedCount:N0} dependent action(s) skipped, {result.Failures.Count:N0} failure(s)."
+            EndPortraitBusy($"Execution finished — {result.CompletedCount:N0} completed, {result.SkippedCount:N0} dependent action(s) skipped, {result.Failures.Count:N0} failure(s)."
                 + (result.Failures.Count == 0 ? string.Empty : " See the failure summary."));
             if (result.Failures.Count > 0)
             {
@@ -193,7 +194,7 @@ public partial class MainWindow : Window
                 await ShowMessageAsync("Execution failures", string.Join(Environment.NewLine + Environment.NewLine, failures));
             }
         }
-        catch (Exception ex) { EndProgress("Execution failed: " + ex.Message); }
+        catch (Exception ex) { EndPortraitBusy("Execution failed: " + ex.Message); }
     }
 
     private static string DescribeAction(FileAction action) => action switch
