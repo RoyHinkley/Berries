@@ -96,54 +96,42 @@ public partial class MainWindow : Window
     private void SuggestCaseButton_Click(object? sender, RoutedEventArgs e)
     {
         var suggestions = controller.Counterparts?.Seeds; if (suggestions is null || suggestions.Count == 0) return;
-        suggestionIndex = (suggestionIndex + 1) % suggestions.Count; ShowBranchPair(suggestions[suggestionIndex]);
+        suggestionIndex = (suggestionIndex + 1) % suggestions.Count; _ = ShowBranchPairAsync(suggestions[suggestionIndex]);
     }
 
-    private void ShowBranchPair(BranchCounterpartSeed suggestion)
+    private async Task ShowBranchPairAsync(BranchCounterpartSeed suggestion)
     {
         if (controller.Session is null || suggestion.Counterparts.Count == 0) return;
-        leftScope = suggestion.Seed.Branch.Path; rightScope = suggestion.Counterparts[0].Branch.Path;
-        PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
-        ProjectionTitle.Text = $"Branch Pair — {suggestion.Counterparts[0].SharedDuplicateContentCount:N0} shared groups";
-        BuildPairBreadcrumbs(leftScope.Value, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
-        BuildPairBreadcrumbs(rightScope.Value, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
-        LeftTree.ItemsSource = new[] { BuildBranchTree(leftScope.Value) };
-        RightTree.ItemsSource = new[] { BuildBranchTree(rightScope.Value) }; UpdateCapabilities();
-    }
-
-    private ExplorerNode BuildBranchTree(FileSystemPath scope)
-    {
-        var session = controller.Session ?? throw new InvalidOperationException("No session.");
-        var duplicateFiles = session.DuplicateSets.SelectMany(set => set.Files)
-            .Where(file => fileSystem.PathsEqual(file.ParentDirectory, scope) || fileSystem.IsDescendant(file.ParentDirectory, scope)).DistinctBy(file => file.Path).ToArray();
-        var root = new ExplorerNode(scope.Value);
-        foreach (var file in duplicateFiles.OrderBy(file => file.Path.Value, StringComparer.OrdinalIgnoreCase))
+        var first = suggestion.Seed.Branch.Path;
+        var second = suggestion.Counterparts[0].Branch.Path;
+        BeginProgress("Opening Branch Pair...", true);
+        try
         {
-            var relative = fileSystem.GetRelativePath(scope, file.Path).Value;
-            var parts = relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
-            var current = root;
-            for (var i = 0; i < parts.Length - 1; i++)
-            {
-                var child = current.Children.FirstOrDefault(node => node.Label.Equals(parts[i], StringComparison.OrdinalIgnoreCase));
-                if (child is null) { child = new ExplorerNode(parts[i]); current.Children.Add(child); }
-                current = child;
-            }
-            current.Children.Add(new ExplorerNode(parts.Length == 0 ? file.Path.Value : parts[^1], [file]));
+            var leftTask = BuildBranchExplorerNodeAsync(first);
+            var rightTask = BuildBranchExplorerNodeAsync(second);
+            await Task.WhenAll(leftTask, rightTask);
+            leftScope = first; rightScope = second;
+            PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
+            ProjectionTitle.Text = $"Branch Pair — {suggestion.Counterparts[0].SharedDuplicateContentCount:N0} shared groups";
+            BuildPairBreadcrumbs(first, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
+            BuildPairBreadcrumbs(second, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
+            LeftTree.ItemsSource = new[] { await leftTask };
+            RightTree.ItemsSource = new[] { await rightTask };
+            EndProgress($"Branch Pair — {suggestion.Counterparts[0].SharedDuplicateContentCount:N0} shared Groups.");
+            SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
         }
-        PopulateScopeFiles(root); return root;
-    }
-
-    private static IReadOnlyList<FileInstance> PopulateScopeFiles(ExplorerNode node)
-    {
-        if (node.Children.Count == 0) return node.Files;
-        node.Files = node.Children.SelectMany(PopulateScopeFiles).Distinct().ToArray(); return node.Files;
+        catch (Exception ex)
+        {
+            EndProgress("Could not open Branch Pair: " + ex.Message);
+        }
     }
 
     private void PivotContent_Click(object? sender, RoutedEventArgs e) => ShowContentProjection();
     private void PivotBranchPair_Click(object? sender, RoutedEventArgs e)
     {
         var suggestions = controller.Counterparts?.Seeds;
-        if (suggestions is null || suggestionIndex < 0 || suggestionIndex >= suggestions.Count) return; ShowBranchPair(suggestions[suggestionIndex]);
+        if (suggestions is null || suggestionIndex < 0 || suggestionIndex >= suggestions.Count) return;
+        _ = ShowBranchPairAsync(suggestions[suggestionIndex]);
     }
 
     private void InvertButton_Click(object? sender, RoutedEventArgs e)
@@ -178,44 +166,45 @@ public partial class MainWindow : Window
     private async void ExcludeButton_Click(object? sender, RoutedEventArgs e)
     {
         var files = SelectedFilesFromActiveProjection(); if (files.Count == 0 || controller.Session is null) return;
-        controller.Session.Exclude(files); await AfterPortraitOperationAsync($"Excluded {files.Count:N0} file(s) from the Corpus.");
+        try { controller.Session.Exclude(files); await RefreshAfterOperationAsync($"Excluded {files.Count:N0} file(s) from the Corpus."); }
+        catch (Exception ex) { StatusText.Text = "Exclude failed: " + ex.Message; }
     }
     private async void DeleteButton_Click(object? sender, RoutedEventArgs e)
     {
         var files = SelectedFilesFromActiveProjection(); if (files.Count == 0 || controller.Session is null) return;
-        controller.Session.Delete(files); await AfterPortraitOperationAsync($"Scheduled deletion of {files.Count:N0} file(s).");
+        try { controller.Session.Delete(files); await RefreshAfterOperationAsync($"Scheduled deletion of {files.Count:N0} file(s). Working Portrait updated."); }
+        catch (Exception ex) { StatusText.Text = "Delete failed: " + ex.Message; }
     }
-    private async void MoveRightButton_Click(object? sender, RoutedEventArgs e)
+    private async void MoveRightButton_Click(object? sender, RoutedEventArgs e) => await MoveSelectedAsync(true);
+    private async void MoveLeftButton_Click(object? sender, RoutedEventArgs e) => await MoveSelectedAsync(false);
+    private async Task MoveSelectedAsync(bool leftToRight)
     {
-        if (leftScope is null || rightScope is null || controller.Session is null) return; var files = SelectedFiles(LeftTree); if (files.Count == 0) return;
-        var result = controller.Session.Move(files, leftScope.Value, rightScope.Value); await AfterPortraitOperationAsync(MoveStatus(files.Count, result));
+        if (controller.Session is null || leftScope is null || rightScope is null) return;
+        var source = leftToRight ? leftScope.Value : rightScope.Value; var destination = leftToRight ? rightScope.Value : leftScope.Value;
+        var tree = leftToRight ? LeftTree : RightTree; var files = SelectedFiles(tree); if (files.Count == 0) return;
+        try { var result = controller.Session.Move(files, source, destination); await RefreshAfterOperationAsync(MoveStatus(files.Count, result)); }
+        catch (Exception ex) { StatusText.Text = "Move failed: " + ex.Message; }
     }
-    private async void MoveLeftButton_Click(object? sender, RoutedEventArgs e)
-    {
-        if (leftScope is null || rightScope is null || controller.Session is null) return; var files = SelectedFiles(RightTree); if (files.Count == 0) return;
-        var result = controller.Session.Move(files, rightScope.Value, leftScope.Value); await AfterPortraitOperationAsync(MoveStatus(files.Count, result));
-    }
-    private static string MoveStatus(int requested, MoveResult result) => result.Collisions.Count == 0
-        ? $"Move resolved {requested:N0} selected file(s)." : $"Move completed where possible; {result.Collisions.Count:N0} destination collision(s) with different content were left unchanged.";
-
     private async void UndoButton_Click(object? sender, RoutedEventArgs e)
     {
-        if (controller.Session?.Undo() != true) return; await AfterPortraitOperationAsync("Undid the most recent portrait operation.");
+        if (controller.Session is null) return; var undone = controller.Session.Undo(); await RefreshAfterOperationAsync(undone ? "Undid the most recent operation." : "Nothing to undo.");
     }
-    private async Task AfterPortraitOperationAsync(string message)
+    private static string MoveStatus(int selectedCount, MoveResult result)
     {
-        RefreshCurrentProjection(); UpdateCapabilities(); BeginProgress(message + " Updating analysis...", true);
-        try { await controller.RefreshAnalysisAsync(); EndProgress(message); UpdateCapabilities(); }
-        catch (Exception ex) { EndProgress(message + " Analysis update failed: " + ex.Message); }
+        var text = $"Move requested for {selectedCount:N0} file(s): {result.MovedCount:N0} moved";
+        if (result.AlreadyAtDestinationCount > 0) text += $", {result.AlreadyAtDestinationCount:N0} already at destination";
+        if (result.ConflictCount > 0) text += $", {result.ConflictCount:N0} conflict(s) skipped"; return text + ".";
     }
-    private void RefreshCurrentProjection()
+    private async Task RefreshAfterOperationAsync(string message)
     {
-        if (PairExplorer.IsVisible && leftScope is not null && rightScope is not null)
-        { LeftTree.ItemsSource = new[] { BuildBranchTree(leftScope.Value) }; RightTree.ItemsSource = new[] { BuildBranchTree(rightScope.Value) }; }
-        else ShowContentProjection();
+        BeginProgress("Updating Working Portrait...", true);
+        try { await controller.RefreshAnalysisAsync(); ShowContentProjection(); EndProgress(message); UpdateCapabilities(); }
+        catch (Exception ex) { EndProgress(message + " Analysis refresh failed: " + ex.Message); }
     }
-    private IReadOnlyList<FileInstance> SelectedFilesFromActiveProjection() => PairExplorer.IsVisible
-        ? DistinctFiles(SelectedFiles(LeftTree).Concat(SelectedFiles(RightTree))) : SelectedFiles(ExplorerTree);
+    private IReadOnlyList<FileInstance> SelectedFilesFromActiveProjection()
+    {
+        if (PairExplorer.IsVisible) return DistinctFiles(SelectedFiles(LeftTree).Concat(SelectedFiles(RightTree))); return SelectedFiles(ExplorerTree);
+    }
     private IReadOnlyList<FileInstance> SelectedFiles(TreeView tree)
     {
         if (tree.SelectedItems is null) return [];
@@ -269,7 +258,6 @@ public partial class MainWindow : Window
         EndProgress($"Execution finished — {completed:N0} completed, {skipped:N0} dependent action(s) skipped, {failures.Count:N0} failure(s)." + (failures.Count == 0 ? string.Empty : " See the failure summary."));
         if (failures.Count > 0) await ShowMessageAsync("Execution failures", string.Join(Environment.NewLine + Environment.NewLine, failures.Take(50)));
     }
-
     private int CountPhysicalContentLosses(BerriesSession session)
     {
         var physicallyDeleted = session.Actions.OfType<DeleteFileAction>().Select(action => action.Path).ToArray();
