@@ -9,6 +9,7 @@ public partial class MainWindow
 {
     private ExplorerNode? focusedNode;
     private bool synchronizingSelection;
+    private ProjectionState? currentProjection;
 
     private void ExplorerNode_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -39,16 +40,13 @@ public partial class MainWindow
         SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
 
-    private bool IsGroupsProjection() => !PairExplorer.IsVisible && currentScope is null
-        && ProjectionTitle.Text?.StartsWith("Group", StringComparison.Ordinal) == true;
+    private bool IsGroupsProjection() => currentProjection?.Kind == ProjectionKind.Groups;
 
-    private IReadOnlyList<FileInstance> RepresentedFiles() => DistinctFilesFast(
-        ActiveTrees().SelectMany(tree => EnumerateNodes(tree.ItemsSource))
-            .Where(node => node.Children.Count == 0 && node.Files.Count == 1).SelectMany(node => node.Files));
+    private IReadOnlyList<FileInstance> RepresentedFiles() => currentProjection?.RepresentedFiles ?? [];
 
     private IEnumerable<TreeView> ActiveTrees()
     {
-        if (PairExplorer.IsVisible) { yield return LeftTree; yield return RightTree; }
+        if (currentProjection?.IsPair == true) { yield return LeftTree; yield return RightTree; }
         else yield return ExplorerTree;
     }
 
@@ -98,7 +96,13 @@ public partial class MainWindow
     private IReadOnlyList<FileInstance> SemanticSelection() => controller.Session?.Selection.Files ?? [];
 
     private IReadOnlyList<FileInstance> SemanticSelectionInScope(Berries.FileSystem.Abstractions.FileSystemPath scope, bool descendants) =>
-        controller.Session is { } session
-            ? Projections.SelectedFilesInContext(session, scope, descendants)
-            : [];
+        controller.Session is { } session ? Projections.SelectedFilesInContext(session, scope, descendants) : [];
+
+    private void SetProjectionState(ProjectionKind kind, IEnumerable<FileInstance> representedFiles,
+        Berries.FileSystem.Abstractions.FileSystemPath? primary = null,
+        Berries.FileSystem.Abstractions.FileSystemPath? secondary = null)
+    {
+        currentProjection = new ProjectionState(kind, DistinctFilesFast(representedFiles), primary, secondary);
+        focusedNode = null;
+    }
 }
