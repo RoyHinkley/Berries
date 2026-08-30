@@ -91,6 +91,9 @@ public sealed class ProjectionService(PortraitQueries queries)
     public IReadOnlyList<FileSystemPath> Breadcrumbs(Corpus corpus, FileSystemPath path) =>
         queries.AncestorsWithinCorpus(corpus, path);
 
+    public DirectoryRecord? DirectoryRecord(IReadOnlyList<DirectoryRecord> directories, FileSystemPath directory) =>
+        queries.DirectoryRecord(directories, directory);
+
     public DirectoryPair? BestDirectoryPair(IReadOnlyList<DirectoryPair> pairs, FileSystemPath directory) =>
         queries.BestDirectoryPair(pairs, directory);
 
