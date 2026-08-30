@@ -12,7 +12,7 @@ Governing semantics are in `PROJECT.md`, `MODEL.md`, `ANALYSIS.md`, and `WORKFLO
         Directory and Branch analysis
         Portrait queries
         portrait-operation history
-        physical Action planning/execution
+        physical FileAction execution
 
     Berries.Projection
         UI-independent Explorer projection construction
@@ -134,9 +134,9 @@ Computes parent-relative Group concentration metrics. The current seed ranking u
 
 Performs targeted Branch relationship discovery and on-demand best-pair search. It does not enumerate every Branch Pair.
 
-### `ActionPlanExecutor`
+### `FileActionExecutor`
 
-Executes the concrete filesystem Actions produced by the Working Portrait. It attempts independent work after failures and performs Move -> Copy/Delete fallback when required.
+Executes the concrete filesystem `FileAction` objects produced by the Working Portrait. It attempts independent work after failures and performs Move -> Copy/Delete fallback when required.
 
 ### `MainWindow`
 
@@ -261,7 +261,7 @@ Move does not rename arbitrarily and does not overwrite different content.
 
 ## Execute implementation
 
-The GUI calculates pre-execution content loss, asks for approval, then calls `ActionPlanExecutor`.
+The GUI calculates pre-execution content loss, asks for approval, then calls `FileActionExecutor`.
 
 Executor behavior:
 
