@@ -123,7 +123,7 @@ public partial class MainWindow
             var leftTask = BuildBranchExplorerNodeAsync(first); var rightTask = BuildBranchExplorerNodeAsync(second); await Task.WhenAll(leftTask, rightTask);
             var left = await leftTask; var right = await rightTask;
             currentScope = null; leftScope = first; rightScope = second; PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
-            SetProjectionState(ProjectionKind.BranchPair, left.Files.Concat(right.Files), first, second);
+            SetPairProjectionState(ProjectionKind.BranchPair, first, left.Files, second, right.Files);
             BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear(); ProjectionTitle.Text = $"Branch Pair — {sharedContentCount:N0} shared Groups";
             BuildPairBreadcrumbs(first, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left); BuildPairBreadcrumbs(second, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
             LeftTree.ItemsSource = new[] { left }; RightTree.ItemsSource = new[] { right };
@@ -187,8 +187,7 @@ public partial class MainWindow
             await Task.WhenAll(nodeTask, sharedTask); var node = await nodeTask;
             if (side == PairSide.Left) { leftScope = target.Path; LeftTree.ItemsSource = new[] { node }; BuildPairBreadcrumbs(target.Path, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left); }
             else { rightScope = target.Path; RightTree.ItemsSource = new[] { node }; BuildPairBreadcrumbs(target.Path, RightScopeBreadcrumbs, true, "Branch", PairSide.Right); }
-            var represented = EnumerateNodes(LeftTree.ItemsSource).Concat(EnumerateNodes(RightTree.ItemsSource)).Where(item => item.Children.Count == 0).SelectMany(item => item.Files);
-            SetProjectionState(ProjectionKind.BranchPair, represented, leftScope, rightScope);
+            UpdatePairProjectionSide(side, target.Path, node.Files);
             var shared = await sharedTask; ProjectionTitle.Text = $"Branch Pair — {shared:N0} shared Groups";
             EndProgress($"Branch Pair — {shared:N0} shared Groups."); SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
         }
