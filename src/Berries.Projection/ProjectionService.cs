@@ -1,4 +1,5 @@
 using Berries.Core;
+using Berries.Core.Analysis;
 using Berries.Core.Domain;
 using Berries.Core.Queries;
 using Berries.FileSystem.Abstractions;
@@ -61,6 +62,16 @@ public sealed class ProjectionService(PortraitQueries queries, IFileSystem fileS
         PopulateFiles(root, cancellationToken);
         return new BranchProjection(branch, root);
     }
+
+    public DirectoryPair? BestDirectoryPair(
+        IReadOnlyList<DirectoryPair> pairs,
+        FileSystemPath directory) =>
+        queries.BestDirectoryPair(pairs, directory);
+
+    public bool HasBranchPairCandidate(
+        IReadOnlyList<BranchRecord> branches,
+        FileSystemPath branch) =>
+        queries.HasBranchPairCandidate(branches, branch);
 
     public Task<int> SharedGroupCountAsync(
         BerriesSession session,
