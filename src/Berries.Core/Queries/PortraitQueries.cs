@@ -69,11 +69,17 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
         return Groups(session).Where(set => contents.Contains(set.Content)).ToArray();
     }
 
+    public IReadOnlyList<FileInstance> FilesInContext(
+        IEnumerable<FileInstance> files,
+        FileSystemPath context,
+        bool includeDescendants) =>
+        files.Where(file => InContext(file, context, includeDescendants)).ToArray();
+
     public IReadOnlyList<FileInstance> SelectedFilesInContext(
         BerriesSession session,
         FileSystemPath context,
         bool includeDescendants) =>
-        session.Selection.Files.Where(file => InContext(file, context, includeDescendants)).ToArray();
+        FilesInContext(session.Selection.Files, context, includeDescendants);
 
     public FileSystemPath? CorpusRootFor(Corpus corpus, FileSystemPath path)
     {
