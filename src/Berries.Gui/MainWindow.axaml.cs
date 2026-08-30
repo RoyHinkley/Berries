@@ -191,9 +191,11 @@ public partial class MainWindow : Window
     }
     private static string MoveStatus(int selectedCount, MoveResult result)
     {
-        var text = $"Move requested for {selectedCount:N0} file(s): {result.MovedCount:N0} moved";
-        if (result.AlreadyAtDestinationCount > 0) text += $", {result.AlreadyAtDestinationCount:N0} already at destination";
-        if (result.ConflictCount > 0) text += $", {result.ConflictCount:N0} conflict(s) skipped"; return text + ".";
+        var collisionCount = result.Collisions.Count;
+        var movedCount = selectedCount - collisionCount;
+        var text = $"Move requested for {selectedCount:N0} file(s): {movedCount:N0} moved";
+        if (collisionCount > 0) text += $", {collisionCount:N0} conflict(s) skipped";
+        return text + ".";
     }
     private async Task RefreshAfterOperationAsync(string message)
     {
