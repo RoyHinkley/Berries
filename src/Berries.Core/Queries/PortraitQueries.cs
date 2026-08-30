@@ -31,12 +31,53 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
     {
         return FindDuplicateFilesAsync(
             session,
-            file => fileSystem.PathsEqual(file.ParentDirectory, branch) ||
-                    fileSystem.IsDescendant(file.ParentDirectory, branch),
+            file => InBranch(file, branch),
             "Finding duplicate files in branch",
             progress,
             cancellationToken);
     }
+
+    public Task<int> SharedGroupCountAsync(
+        BerriesSession session,
+        FileSystemPath first,
+        FileSystemPath second,
+        bool includeDescendants,
+        IProgress<Berries.Core.OperationProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.Run(() =>
+        {
+            var sets = session.DuplicateSets;
+            var count = 0;
+            progress?.Report(new Berries.Core.OperationProgress("Counting shared Groups", 0, sets.Count));
+
+            for (var i = 0; i < sets.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var inFirst = false;
+                var inSecond = false;
+
+                foreach (var file in sets[i].Files)
+                {
+                    if (!inFirst && InContext(file, first, includeDescendants)) inFirst = true;
+                    if (!inSecond && InContext(file, second, includeDescendants)) inSecond = true;
+                    if (inFirst && inSecond) break;
+                }
+
+                if (inFirst && inSecond) count++;
+                if ((i & 0xff) == 0 || i + 1 == sets.Count)
+                    progress?.Report(new Berries.Core.OperationProgress("Counting shared Groups", i + 1, sets.Count));
+            }
+
+            return count;
+        }, cancellationToken);
+    }
+
+    private bool InContext(FileInstance file, FileSystemPath context, bool includeDescendants) =>
+        fileSystem.PathsEqual(file.ParentDirectory, context) ||
+        (includeDescendants && fileSystem.IsDescendant(file.ParentDirectory, context));
+
+    private bool InBranch(FileInstance file, FileSystemPath branch) => InContext(file, branch, true);
 
     private static Task<IReadOnlyList<FileInstance>> FindDuplicateFilesAsync(
         BerriesSession session,
