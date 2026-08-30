@@ -13,13 +13,17 @@ public sealed record BranchCounterpart(
     double Score,
     int DirectDirectoryPairSharedGroupCount = 0);
 
-public sealed record BranchCounterpartSeed(
+/// <summary>
+/// A Branch Pair selected for presentation because its relationship appears worth user attention.
+/// The Seed is an internal search aid; its highest-scoring Counterpart forms the suggested pair.
+/// </summary>
+public sealed record BranchPairSuggestion(
     BranchPriorityMetric Seed,
     IReadOnlyList<BranchCounterpart> Counterparts,
     int CandidateSeedRank = 0);
 
-public sealed record BranchCounterpartResult(
-    IReadOnlyList<BranchCounterpartSeed> Seeds,
+public sealed record BranchPairSuggestionResult(
+    IReadOnlyList<BranchPairSuggestion> Suggestions,
     TimeSpan Elapsed);
 
 public sealed record BestBranchPairResult(
@@ -30,14 +34,16 @@ public sealed record BestBranchPairResult(
 
 public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
 {
+    // Evaluate several strong seeds before selecting a Suggestion. The winning Branch Pair
+    // is chosen by pair score and therefore need not originate from the highest-ranked seed.
     private const int CandidateSeedLimit = 10;
 
-    public BranchCounterpartResult Analyze(
+    public BranchPairSuggestionResult Analyze(
         Corpus corpus,
         IReadOnlyList<BranchRecord> branches,
         IReadOnlyList<Group> groups,
         IReadOnlyList<DirectoryPair> directoryPairs,
-        int seedLimit = int.MaxValue,
+        int suggestionLimit = int.MaxValue,
         int counterpartLimit = 5,
         CancellationToken cancellationToken = default,
         IProgress<OperationProgress>? progress = null)
@@ -73,11 +79,11 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
             directDirectoryPairSharedGroups[(pair.Second, pair.First)] = pair.SharedGroupCount;
         }
 
-        progress?.Report(new OperationProgress("Finding promising relationships"));
-        var selected = new List<BranchCounterpartSeed>();
+        progress?.Report(new OperationProgress("Finding Suggestions"));
+        var suggestions = new List<BranchPairSuggestion>();
         var blockedRoots = new List<FileSystemPath>();
 
-        while (selected.Count < seedLimit)
+        while (suggestions.Count < suggestionLimit)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var candidateSeeds = rankedSeeds
@@ -86,7 +92,7 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
                 .ToArray();
             if (candidateSeeds.Length == 0) break;
 
-            var pairedCandidates = new List<BranchCounterpartSeed>();
+            var pairCandidates = new List<BranchPairSuggestion>();
             for (var rank = 0; rank < candidateSeeds.Length; rank++)
             {
                 var seed = candidateSeeds[rank];
@@ -97,11 +103,14 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
                     blockedRoots,
                     counterpartLimit);
                 if (counterparts.Count > 0)
-                    pairedCandidates.Add(new BranchCounterpartSeed(seed, counterparts, rank + 1));
+                    pairCandidates.Add(new BranchPairSuggestion(seed, counterparts, rank + 1));
             }
 
-            if (pairedCandidates.Count == 0) break;
-            var winner = pairedCandidates
+            if (pairCandidates.Count == 0) break;
+
+            // Select the strongest pair among the candidate seeds. Seed rank breaks ties only;
+            // a lower-ranked seed can therefore yield the best Suggestion.
+            var winner = pairCandidates
                 .OrderByDescending(item => item.Counterparts[0].Score)
                 .ThenByDescending(item => item.Seed.ExcessConcentratedGroups)
                 .ThenBy(item => item.CandidateSeedRank)
@@ -114,14 +123,14 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
             }).ToArray();
 
             winner = winner with { Counterparts = diagnosedCounterparts };
-            selected.Add(winner);
+            suggestions.Add(winner);
             blockedRoots.Add(winner.Seed.Branch.Path);
             blockedRoots.Add(winner.Counterparts[0].Branch.Path);
-            progress?.Report(new OperationProgress($"Finding promising relationships — {selected.Count:N0} found"));
+            progress?.Report(new OperationProgress($"Finding Suggestions — {suggestions.Count:N0} found"));
         }
 
         timer.Stop();
-        return new BranchCounterpartResult(selected, timer.Elapsed);
+        return new BranchPairSuggestionResult(suggestions, timer.Elapsed);
     }
 
     public BestBranchPairResult? FindBestPair(
