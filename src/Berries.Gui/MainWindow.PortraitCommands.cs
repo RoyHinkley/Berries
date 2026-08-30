@@ -1,6 +1,7 @@
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Berries.Core.Domain;
+using Berries.Projection;
 
 namespace Berries.Gui;
 
@@ -69,17 +70,8 @@ public partial class MainWindow
             () => undone ? "Undid the most recent operation." : "Nothing to undo.");
     }
 
-    private IReadOnlyList<FileInstance> DistinctFilesFast(IEnumerable<FileInstance> files)
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var result = new List<FileInstance>();
-        foreach (var file in files)
-        {
-            var key = fileSystem.NormalizePath(file.Path).Value;
-            if (seen.Add(key)) result.Add(file);
-        }
-        return result;
-    }
+    private IReadOnlyList<FileInstance> DistinctFilesFast(IEnumerable<FileInstance> files) =>
+        Projections.DistinctFiles(files);
 
     private async Task RunPortraitCommandAsync(
         string busyMessage,
