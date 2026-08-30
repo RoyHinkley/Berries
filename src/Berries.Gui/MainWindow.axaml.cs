@@ -59,6 +59,9 @@ public partial class MainWindow : Window
         SetRootControlsEnabled(false); ShowExplorerWithRoots(); BeginProgress("Scanning corpus...", true);
         try
         {
+            await StopBackgroundAnalysisAsync();
+            suggestionIndex = -1;
+
             var config = BerriesConfig.Load(Path.Combine(AppContext.BaseDirectory, "Berries.config"));
             var scanProgress = new Progress<ScanProgress>(p => StatusText.Text = $"Scanning corpus — {p.FilesExamined:N0} files");
             var duplicateProgress = new Progress<DuplicateDiscoveryProgress>(p =>
@@ -67,13 +70,25 @@ public partial class MainWindow : Window
                 StatusProgress.IsIndeterminate = false;
                 StatusProgress.Value = p.CandidateFiles == 0 ? 0 : 100.0 * p.FilesHashed / p.CandidateFiles;
             });
-            var scan = await controller.ScanAsync(roots, config.IsExcluded, scanProgress, duplicateProgress);
+
+            var scanTask = controller.ScanAsync(roots, config.IsExcluded, scanProgress, duplicateProgress);
+            UpdateSelectionSummary();
+            UpdateCapabilities();
+            UpdatePivotCapabilities();
+
+            var scan = await scanTask;
             ShowContentProjection();
             EndProgress($"Ready — {scan.FileCount:N0} files, with {scan.DuplicateFileCount:N0} files in {scan.DuplicateSetCount:N0} groups."
                 + (scan.EvictionCount == 0 ? string.Empty : $" {scan.EvictionCount:N0} inaccessible file(s) omitted."));
             UpdateCapabilities();
         }
-        catch (Exception ex) { EndProgress(ex.Message); }
+        catch (Exception ex)
+        {
+            UpdateSelectionSummary();
+            UpdateCapabilities();
+            UpdatePivotCapabilities();
+            EndProgress(ex.Message);
+        }
         finally { SetRootControlsEnabled(true); }
     }
 
