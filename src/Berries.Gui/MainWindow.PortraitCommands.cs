@@ -13,7 +13,7 @@ public partial class MainWindow
 
     private async void ExcludeImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
-        var files = FastSelectedFilesFromActiveProjection();
+        var files = SemanticSelection();
         if (files.Count == 0 || controller.Session is null || portraitCommandBusy) return;
         await RunPortraitCommandAsync(
             $"Excluding {files.Count:N0} files...",
@@ -23,7 +23,7 @@ public partial class MainWindow
 
     private async void DeleteImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
-        var files = FastSelectedFilesFromActiveProjection();
+        var files = SemanticSelection();
         if (files.Count == 0 || controller.Session is null || portraitCommandBusy) return;
         await RunPortraitCommandAsync(
             $"Scheduling deletion of {files.Count:N0} files...",
@@ -34,7 +34,8 @@ public partial class MainWindow
     private async void MoveRightImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
         if (leftScope is null || rightScope is null || controller.Session is null || portraitCommandBusy) return;
-        var files = FastSelectedFiles(LeftTree);
+        var descendants = ProjectionTitle.Text?.StartsWith("Branch Pair", StringComparison.Ordinal) == true;
+        var files = SemanticSelectionInScope(leftScope.Value, descendants);
         if (files.Count == 0) return;
         MoveResult? result = null;
         await RunPortraitCommandAsync(
@@ -47,7 +48,8 @@ public partial class MainWindow
     private async void MoveLeftImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
         if (leftScope is null || rightScope is null || controller.Session is null || portraitCommandBusy) return;
-        var files = FastSelectedFiles(RightTree);
+        var descendants = ProjectionTitle.Text?.StartsWith("Branch Pair", StringComparison.Ordinal) == true;
+        var files = SemanticSelectionInScope(rightScope.Value, descendants);
         if (files.Count == 0) return;
         MoveResult? result = null;
         await RunPortraitCommandAsync(
@@ -68,14 +70,15 @@ public partial class MainWindow
             () => undone ? "Undid the most recent operation." : "Nothing to undo.");
     }
 
-    private IReadOnlyList<FileInstance> FastSelectedFilesFromActiveProjection() => PairExplorer.IsVisible
-        ? DistinctFilesFast(FastSelectedFiles(LeftTree).Concat(FastSelectedFiles(RightTree)))
-        : FastSelectedFiles(ExplorerTree);
+    private IReadOnlyList<FileInstance> FastSelectedFilesFromActiveProjection() => SemanticSelection();
 
     private IReadOnlyList<FileInstance> FastSelectedFiles(Avalonia.Controls.TreeView tree)
     {
-        if (tree.SelectedItems is null) return [];
-        return DistinctFilesFast(tree.SelectedItems.OfType<ExplorerNode>().SelectMany(node => node.Files));
+        if (controller.Session is not { } session) return [];
+        var represented = EnumerateNodes(tree.ItemsSource).SelectMany(node => node.Files);
+        var keys = DistinctFilesFast(represented).Select(file => fileSystem.NormalizePath(file.Path).Value)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return session.Selection.Files.Where(file => keys.Contains(fileSystem.NormalizePath(file.Path).Value)).ToArray();
     }
 
     private IReadOnlyList<FileInstance> DistinctFilesFast(IEnumerable<FileInstance> files)
@@ -101,15 +104,12 @@ public partial class MainWindow
 
         try
         {
-            // Yield once so the busy state can paint before any potentially expensive
-            // cancellation, model work, or projection reconstruction begins.
             await Task.Yield();
             await StopBackgroundAnalysisAsync();
             await Task.Run(command);
-
-            // Projection model construction can be substantial for a large branch. Build
-            // it away from the UI thread, then publish only the finished node collections.
             await RefreshCurrentProjectionModelsAsync();
+            SynchronizeVisibleSelection();
+            UpdateSelectionSummary();
             UpdateCapabilities();
 
             var message = completedMessageFactory?.Invoke() ?? completedMessage ?? "Operation completed.";
@@ -216,13 +216,8 @@ public partial class MainWindow
         if (refresh is null || task is null) return;
 
         refresh.Cancel();
-        try
-        {
-            await task;
-        }
-        catch (OperationCanceledException)
-        {
-        }
+        try { await task; }
+        catch (OperationCanceledException) { }
         finally
         {
             if (refresh == portraitAnalysisRefresh)
@@ -254,9 +249,7 @@ public partial class MainWindow
             StatusProgress.IsIndeterminate = false;
             UpdateCapabilities();
         }
-        catch (OperationCanceledException)
-        {
-        }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             if (refresh != portraitAnalysisRefresh) return;
