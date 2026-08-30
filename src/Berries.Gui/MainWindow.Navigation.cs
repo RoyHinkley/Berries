@@ -74,7 +74,9 @@ public partial class MainWindow
         BeginProgress("Building Corpus Roots view...", true);
         try
         {
-            var nodes = await Task.Run(() => corpus.Roots.Select(root => BuildBranchTree(root.Path)).ToArray());
+            var tasks = corpus.Roots.Select(root => BuildBranchExplorerNodeAsync(root.Path)).ToArray();
+            await Task.WhenAll(tasks);
+            var nodes = tasks.Select(task => task.Result).ToArray();
             currentScope = null; leftScope = null; rightScope = null; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
             BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear(); ProjectionTitle.Text = "Corpus Roots";
             ExplorerTree.ItemsSource = nodes; EndProgress("Corpus Roots"); SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
@@ -112,10 +114,10 @@ public partial class MainWindow
         if (scope is not null) await ShowDirectoryProjectionAsync(scope.Value);
     }
 
-    private void PivotBranch_Click(object? sender, RoutedEventArgs e)
+    private async void PivotBranch_Click(object? sender, RoutedEventArgs e)
     {
         var scope = SelectedScope();
-        if (scope is not null) ShowBranchProjection(scope.Value);
+        if (scope is not null) await ShowBranchProjectionAsync(scope.Value);
     }
 
     private async void PivotBestDirectoryPair_Click(object? sender, RoutedEventArgs e)
@@ -140,7 +142,7 @@ public partial class MainWindow
         {
             var pair = await controller.FindBestBranchPairAsync(scope.Value);
             if (pair is null) { EndProgress("No Branch Pair shares duplicate content with the selected Branch."); return; }
-            ShowAdHocBranchPair(pair.First, pair.Second, pair.SharedDuplicateContentCount);
+            await ShowAdHocBranchPairAsync(pair.First, pair.Second, pair.SharedDuplicateContentCount);
             EndProgress($"Best Branch Pair — {pair.SharedDuplicateContentCount:N0} shared Groups.");
         }
         catch (Exception ex) { EndProgress("Best Branch Pair search failed: " + ex.Message); }
@@ -169,40 +171,39 @@ public partial class MainWindow
     private DirectoryPair? FindBestDirectoryPair(FileSystemPath scope) => controller.DirectoryAnalysis?.DirectoryPairs
         .Where(pair => fileSystem.PathsEqual(pair.First, scope) || fileSystem.PathsEqual(pair.Second, scope)).OrderByDescending(pair => pair.SharedContentCount).FirstOrDefault();
 
-    private void ShowAdHocBranchPair(FileSystemPath first, FileSystemPath second, int sharedContentCount)
+    private async Task ShowAdHocBranchPairAsync(FileSystemPath first, FileSystemPath second, int sharedContentCount)
     {
-        currentScope = null; leftScope = first; rightScope = second; PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
-        BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear(); ProjectionTitle.Text = $"Branch Pair — {sharedContentCount:N0} shared Groups";
-        BuildPairBreadcrumbs(first, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left); BuildPairBreadcrumbs(second, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
-        LeftTree.ItemsSource = new[] { BuildBranchTree(first) }; RightTree.ItemsSource = new[] { BuildBranchTree(second) };
-        SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
+        BeginProgress("Opening Branch Pair...", true);
+        try
+        {
+            var leftTask = BuildBranchExplorerNodeAsync(first);
+            var rightTask = BuildBranchExplorerNodeAsync(second);
+            await Task.WhenAll(leftTask, rightTask);
+            currentScope = null; leftScope = first; rightScope = second; PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
+            BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear(); ProjectionTitle.Text = $"Branch Pair — {sharedContentCount:N0} shared Groups";
+            BuildPairBreadcrumbs(first, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left); BuildPairBreadcrumbs(second, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
+            LeftTree.ItemsSource = new[] { await leftTask }; RightTree.ItemsSource = new[] { await rightTask };
+            SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
+        }
+        finally { StatusProgress.IsVisible = false; }
     }
 
-    private void SuggestCaseWithBreadcrumbs_Click(object? sender, RoutedEventArgs e)
+    private async void SuggestCaseWithBreadcrumbs_Click(object? sender, RoutedEventArgs e)
     {
         var suggestions = controller.Counterparts?.Seeds; if (suggestions is null || suggestions.Count == 0) return;
-        suggestionIndex = (suggestionIndex + 1) % suggestions.Count; ShowBranchPair(suggestions[suggestionIndex]);
+        suggestionIndex = (suggestionIndex + 1) % suggestions.Count; await ShowBranchPairAsync(suggestions[suggestionIndex]);
         if (leftScope is not null) BuildPairBreadcrumbs(leftScope.Value, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
         if (rightScope is not null) BuildPairBreadcrumbs(rightScope.Value, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
         SynchronizeVisibleSelection(); UpdateSelectionSummary();
     }
 
-    private void PivotSuggestedBranchPairWithBreadcrumbs_Click(object? sender, RoutedEventArgs e)
+    private async void PivotSuggestedBranchPairWithBreadcrumbs_Click(object? sender, RoutedEventArgs e)
     {
         var suggestions = controller.Counterparts?.Seeds; if (suggestions is null || suggestionIndex < 0 || suggestionIndex >= suggestions.Count) return;
-        ShowBranchPair(suggestions[suggestionIndex]);
+        await ShowBranchPairAsync(suggestions[suggestionIndex]);
         if (leftScope is not null) BuildPairBreadcrumbs(leftScope.Value, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
         if (rightScope is not null) BuildPairBreadcrumbs(rightScope.Value, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
         SynchronizeVisibleSelection(); UpdateSelectionSummary();
-    }
-
-    private void ShowBranchProjection(FileSystemPath scope)
-    {
-        if (controller.Session is null) return;
-        currentScope = scope; scopeIncludesDescendants = true; scopeProjectionTitle = "Branch"; leftScope = null; rightScope = null;
-        PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true; ProjectionTitle.Text = "Branch"; BuildBreadcrumbs(scope);
-        ExplorerTree.ItemsSource = new[] { BuildBranchTree(scope) };
-        SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
     }
 
     private void BuildBreadcrumbs(FileSystemPath scope)
@@ -242,7 +243,7 @@ public partial class MainWindow
         if (sender is not Button { Tag: BreadcrumbTarget target }) return;
         if (target.Side is null)
         {
-            if (target.IncludeDescendants) ShowBranchProjection(target.Path);
+            if (target.IncludeDescendants) await ShowBranchProjectionAsync(target.Path);
             else await ShowDirectoryProjectionAsync(target.Path);
             return;
         }
@@ -265,28 +266,26 @@ public partial class MainWindow
         BeginProgress($"Opening {target.Title}...", true);
         try
         {
-            var rebuilt = await Task.Run(() =>
-            {
-                var node = BuildBranchTree(target.Path);
-                var shared = CountSharedContents(session, first, second, includeDescendants: true);
-                return (Node: node, Shared: shared);
-            });
+            var nodeTask = BuildBranchExplorerNodeAsync(target.Path);
+            var sharedTask = Task.Run(() => CountSharedContents(session, first, second, includeDescendants: true));
+            await Task.WhenAll(nodeTask, sharedTask);
 
             if (side == PairSide.Left)
             {
                 leftScope = target.Path;
-                LeftTree.ItemsSource = new[] { rebuilt.Node };
+                LeftTree.ItemsSource = new[] { await nodeTask };
                 BuildPairBreadcrumbs(target.Path, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
             }
             else
             {
                 rightScope = target.Path;
-                RightTree.ItemsSource = new[] { rebuilt.Node };
+                RightTree.ItemsSource = new[] { await nodeTask };
                 BuildPairBreadcrumbs(target.Path, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
             }
 
-            ProjectionTitle.Text = $"Branch Pair — {rebuilt.Shared:N0} shared Groups";
-            EndProgress($"Branch Pair — {rebuilt.Shared:N0} shared Groups.");
+            var shared = await sharedTask;
+            ProjectionTitle.Text = $"Branch Pair — {shared:N0} shared Groups";
+            EndProgress($"Branch Pair — {shared:N0} shared Groups.");
             SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
         }
         catch (Exception ex)
