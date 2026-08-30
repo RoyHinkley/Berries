@@ -19,8 +19,6 @@ public partial class MainWindow : Window
     private readonly ActionPlanExecutor actionPlanExecutor;
     private readonly List<string> roots = [];
     private int suggestionIndex = -1;
-    private FileSystemPath? leftScope;
-    private FileSystemPath? rightScope;
 
     public MainWindow()
     {
@@ -90,7 +88,7 @@ public partial class MainWindow : Window
     {
         var session = controller.Session; if (session is null) return;
         var groups = Projections.Groups(session);
-        leftScope = null; rightScope = null; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
+        PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
         SetProjectionState(ProjectionKind.Groups, groups.SelectMany(group => group.Files)); ProjectionTitle.Text = "Groups";
         ExplorerTree.ItemsSource = groups.Select(BuildGroupNode).ToArray();
         UpdateCapabilities();
@@ -109,7 +107,7 @@ public partial class MainWindow : Window
             await Task.WhenAll(leftTask, rightTask);
             var left = await leftTask;
             var right = await rightTask;
-            leftScope = first; rightScope = second; PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
+            PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
             SetPairProjectionState(ProjectionKind.BranchPair, first, left.Files, second, right.Files);
             ProjectionTitle.Text = $"Branch Pair — {suggestion.Counterparts[0].SharedDuplicateContentCount:N0} shared groups";
             BuildPairBreadcrumbs(first, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
@@ -145,7 +143,7 @@ public partial class MainWindow : Window
     {
         var session = controller.Session;
         var hasSession = session is not null;
-        var hasPair = currentProjection?.IsPair == true && leftScope is not null && rightScope is not null;
+        var hasPair = currentProjection is { IsPair: true, Primary: not null, Secondary: not null };
         MoveRightButton.IsEnabled = hasPair;
         MoveLeftButton.IsEnabled = hasPair;
         UndoButton.IsEnabled = hasSession && session!.Operations.Count > 0;
