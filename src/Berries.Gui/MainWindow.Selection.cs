@@ -105,4 +105,38 @@ public partial class MainWindow
         currentProjection = new ProjectionState(kind, DistinctFilesFast(representedFiles), primary, secondary);
         focusedNode = null;
     }
+
+    private void SetPairProjectionState(
+        ProjectionKind kind,
+        Berries.FileSystem.Abstractions.FileSystemPath primary,
+        IReadOnlyList<FileInstance> primaryFiles,
+        Berries.FileSystem.Abstractions.FileSystemPath secondary,
+        IReadOnlyList<FileInstance> secondaryFiles)
+    {
+        var first = DistinctFilesFast(primaryFiles);
+        var second = DistinctFilesFast(secondaryFiles);
+        currentProjection = new ProjectionState(
+            kind,
+            DistinctFilesFast(first.Concat(second)),
+            primary,
+            secondary,
+            first,
+            second);
+        focusedNode = null;
+    }
+
+    private void UpdatePairProjectionSide(
+        PairSide side,
+        Berries.FileSystem.Abstractions.FileSystemPath path,
+        IReadOnlyList<FileInstance> files)
+    {
+        if (currentProjection is not { IsPair: true, Primary: { } primary, Secondary: { } secondary } projection)
+            return;
+
+        var firstPath = side == PairSide.Left ? path : primary;
+        var secondPath = side == PairSide.Right ? path : secondary;
+        var firstFiles = side == PairSide.Left ? DistinctFilesFast(files) : projection.PrimaryFiles ?? [];
+        var secondFiles = side == PairSide.Right ? DistinctFilesFast(files) : projection.SecondaryFiles ?? [];
+        SetPairProjectionState(projection.Kind, firstPath, firstFiles, secondPath, secondFiles);
+    }
 }
