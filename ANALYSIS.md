@@ -1,10 +1,12 @@
 # Berries Analysis Design
 
-This document defines how Berries discovers Groups, derives structural evidence, and identifies promising Explorer foci. Terminology and invariants are defined in `MODEL.md`; interaction and execution are defined in `WORKFLOW.md`.
+This document defines how Berries discovers Groups, derives structural evidence, and finds Suggestions for the Explorer. Terminology and invariants are defined in `MODEL.md`; interaction and execution are defined in `WORKFLOW.md`.
 
 ## Purpose
 
-Analysis exists to help the user find duplication likely to reward attention. It supplies evidence to the Explorer; it does not prescribe a mandatory workflow.
+Analysis exists to help the user find duplication likely to reward attention. Its application-level output is a set of Suggestions; it does not prescribe a mandatory workflow.
+
+A Suggestion is a view Berries has found worth presenting because its structure indicates that one or a few user decisions may resolve a relatively large amount of duplicated material. The currently implemented Suggestions are Branch Pair views.
 
 The useful viewpoints are complementary:
 
@@ -119,7 +121,7 @@ Same-Directory copies remain directly visible through a Directory projection eve
 
 Branch statistics are obtained by walking ancestry within the Corpus and are inexpensive compared with exhaustive Branch relationship construction.
 
-## Branch seed priority
+## Branch Seed priority
 
 For a child Branch relative to its immediate parent:
 
@@ -130,7 +132,7 @@ For a child Branch relative to its immediate parent:
 
     C = group retention / file retention
 
-The current useful seed score is:
+The current useful Seed score is:
 
     D * (1 - 1/C), for C > 1
     0,             otherwise
@@ -139,35 +141,36 @@ This is stored as `ExcessConcentratedGroups`.
 
 Interpretation: Groups are concentrated in the child beyond what would be expected from the child's ordinary share of parent files.
 
-Seed score answers only:
+The Seed score answers only:
 
-    where is it promising to look?
+    where is it worth looking for a strong Branch relationship?
 
-It does not measure the quality of any particular counterpart.
+It does not measure the quality of any particular Counterpart or Branch Pair.
 
-## Targeted Branch counterpart discovery
+## Targeted Branch Counterpart discovery
 
 Exhaustive ancestor-Cartesian Branch Pair construction was abandoned after experiments produced very large pair populations and long runtimes without proportional user value.
 
 Current targeted analysis:
 
-1. Rank eligible Branch seeds by `ExcessConcentratedGroups`.
-2. In each selection round, inspect the top 10 unblocked seeds.
-3. For each seed, identify non-nested candidate Branches sharing Groups.
-4. For each relationship compute:
+1. Rank eligible Branch Seeds by `ExcessConcentratedGroups`.
+2. In each selection round, inspect the top 10 unblocked Seeds.
+3. For each Seed, identify non-nested candidate Counterparts sharing Groups.
+4. For each Seed/Counterpart relationship compute:
 
        shared Group count
-       seed coverage
-       counterpart coverage
+       Seed coverage
+       Counterpart coverage
        Jaccard overlap
        score = shared Group count * Jaccard
 
-5. Keep the strongest few counterparts for diagnostics.
-6. Choose the strongest relationship among the current top-10 seed window.
-7. Block the chosen seed Branch, chosen counterpart Branch, and their descendants from later seed selection.
-8. Repeat until the requested suggestion limit is reached or no candidate remains.
+5. Keep the strongest few Counterparts for each Seed.
+6. Compare the best Branch Pair from every Seed in the current top-10 window.
+7. Emit the strongest of those Branch Pairs as the next Suggestion.
+8. Block the chosen Seed Branch, chosen Counterpart Branch, and their descendants from later Seed selection.
+9. Repeat until the requested Suggestion limit is reached or no candidate remains.
 
-The winning relationship can originate from any seed in the window. Seed quality and relationship quality are therefore deliberately separate measurements.
+The best Branch Pair often does not originate from the highest-ranked Seed. Seed quality and pair quality are deliberately separate measurements; Seed rank is only a later tie-breaker after pair score.
 
 The analysis also records exact-root Directory Pair shared-Group count as a diagnostic when available; it does not drive Branch Pair ranking.
 
@@ -175,15 +178,17 @@ The analysis also records exact-root Directory Pair shared-Group count as a diag
 
 When the user Pivots from a selected Branch to `Best Branch Pair`, Berries searches non-nested Branches on demand using the same Group-overlap/Jaccard idea.
 
-This operation does not require a pre-enumerated population of Branch Pairs.
+This operation starts from the selected Branch rather than from the ranked Seed search and does not require a pre-enumerated population of Branch Pairs.
 
-## Suggest
+## Suggestions and Suggest
 
-`Suggest` becomes available when targeted Branch counterpart results are present.
+A `BranchPairSuggestion` contains the Seed used to reach the relationship and its ranked Counterparts. The highest-scoring Counterpart forms the Branch Pair presented by that Suggestion.
 
-The current implementation cycles through the compact suggestion list and opens the corresponding Branch Pair. Suggest changes focus only; the user may immediately Pivot elsewhere or operate on any selection.
+`Suggest` becomes available when Suggestions are present. It cycles through the compact Suggestion list and opens each corresponding Branch Pair. Suggest changes focus only; the user may immediately Pivot elsewhere or operate on any selection.
 
-Future suggestion sources may include strong Group-centric or same-Directory signals, but they should enter through the same Explorer rather than create special workflow screens.
+Seed and Counterpart are therefore under-the-hood search concepts. Suggestion is the application concept exposed to the user.
+
+Future Suggestion sources may include strong Group-centric or same-Directory signals, but they should enter through the same Explorer rather than create special workflow screens.
 
 ## Projection queries
 
@@ -195,21 +200,21 @@ Future suggestion sources may include strong Group-centric or same-Directory sig
     grouped files in a Branch
     grouped files arranged beneath Corpus Roots
     best Directory Pair for a Directory
-    whether a Branch can have a counterpart
+    whether a Branch can have a Counterpart
     shared Group count between two scopes
 
 `Berries.Projection` turns those facts into UI-independent projection models. Avalonia presentation remains above that layer.
 
 ## Derived analysis after portrait operations
 
-Exclude/Delete/Move immediately rebuild the Working Portrait and current Groups in memory. Directory analysis, Branch statistics, and counterpart results then become stale.
+Exclude/Delete/Move immediately rebuild the Working Portrait and current Groups in memory. Directory analysis, Branch statistics, and Suggestions then become stale.
 
 Current application behavior is intentionally simple:
 
 1. a portrait command changes `BerriesSession`;
 2. `BerriesApplication` invalidates all three derived result objects;
 3. the GUI immediately refreshes the visible projection from the Working Portrait;
-4. Directory analysis, Branch statistics, and counterpart analysis are recomputed in the background;
+4. Directory analysis, Branch statistics, and Suggestion discovery are recomputed in the background;
 5. completed results restore capabilities such as Suggest.
 
 Known ContentId values do not need to be reread or rehashed after virtual portrait operations.
@@ -223,7 +228,7 @@ The initial path is still sequential:
         -> Session construction
         -> Directory analysis
         -> Branch statistics
-        -> counterpart analysis
+        -> Suggestion discovery
         -> ScanAsync returns
 
 This is an implementation fact, not a governing requirement.
@@ -237,8 +242,9 @@ Real-corpus testing established several durable principles:
 - repeated low-level Groups can manufacture large amounts of weak structural evidence;
 - Group-centric and container-centric views are complementary;
 - Branch statistics are cheap and useful before relationship search;
-- targeted counterpart search is dramatically cheaper than exhaustive Branch Pair construction;
-- seed quality and relationship quality are different measurements;
+- targeted Seed/Counterpart search is dramatically cheaper than exhaustive Branch Pair construction;
+- Seed quality and Branch Pair quality are different measurements;
+- evaluating several good Seeds before selecting the next Suggestion materially improves the result;
 - mathematically perfect structural boundaries are unnecessary when nearby boundaries support the same useful user operation;
 - generated/repository/application-managed trees can create substantial real duplication evidence, making configurable Exclude valuable;
-- Berries should surface promising evidence, not pretend to infer semantic truth autonomously.
+- Berries should surface useful Suggestions, not pretend to infer semantic truth autonomously.
