@@ -29,7 +29,7 @@ public partial class MainWindow
     private void InvertSelectedCopies_Click(object? sender, RoutedEventArgs e)
     {
         if (controller.Session is not { } session || session.Selection.IsEmpty) return;
-        session.Selection.InvertSelectedCopies(session.DuplicateSets);
+        session.InvertSelectedCopies();
         SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
 
@@ -77,7 +77,7 @@ public partial class MainWindow
         }
 
         var selection = session.Selection;
-        var groups = selection.CountGroups(session.DuplicateSets);
+        var groups = session.SelectedGroupCount;
         var outside = selection.CountOutside(RepresentedFiles());
         SelectionText.Text = $"Selected: {selection.Count:N0} files · {groups:N0} groups · {outside:N0} outside view";
         SetSelectionCapabilities(true);
