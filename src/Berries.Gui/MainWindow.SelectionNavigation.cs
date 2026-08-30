@@ -18,9 +18,6 @@ public partial class MainWindow
         e.Handled = true;
     }
 
-    private static void ClearTreeSelection(TreeView tree) =>
-        tree.SelectedItems?.Clear();
-
     private void PivotButton_Click(object? sender, RoutedEventArgs e)
     {
         // Selection is persistent Core state; focus identifies the particular Explorer
@@ -48,17 +45,6 @@ public partial class MainWindow
         PivotButton_Click(PivotButton, e);
         PivotButton.Flyout?.ShowAt(control);
         e.Handled = true;
-    }
-
-    private TreeView? TreeContaining(ExplorerNode node)
-    {
-        if (SingleExplorer.IsVisible && EnumerateNodes(ExplorerTree.ItemsSource).Any(candidate => ReferenceEquals(candidate, node)))
-            return ExplorerTree;
-        if (PairExplorer.IsVisible && EnumerateNodes(LeftTree.ItemsSource).Any(candidate => ReferenceEquals(candidate, node)))
-            return LeftTree;
-        if (PairExplorer.IsVisible && EnumerateNodes(RightTree.ItemsSource).Any(candidate => ReferenceEquals(candidate, node)))
-            return RightTree;
-        return null;
     }
 
     private void PivotContentOrAll_Click(object? sender, RoutedEventArgs e)
