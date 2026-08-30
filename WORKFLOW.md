@@ -1,275 +1,243 @@
 # Berries User and Execution Workflow
 
-This document defines application flow, Duplicate Explorer interaction, portrait operations, Move semantics, execution, and persistence direction. Terminology and invariants are defined in `MODEL.md`; discovery/ranking is defined in `ANALYSIS.md`.
+This document describes the workflow implemented by the current application. Domain terminology is in `MODEL.md`; analysis mechanics are in `ANALYSIS.md`.
 
-## Application shell and program flow
+## Application shell
 
-Berries should use one long-lived application shell rather than a wizard sequence of analysis screens.
+Berries uses one long-lived Avalonia window with two primary surfaces:
 
-A conventional `File` menu should provide the application-level commands:
+    root selection
+    Duplicate Explorer
+
+The File menu currently contains:
 
     Select Roots...
-    Load Saved Session...      [may initially be disabled]
-    Save Session...            [may initially be disabled]
+    Load Saved Session...      [disabled]
+    Save Session...            [disabled]
     Execute...
     Exit
 
-### New session
+The root-selection view says "Search these directories for duplicates" and provides:
 
-`Select Roots...` shows the root-selection view. The current Add / Remove / Scan interaction is appropriate.
+    Add...
+    Remove
+    Explore
 
-Selected roots are normalized to a minimal disjoint set. Scan begins a new session and transitions into the Duplicate Explorer as soon as practical. The corpus roots themselves provide the initial Explorer structure while analysis results become available.
+Selected roots are normalized to a minimal disjoint set.
 
-There is no special pre-analysis exclusion/settlement screen.
+## Starting or returning to a session
 
-### Loaded session
+Pressing Explore behaves in two ways:
 
-`Load Saved Session...`, when implemented, restores the saved session directly into the Duplicate Explorer. It does not rescan or reconcile the filesystem.
+- if the selected roots match the current session Corpus, return to that session without rescanning;
+- otherwise start a new scan/session.
 
-### Long-lived Explorer
+When a new scan starts, the Explorer appears immediately in a Corpus-root view while the scan is running. Status text and a bottom progress bar report acquisition/hashing progress.
 
-The Duplicate Explorer is the primary working UI. Analysis should progressively enrich it rather than requiring a completed monolithic scan before the application can become interactive.
-
-Heavy work should migrate toward asynchronous background tasks where practical. The architecture should not assume that every analysis stage must block the UI or that all derived analysis is simultaneously current.
-
-A status bar at the bottom of the main window owns progress reporting. It should show the current stage and meaningful progress within that stage, for example hashing count/percentage. Avoid modal progress UI.
-
-Controls such as `Suggest Case` become enabled when the analysis required to support them is available. Background recomputation must not steal focus or unexpectedly restructure the user's current Explorer view.
+The current initial scan does not become fully interactive at the Group level until `BerriesApplication.ScanAsync()` finishes its derived analysis. After completion, the normal starting projection is Groups.
 
 ## Explorer projections
 
-The Explorer presents the Working Portrait through interchangeable projections.
+The Explorer can Pivot among several views of the same Working Portrait.
 
-### Content projection
+### Groups
 
-One pane. Each root node represents one duplicated Content; leaves are the full-path FileInstances having that Content.
+One pane. Each Group represents one currently duplicated content identity and lists its files by full path.
 
-All FileInstances are shown individually. Do not substitute directories as leaves: multiple identical instances can exist in one directory, and operational scope must remain instance-precise.
+The underlying Core type is `DuplicateSet`, but the user-facing word is Group.
 
-Selecting a Content node is shorthand for selecting its currently represented FileInstance descendants.
+### Directory
 
-### DirectoryPair projection
+One pane rooted at one exact Directory. It shows duplicate files directly contained there.
 
-Two equivalent tree panes rooted at two exact directories. It is a narrow container-centric view and can be understood as a degenerate BranchPair projection.
+### Branch
 
-### BranchPair projection
+One pane rooted at one Branch (a directory plus descendants), preserving directory hierarchy beneath the Branch.
 
-Two equivalent tree panes rooted at two branches. Directory nodes organize duplicate FileInstances. Selecting a directory node selects the applicable duplicate FileInstances beneath it; the directory itself is not an operation target.
+### Corpus Roots
 
-Unique files are not shown as resolution candidates, although the session can retain knowledge of them for collision detection and other constraints.
+One pane containing all selected Corpus roots as Branch-style trees.
 
-## Navigation and Pivot
+### Directory Pair
 
-Cases are suggested foci, not a queue and not a separate mandatory Case screen.
+Two equivalent panes rooted at two exact Directories that share Groups directly.
 
-Berries should provide a command such as `Suggest Case` whose purpose is:
+### Branch Pair
 
-    identify something likely to reward attention
+Two equivalent panes rooted at two Branches that share Groups across their descendant trees.
 
-A suggestion establishes an appropriate focus/projection. The user may then navigate or Pivot freely.
+Pair views are the surfaces on which Move left/right is meaningful.
 
-`Pivot` changes the projection or structural interpretation of the current focus without modifying the Working Portrait. It belongs with navigation controls, along with Back/Forward, rather than with Undoable resolution operations.
+## Pivot and navigation
 
-Exact Pivot availability is context-sensitive and can evolve with the Explorer implementation.
+The current Pivot menu includes:
 
-## Selection model
+    Corpus Roots
+    Group
+    Containing Directory
+    Branch
+    Best Directory Pair
+    Best Branch Pair
+    Current Suggested Branch Pair
 
-Selection always reduces to a set of duplicate FileInstances in the Working Portrait.
+Structural views use clickable breadcrumbs. In Branch-Pair views, each side has an independent breadcrumb chain, allowing either scope to be broadened/narrowed while retaining the pair relationship.
 
-    leaf selection
-        one FileInstance
+The shell includes Back and Forward controls, but navigation-history behavior is not yet implemented.
 
-    Content selection
-        all represented instances of that Content
+## Suggest
 
-    directory/branch node selection
-        all applicable duplicate FileInstances represented beneath that node
+The `Suggest` button cycles through the current targeted Branch-Pair candidates produced by analysis.
 
-Ctrl/Shift/multiple selection should behave conventionally where the tree control permits it.
+A suggestion changes focus/view only. It does not create a required Case, record a decision, or modify the Working Portrait.
 
-`Invert Selection` is Content-relative. For each Content represented by the current selection, select its other currently selectable instances and deselect the selected instances. Do not invert unrelated visible Contents. Excluded instances are not selectable and therefore cannot be selected by inversion.
+The older `Case` terminology remains in some code/research names, but the current interaction is simply: Suggest a promising place to look, then Pivot/navigate/operate normally.
 
-## Resolution controls
+## Selection
 
-The primary interaction is selection-first:
+Selection persists semantically across projections and ultimately denotes files in the current Working Portrait.
 
-    select FileInstances / structural scope
-        -> invoke operation
-        -> Working Portrait changes immediately
+Selecting a Group or structural node is shorthand for selecting its represented descendant files. Files that disappear from the Working Portrait are automatically removed from selection when the session rebuilds.
 
-Do not use tool-first paint semantics for destructive operations.
+The status bar reports the current selection summary and provides Clear.
 
-A compact toolbar should expose the principal commands. Context menus may duplicate common commands as a convenience, but should not be the sole discoverability mechanism. Per-item Keep/Delete buttons would create unnecessary clutter and make bulk work awkward.
+### Invert Selected Copies
 
-The working command set is approximately:
+For every Group represented by the current selection, select its other current copies and deselect the selected ones. Unrelated Groups are unchanged.
 
-    Back / Forward
-    Pivot
-    Suggest Case
-    Invert Selection
+### Invert All Groups
+
+Invert every file in every Group represented in the current projection.
+
+## Portrait operations
+
+The primary commands are:
+
     Exclude
     Delete
     Move ->
     <- Move
     Undo
 
-Commands are enabled according to projection and selection validity.
+There is no user-facing Keep, Accept, Settle, or Apply command.
 
-There is no `Keep`. A surviving instance simply has no destructive operation applied to it.
+All portrait operations change the virtual Working Portrait immediately. No physical filesystem change occurs until Execute.
 
-There is no `Accept` or `Settle`. If instances should cease to participate in Berries, `Exclude` removes them from the Working Portrait.
+### Exclude
 
-There is no `Apply`. Exclude/Delete/Move immediately update the Working Portrait and operation history. Undo provides local safety; Execute is the ultimate physical commitment boundary.
+Exclude removes selected files from the Working Portrait and therefore from Groups, projections, selection, and subsequent structural analysis.
 
-## Exclude
+Exclude produces no physical filesystem Action. The file remains on disk.
 
-Exclude removes selected FileInstances from the working Corpus.
+### Delete
 
-The excluded instances disappear from all projections and derived analysis and are no longer selectable. No filesystem Action is produced.
+Delete removes selected files from the Working Portrait and adds corresponding delete work to the current physical Action list.
 
-Record Exclude as an undoable portrait operation, conceptually one excluded instance per operation/history entry even if a bulk UI command groups them for Undo presentation.
+Delete does not interrupt the user merely because all current copies of some content have been selected. Potential physical content loss is summarized at Execute.
 
-Configuration exclusions have the same semantic result. `Berries.config` should use `[exclude]`, not `[ignore]`. Configuration exclusions are automatic initial Exclude operations; implementation may filter them during acquisition for efficiency.
+### Move
 
-## Delete
+Move is available in pair views and uses the pair scopes as source/destination correspondence.
 
-Delete removes selected FileInstances from the Working Portrait and contributes deletion work to the eventual Action Plan.
+For Move ->, selected files on the left side are mapped beneath the right-side scope. For <- Move, the reverse applies.
 
-Do not interrupt ordinary editing merely because the operation removes every remaining instance of one or more Contents. Potential Content loss is summarized at the pre-execution review, not treated as an early warning.
+For each requested source file:
 
-## Move
+1. preserve its relative directory path beneath the selected source scope;
+2. map that relative directory path beneath the destination scope;
+3. if the same content already exists directly in that exact destination directory, keep the destination copy and reduce the source to Delete;
+4. otherwise use the source filename;
+5. if the destination path is free, move there;
+6. if that path contains identical content, keep the destination copy and Delete the source;
+7. if that path contains different content, report a collision and leave that source unchanged while continuing other requested sources.
 
-Move is duplicate-motivated structural relocation, not a general file-management command and not an inferred directory merge.
+Berries does not invent filenames and does not overwrite different content.
 
-The user explicitly selects source and destination scopes in a two-pane projection. The selected scopes establish the directory correspondence. Berries preserves source paths beneath the selected source scope when mapping them beneath the destination scope.
+Unique files are not resolution targets but remain modeled so they can cause step 7 collisions.
 
-Example:
+### Undo
 
-    source scope:       Old\Photos\Trips
-    destination scope: Photos\Travel
+Each top-level user command is one Undo step, even when it contains multiple per-file operations.
 
-    source instance:   Old\Photos\Trips\2024\a.jpg
-    computed directory:Photos\Travel\2024
+Undo removes the most recent portrait operation and deterministically rebuilds:
 
-The duplicate counterpart's existing directory elsewhere does not establish a mapping. If the user later wants a broader mapping, it is a separate Move operation. Thus a reorganization can naturally be expressed by a sequence such as:
+    Working Portrait
+    current Groups
+    Action list
+    valid selection state
 
-    Old\Photos\Trips -> Photos\Travel
-    Old\Photos       -> Photos
+from the fixed Initial Portrait plus the remaining operation history.
 
-The first handles the renamed/reorganized subtree; the second handles the remainder.
+## Analysis after portrait operations
 
-### Destination-authoritative collision semantics
+After Exclude/Delete/Move/Undo changes the operation history, the current derived structural results are invalidated.
 
-Choosing the destination asserts that its existing organization is the right place. Work already completed there is authoritative. Berries does not rename destination files, invent filenames, or undo existing organization.
+The GUI then:
 
-For each selected source FileInstance:
+1. cancels any older analysis refresh;
+2. refreshes the current visible projection from the new Working Portrait;
+3. restores/synchronizes visible selection;
+4. returns the Explorer to use;
+5. recomputes Directory analysis, Branch statistics, and Branch counterparts in the background.
 
-1. Determine the exact computed destination directory from the source's relative directory path.
-2. If the same Content already exists **within that exact destination directory**, regardless of filename, the desired Content is already in the right place. Retain the existing destination name and reduce the source operation to Delete.
-3. Otherwise compute the destination path using the source filename.
-4. If that path is free, Move the source there.
-5. If that path contains identical Content, retain the destination and Delete the source.
-6. If that path contains different Content, flag the collision immediately, leave source and destination untouched, and continue with the rest of the requested Move.
-
-`Within` means directly in the computed destination directory, not somewhere beneath its descendant tree.
-
-Unique destination files participate in collision detection even though unique files are not selectable resolution targets. The Initial/session model therefore retains enough filesystem knowledge to detect them.
-
-There is no separate Merge command. Move plus the destination-authoritative collision rules covers the duplicate-resolution behavior we need. General rename and general unique-file reorganization remain out of scope.
-
-## Undo and navigation history
-
-Undo reverses portrait operations. It does not mean Back.
-
-Back/Forward reverse navigation/Pivot history. Exclude/Delete/Move belong to the operation history; Pivot and ordinary navigation belong to view history.
-
-The exact grouping of a multi-instance command into one user-visible Undo step is a UI implementation detail, but the model must retain enough information to reconstruct the Working Portrait deterministically.
-
-## Derived analysis after portrait changes
-
-The Working Portrait changes immediately after Exclude/Delete/Move. Duplicate membership and higher-level evidence derived from it can therefore change.
-
-Correct incremental invalidation is desirable, but broad in-memory recomputation is acceptable initially if measured performance is adequate. Known Content need not be reread or rehashed merely because a virtual operation changed its location or membership.
-
-Asynchronous recomputation should publish availability/results without forcing the user out of the current view. A suggestion can become stale and be recomputed; the Explorer itself remains the stable interaction surface.
-
-## Save / Resume
-
-Persistence is conceptually straightforward but deliberately optional for the next implementation revision.
-
-A saved session should serialize one session object containing all state necessary to resume directly, including at least:
-
-    Initial Portrait
-    ordered portrait-operation history and/or directly reconstructible Working Portrait
-    selected Corpus roots and exclusion state
-    Content identities and analysis state worth retaining
-    useful Explorer/view state
-
-JSON is preferred for inspectability and schema evolution. Session files should normally be compressed because Portrait data can be large.
-
-`Save Session...` and `Load Saved Session...` may be present but nonfunctional/disabled until actual use demonstrates that persistence is worth implementing. Avoid freezing a persistence schema while the runtime model is still evolving.
-
-There is no saved-session reconciliation workflow. To obtain a fresh filesystem view, the user starts a New Session by selecting roots and scanning.
+The status bar indicates that analysis is updating. When the current background generation completes, capabilities such as Suggest are updated. The analysis does not automatically change the user's current projection.
 
 ## Execute
 
-Execute is application-level and deliberately separated from ordinary Explorer operations.
+Execute is enabled when the session has physical Actions.
 
-### Pre-execution summary
+### Pre-execution confirmation
 
-Before modifying disk, show an execution summary describing the intended work and ask for explicit approval. Include at least:
+Before disk changes, the application displays:
 
-    planned moves/copies/deletions
-    Content that will have no surviving instance in the final working Corpus
-    other useful aggregate consequences
+    planned filesystem Action count
+    number of Groups whose content would have no surviving physical file
+    notice that independent failures will not stop unrelated safe work
 
-This is the appropriate place to call attention to Content loss. Ordinary Delete editing does not raise a last-copy warning.
+The user must explicitly approve execution.
 
-### Execution practice
+### Execution behavior
 
-After approval, assume the Action Plan is valid and attempt it. Do not globally validate/rescan/reconcile the filesystem first. Such a pass cannot guarantee later atomic operations will succeed and introduces an unnecessary time-of-check/time-of-use race.
+Execution attempts the current Action list against the physical filesystem. It does not first perform a global rescan/reconciliation.
 
-Filesystem operations can fail. Handle failures locally and preserve dependency safety:
+Failures are local outcomes. The executor continues independent safe work where possible and preserves dependency safety. In particular, if a move must be implemented as copy followed by delete, failure of the prerequisite copy suppresses the dependent source deletion.
 
-    independent operations continue where safe;
-    a failed prerequisite suppresses dependent destructive work;
-    a cross-device Move may be implemented as Copy followed by Delete;
-    if that Copy fails, the source Delete must not occur;
-    if an ordinary Move fails, leave the source intact;
-    record failures/exceptions for the post-execution report.
+### Post-execution result
 
-Move collisions known from the Working Portrait are handled when Move is requested. New conflicts or changes that arise later are ordinary execution failures.
+The status bar reports completed, skipped-dependent, and failed counts. When failures exist, the GUI displays a failure summary containing the affected Action and error message.
 
-### Post-execution summary
+The current implementation does not automatically create a new post-execution session reflecting whatever subset of filesystem work succeeded; the execution report is the factual result of attempting the approved plan.
 
-After execution, report what actually happened:
+## Progress and busy behavior
 
-    successful operations
-    failures and exceptions
-    skipped dependent operations
-    conflicts/discrepancies encountered during execution
+A persistent bottom status bar owns scan, analysis, portrait-operation, and execution progress.
 
-Do not repeat Content-loss warnings as warnings here; those were part of the approved pre-execution plan. The post-execution report is factual.
+During a portrait command itself, the Explorer/menu are temporarily disabled while the Working Portrait is rebuilt and the visible projection refreshed. They are re-enabled before the heavier structural reanalysis runs in the background.
 
-## Filesystem abstraction requirements
+This is intentionally different from the initial scan, whose current controller method still awaits all derived analysis before returning.
 
-Core must remain independent of Windows path syntax, drive letters, NTFS IDs, ACLs, reparse points, case-insensitive behavior, and other platform assumptions.
+## Configuration exclusion
 
-The abstraction should provide the least capabilities required by the model: hierarchy/navigation, metadata needed for discovery, readable ordinary Content, and safe create/copy/move/delete operations.
+`Berries.config` uses `[exclude]`.
 
-Symbolic/special objects remain outside the initial ordinary-file model. Hard links need no special treatment initially if the adapter exposes their directory entries as ordinary instances. Duplicate identity is based on ordinary byte Content, not ACLs, alternate streams, ownership, or other metadata.
+Configuration exclusion is applied while acquiring the initial scan. Its user-visible result is the same as never including those files in the working Corpus. It does not create physical Actions.
 
-## Deliberately deferred
+## Saved sessions
 
-The following are not required before the next Explorer implementation:
+`Save Session...` and `Load Saved Session...` are present but disabled. Persistence behavior is therefore not currently part of executable workflow.
 
-    Save/Load implementation
+If implemented later, saved-session semantics should be documented from the actual runtime design at that time rather than treated as already settled behavior.
+
+## Deliberately outside the current workflow
+
+The current application does not provide:
+
     general unique-file maintenance
-    rename as a user operation
-    sophisticated Situation inference
-    persistent learned rules
-    exhaustive BranchPair generation
-    aggressive incremental/background recomputation optimization
-    exact final toolbar styling and projection-specific visual polish
+    arbitrary rename
+    automatic semantic Situation classification
+    Accept/Settle workflow
+    mandatory Case queue
+    exhaustive Branch-Pair enumeration
+    saved-session persistence
+    implemented Back/Forward navigation history
 
-The architecture should leave room for these without implementing them prematurely.
+The Explorer remains intentionally centered on duplicate Groups, structural Pivot/navigation, explicit Exclude/Delete/Move operations, Undo, and final Execute.
