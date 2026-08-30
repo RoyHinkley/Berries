@@ -2,21 +2,20 @@
 
 This document describes the current implementation state of Berries. It is intended to orient development work from the code that exists today, not preserve superseded plans.
 
-Governing semantics are in `PROJECT.md`, `MODEL.md`, `ANALYSIS.md`, and `WORKFLOW.md`. `SITUATIONS.md` and `BOUNDARY.md` retain historical/empirical research.
+Governing semantics are in `PROJECT.md`, `MODEL.md`, `ANALYSIS.md`, and `WORKFLOW.md`. `SEMANTIC-RESEARCH.md` and `BOUNDARY.md` retain empirical research without defining runtime workflow.
 
 ## Solution structure
 
-Current projects:
-
     Berries.Core
         domain/session model
-        duplicate and structural analysis
-        portrait queries
+        Group discovery
+        Directory and Branch analysis
+        Portrait queries
         portrait-operation history
-        physical Action planning/execution types
+        physical Action planning/execution
 
     Berries.Projection
-        UI-independent Explorer projection construction and querying
+        UI-independent Explorer projection construction
 
     Berries.FileSystem.Abstractions
         platform-neutral filesystem boundary
@@ -30,48 +29,122 @@ Current projects:
     Berries.Core.Tests
         synthetic platform-independent tests
 
-Target framework is .NET 10. The GUI is Avalonia and builds as `WinExe`.
+Target framework is .NET 10. The GUI is Avalonia and builds as `WinExe`. There is deliberately no console front end.
 
-There is deliberately no console front end.
+## Vocabulary in code
 
-## Current application architecture
+The code now follows current application language wherever the concepts coincide:
 
-The principal runtime objects are:
+    Group
+    GroupCount
+    GroupedFileCount
+    SharedGroupCount
+    GroupDiscovery...
+    Suggest
+    Exclude
+    Directory / Branch / DirectoryPair / BranchPair
 
-    BerriesEngine
-        Corpus creation, Portrait acquisition, duplicate discovery,
-        direct Directory analysis
+Two lower-level names intentionally remain:
 
-    BerriesApplication
-        application-level orchestration and publication of current
-        Session / scan / derived analysis results
+    FileInstance
+        one filesystem file instance at one exact path
 
-    BerriesSession
-        fixed Initial Portrait
-        Working Portrait
-        persistent selection
-        ordered portrait operations
-        current Groups / DuplicateSets
-        physical Action list
+    ContentId
+        established byte-content identity
 
-    ProjectionService / PortraitQueries
-        build/query Explorer views without Avalonia dependencies
+They are narrower technical concepts rather than alternative product vocabulary. `Group` is the current collection of at least two FileInstances having one ContentId.
 
-    BranchStatisticsAnalyzer
-        first-class Branch statistics
+The obsolete classification/acceptance framework has been removed from compiled code. There are no runtime model types for semantic classification, no separate acceptance state, and no exhaustive structural-pair analysis path.
 
-    BranchCounterpartAnalyzer
-        targeted Branch counterpart search and on-demand best-pair search
+## Principal runtime objects
 
-    ActionPlanExecutor
-        physical execution and failure/dependency handling
+### `BerriesEngine`
 
-    MainWindow
-        Avalonia presentation and command orchestration
+Owns:
+
+    Corpus normalization
+    Initial Portrait acquisition
+    Group discovery
+    direct Directory analysis
+
+Important public operations:
+
+    CreateCorpus
+    BuildInitialPortraitAsync
+    DiscoverGroupsAsync
+    AnalyzeDirectoriesAsync
+
+### `BerriesApplication`
+
+Owns application-level orchestration and publishes:
+
+    Corpus
+    Session
+    Scan
+    DirectoryAnalysis
+    BranchStatistics
+    Counterparts
+
+A portrait operation invalidates all three derived analysis objects.
+
+### `BerriesSession`
+
+Owns:
+
+    InitialPortrait
+    WorkingPortrait
+    Selection
+    Operations
+    Actions
+    Groups
+
+Exclude/Delete/Move add one top-level operation per user command. `Rebuild()` replays operations from the Initial Portrait and reconstructs Working Portrait, Groups, Actions, and selection binding.
+
+### `PortraitQueries`
+
+Answers model questions without UI dependencies:
+
+    Groups / GroupsForSelection
+    grouped files in Directory / Branch / Corpus Roots
+    files in scope
+    breadcrumbs
+    best Directory Pair
+    Branch counterpart eligibility
+    shared Group count
+
+### `ProjectionService`
+
+Builds UI-independent Explorer representations from `PortraitQueries`.
+
+### `BranchStatisticsAnalyzer`
+
+Computes Branch records:
+
+    FileCount
+    DirectoryCount
+    GroupedFileCount
+    GroupCount
+    GroupedDirectoryCount
+
+### `BranchPriorityMetrics`
+
+Computes parent-relative Group concentration metrics. The current seed ranking uses `ExcessConcentratedGroups`.
+
+### `BranchCounterpartAnalyzer`
+
+Performs targeted Branch relationship discovery and on-demand best-pair search. It does not enumerate every Branch Pair.
+
+### `ActionPlanExecutor`
+
+Executes the concrete filesystem Actions produced by the Working Portrait. It attempts independent work after failures and performs Move -> Copy/Delete fallback when required.
+
+### `MainWindow`
+
+Owns Avalonia presentation and command orchestration. Functionality is split across partial-class files for navigation, projection construction, selection, portrait commands, context menus, and progress handling.
 
 ## Current UI
 
-The implemented application has a conventional File menu:
+File menu:
 
     Select Roots...
     Load Saved Session...      disabled
@@ -79,13 +152,19 @@ The implemented application has a conventional File menu:
     Execute...
     Exit
 
-Root selection supports:
+Explorer toolbar:
 
-    Add...
-    Remove
-    Explore
+    Back                       present, history not implemented
+    Pivot
+    Forward                    present, history not implemented
+    Suggest
+    Invert
+    Exclude
+    Delete
+    Move -> / <- Move
+    Undo
 
-The Explorer supports these current user-facing projections/terms:
+Current projections:
 
     Groups
     Directory
@@ -94,260 +173,144 @@ The Explorer supports these current user-facing projections/terms:
     Directory Pair
     Branch Pair
 
-The code uses internal types such as `DuplicateSet`, `ContentId`, and `FileInstance`; ordinary UI/documentation should prefer Group, file/copy, and shared Groups.
+## Current initial scan path
 
-Current toolbar/navigation language includes:
+`BerriesApplication.ScanAsync()` currently performs:
 
-    Back                 present but history not implemented
-    Pivot
-    Forward              present but history not implemented
-    Suggest
-    Invert Selected Copies
-    Invert All Groups
-    Exclude
-    Delete
-    Move ->
-    <- Move
-    Undo
+    normalize Corpus
+        -> acquire Portrait
+        -> DiscoverGroupsAsync
+        -> attach ContentIds to grouped files
+        -> construct BerriesSession
+        -> RefreshAnalysisAsync
+             -> Directory analysis
+             -> Branch statistics
+             -> targeted counterpart analysis
+        -> return ScanResult
+
+This entire path is awaited before the Groups projection becomes ready.
+
+The discovery front end is fundamentally one Corpus-dependent chunk: once the Corpus is unchanged, its observed Portrait and established ContentIds are treated as fixed session truth. Berries does not rehash because virtual portrait operations occur or because the external filesystem may have drifted.
+
+## Current portrait-operation path
+
+Exclude/Delete/Move/Undo are run through `BerriesApplication`.
+
+After a command changes the operation history:
+
+    derived analysis objects are set to null
+    visible projection is refreshed immediately from BerriesSession
+    GUI starts RefreshAnalysisAsync in background
+    old refresh work is cancelled when another portrait command starts
+    completion restores analysis-dependent capabilities
+
+This is the first implemented form of analysis invalidation/background refresh.
+
+## Current analysis mathematics
+
+### Directory Pair
+
+Strength is simply:
+
+    SharedGroupCount
+
+No separate generic leverage abstraction is retained.
+
+### Branch seed
+
+For a child Branch relative to its parent:
+
+    group retention = child GroupCount / parent GroupCount
+    file retention  = child FileCount / parent FileCount
+    concentration   = group retention / file retention
+
+    ExcessConcentratedGroups =
+        child GroupCount * (1 - 1 / concentration), concentration > 1
+        0,                                         otherwise
+
+### Branch relationship
+
+Targeted search uses:
+
+    shared Group count
+    seed coverage
+    counterpart coverage
+    Jaccard overlap
+
+    score = shared Group count * Jaccard
+
+Selection examines a top-10 seed window, chooses the strongest actual relationship, blocks both chosen Branch families, and repeats.
+
+This practical approach replaced exhaustive ancestor-Cartesian Branch Pair construction because the latter produced combinatorial growth on real corpora.
+
+## Move implementation
+
+`BerriesSession.Move()` operates entirely on the Working Portrait.
+
+For each requested source file:
+
+1. verify it is still present and lies within the source scope;
+2. preserve its source-relative parent path beneath destination scope;
+3. detect the same ContentId directly in the computed destination Directory;
+4. reduce to Delete when content is already correctly present there;
+5. otherwise use the source filename;
+6. report same-name/different-content collisions without modifying either file;
+7. update persistent selection for successful modeled moves.
+
+Move does not rename arbitrarily and does not overwrite different content.
+
+## Execute implementation
+
+The GUI calculates pre-execution content loss, asks for approval, then calls `ActionPlanExecutor`.
+
+Executor behavior:
+
+    DeleteFileAction -> delete
+    CopyFileAction   -> ensure parent, copy
+    MoveFileAction   -> ensure parent, try Move;
+                        on IOException, Copy then Delete
+
+I/O/authorization failures are recorded. Independent later work continues.
 
 ## Configuration
 
-`Berries.config` now uses `[exclude]`; `[ignore]` is obsolete.
+`Berries.config` uses `[exclude]` only.
 
-Current matching semantics:
+Matching:
 
-    no path separator
-        match a path component / filename
+    no separator     -> any path component / filename
+    separator        -> contiguous full-path segment
+    * / ?            -> wildcards
+    # / ;            -> comments
 
-    path separator present
-        match a contiguous normalized path segment
+The parser and tests use Exclude terminology consistently.
 
-    * and ?
-        wildcards
+## Tests retained after cleanup
 
-    # or ; at line start
-        comments
+Active tests cover:
 
-Configuration matching is applied during initial Portrait acquisition.
+    Corpus/Portrait acquisition
+    Group discovery and file-access failures
+    configuration Exclude
+    Directory statistics and Directory Pairs
+    Branch statistics
+    Branch priority metrics
+    BerriesSession portrait operations / Undo / Move
+    filesystem abstraction and execution behaviors
 
-## Initial scan pipeline
+Tests for removed experimental models were deleted rather than translated into current terminology.
 
-`BerriesApplication.ScanAsync()` currently orchestrates the full new-session scan sequentially:
+## Immediate architectural work
 
-    CreateCorpus
-        -> BuildInitialPortraitAsync
-        -> DiscoverDuplicatesAsync
-        -> attach discovered ContentIds
-        -> new BerriesSession
-        -> RefreshAnalysisAsync
-             -> AnalyzeDirectoriesAsync
-             -> BranchStatisticsAnalyzer.Analyze
-             -> BranchCounterpartAnalyzer.Analyze
-        -> return ScanResult
+The next design problem remains the analysis lifecycle discussed immediately before this terminology cleanup.
 
-The GUI displays Corpus roots and progress while this work runs. It switches to the normal Group projection after `ScanAsync()` returns.
+The initial discovery chunk is required whenever the Corpus changes and can thereafter remain stable for the session. Derived results have different prerequisites and invalidators:
 
-This means the GUI thread is not synchronously blocked by the computational work, but initial session readiness is still coupled to completion of the full derived-analysis chain.
+    Working Portrait + Groups
+        -> Directory analysis
+        -> Branch statistics
 
-## Duplicate discovery
+    Directory analysis + Branch statistics + Groups
+        -> counterpart analysis
 
-Discovery groups files by length and hashes only non-singleton length groups with SHA-256.
-
-Expected content-read failures (`IOException`, `UnauthorizedAccessException`, `SecurityException`) evict the affected file from the established session. Programming errors propagate.
-
-The Windows filesystem implementation uses permissive read sharing (`ReadWrite | Delete`) where practical.
-
-Unique files remain in the Initial/Working Portrait even though they are not shown as duplicate-resolution candidates. The current Move implementation depends on them for destination collision detection.
-
-## Session and portrait operations
-
-`BerriesSession` is now the authoritative mutable session model.
-
-It owns:
-
-    InitialPortrait          fixed
-    WorkingPortrait          rebuilt from operation history
-    Selection                persistent semantic selection
-    Operations               ordered top-level Undo steps
-    Actions                  physical filesystem work implied by operations
-    DuplicateSets            current Working-Portrait Groups
-
-### Exclude
-
-`Exclude()` records `ExcludePortraitOperation` objects. Excluded files disappear from the Working Portrait but create no physical Action.
-
-### Delete
-
-`Delete()` records `DeletePortraitOperation` objects. Rebuild removes those files and adds `DeleteFileAction` entries.
-
-### Move
-
-`Move()` evaluates each requested source against the current Working Portrait.
-
-It:
-
-- preserves source-relative directory structure beneath the chosen destination scope;
-- treats existing same-Content files in the exact computed destination Directory as authoritative;
-- reduces already-present content to source Delete;
-- detects same-name/different-Content collisions, including collisions with unique files;
-- records successful relocations as `MovePortraitOperation`;
-- updates selected paths for moved files.
-
-### Undo
-
-Each user command is one top-level operation, using `PortraitOperationBatch` when necessary.
-
-`Undo()` removes the latest top-level operation and calls `Rebuild()`, which reconstructs the Working Portrait, Group membership, Action list, and valid Selection from the fixed Initial Portrait.
-
-## Projection layer
-
-`Berries.Projection` is now a real architectural boundary and should remain separate from GUI controls.
-
-`ProjectionService` currently supplies:
-
-    DirectoryAsync
-    BranchAsync
-    CorpusRootsAsync
-    Groups
-    GroupsForSelection
-    Group
-    SharedGroupCountAsync
-    structural lookup/navigation helpers
-
-The GUI converts these projection models into `ExplorerNode` trees.
-
-Do not move ordinary projection/query logic back into Avalonia event handlers unless the behavior is genuinely presentation-specific.
-
-## Navigation
-
-Current Pivot operations include:
-
-    Corpus Roots
-    Group
-    Containing Directory
-    Branch
-    Best Directory Pair
-    Best Branch Pair
-    Current Suggested Branch Pair
-
-Directory/Branch pair panes maintain independent structural breadcrumbs.
-
-Back and Forward controls exist in XAML but have not yet acquired navigation-history implementation.
-
-## Structural analysis
-
-### Directory analysis
-
-The engine computes duplicate-bearing `DirectoryRecord` objects and `DirectoryPair` evidence.
-
-### Branch statistics
-
-`BranchStatisticsAnalyzer` computes first-class Branch statistics without enumerating all Branch Pairs.
-
-### Branch priority
-
-`BranchPriorityMetrics` contains parent-relative measures. Current seed selection uses the concentration form based on distinct duplicated Content and duplicate-content retention versus ordinary-file retention.
-
-### Targeted counterparts
-
-`BranchCounterpartAnalyzer` is the active container-centric discovery mechanism.
-
-The application currently requests:
-
-    seedLimit = 25
-    counterpartLimit = 5
-
-and publishes the result as `BerriesApplication.Counterparts`.
-
-Comprehensive Branch-Pair enumeration is intentionally not part of the active design; prior experiments demonstrated unacceptable combinatorial cost.
-
-`FindBestBranchPairAsync()` performs an on-demand best-counterpart search for a selected Branch using current Branch statistics and Groups.
-
-## Analysis invalidation and background refresh
-
-Any session command that changes the top-level portrait-operation count calls `InvalidateAnalysis()`, which currently clears all three derived products:
-
-    DirectoryAnalysis
-    BranchStatistics
-    Counterparts
-
-The invalidation model is intentionally coarse.
-
-After a GUI portrait command:
-
-1. cancel an older background analysis refresh if one exists;
-2. apply the session command;
-3. refresh the visible projection immediately;
-4. re-enable ordinary Explorer interaction;
-5. start a cancellable background `RefreshAnalysisAsync()`;
-6. update capabilities when the current refresh finishes.
-
-This background-generation mechanism is implemented in `MainWindow.PortraitCommands.cs`.
-
-Initial scan still awaits the same derived analysis synchronously from the caller's perspective before returning.
-
-## Transitional analysis residue
-
-`DuplicateSettlements` remains in Core and in several analyzer signatures from the earlier Accept/Settle experimental model.
-
-Current application behavior does **not** use settlement semantics. `RefreshAnalysisAsync()` creates a new empty `DuplicateSettlements` for each refresh and never accepts content or pairs. Therefore it is currently a compatibility parameter with no filtering effect.
-
-Do not describe Accept/Settle as an application feature. Removing this residue from analyzer APIs is legitimate cleanup when convenient, but documentation should reflect the code until that happens.
-
-Older `Case` classes/report formatters also remain in parts of the tree from experimental work. The active Explorer does not require a persistent Case queue or Situation->Resolution->Disposition workflow.
-
-## Execute
-
-Physical Execute is implemented.
-
-The GUI enables Execute when `session.Actions.Count > 0`.
-
-Before approval it reports:
-
-    planned Action count
-    Groups with no surviving physical file after the plan
-
-`ActionPlanExecutor` then attempts the Actions. It supports dependency-safe execution, including copy-before-delete behavior where a physical move cannot be completed directly.
-
-Independent work can continue after local failure. Results distinguish completed, skipped-dependent, and failed Actions. The GUI presents a failure summary when necessary.
-
-There is no global pre-execution rescan/reconciliation pass.
-
-## Persistence
-
-Save/Load menu items are present but disabled. No current persistence format or schema should be treated as implemented.
-
-When persistence work eventually begins, derive its representation from the runtime session model rather than resurrecting earlier speculative schemas.
-
-## Tests
-
-The test project contains coverage for current Core/session behavior, duplicate discovery, filesystem boundaries, structural analysis, projection-relevant query semantics, operations, Move behavior, and execution.
-
-When changing architecture, prefer synthetic tests that exercise Core without Avalonia or Windows-specific assumptions.
-
-Particularly important invariants to preserve include:
-
-- deterministic Working-Portrait rebuild from Initial Portrait plus operations;
-- one user command per Undo step;
-- Exclude produces no physical Action;
-- Group membership follows the current Working Portrait;
-- Move preserves relative paths and destination-authoritative semantics;
-- same-name/different-Content collisions leave the source unchanged;
-- unique files can block Move destinations;
-- failed execution prerequisites suppress dependent destructive work;
-- exhaustive Branch-Pair generation must not accidentally return as a dependency of normal analysis.
-
-## Known incomplete or deliberately deferred work
-
-Current code intentionally does not yet provide:
-
-    Save/Load
-    Back/Forward navigation history
-    general rename
-    general unique-file maintenance
-    automatic Situation classification
-    learned/persistent resolution rules
-    fine-grained analysis invalidation
-    independent lazy scheduling of every derived analysis product
-
-The last item is the active architectural area immediately under study: the current initial-scan chain and post-operation background refresh are functional, but derived analyses are still managed as one coarse validity unit.
+The current implementation still recomputes these as one sequential `RefreshAnalysisAsync()` operation. The intended next step is to define explicit validity/prerequisite state and demand-driven background scheduling without constructing an over-general analysis framework.
