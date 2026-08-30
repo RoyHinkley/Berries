@@ -98,6 +98,7 @@ public partial class MainWindow
     private IReadOnlyList<FileInstance> SemanticSelection() => controller.Session?.Selection.Files ?? [];
 
     private IReadOnlyList<FileInstance> SemanticSelectionInScope(Berries.FileSystem.Abstractions.FileSystemPath scope, bool descendants) =>
-        SemanticSelection().Where(file => fileSystem.PathsEqual(file.ParentDirectory, scope)
-            || (descendants && fileSystem.IsDescendant(file.ParentDirectory, scope))).ToArray();
+        controller.Session is { } session
+            ? Projections.SelectedFilesInContext(session, scope, descendants)
+            : [];
 }
