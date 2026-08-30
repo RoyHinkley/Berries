@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Berries.Core.Domain;
+using Berries.Projection;
 
 namespace Berries.Gui;
 
