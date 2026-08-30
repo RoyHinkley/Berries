@@ -73,6 +73,12 @@ public sealed class ProjectionService(PortraitQueries queries)
                 .Select(file => new GroupProjectionFile(file.Path.Value, file)).ToArray());
     }
 
+    public IReadOnlyList<FileInstance> FilesInContext(
+        IEnumerable<FileInstance> files,
+        FileSystemPath context,
+        bool includeDescendants) =>
+        queries.FilesInContext(files, context, includeDescendants);
+
     public IReadOnlyList<FileInstance> SelectedFilesInContext(BerriesSession session, FileSystemPath context, bool includeDescendants) =>
         queries.SelectedFilesInContext(session, context, includeDescendants);
 
