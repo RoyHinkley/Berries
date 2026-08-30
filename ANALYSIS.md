@@ -1,48 +1,64 @@
 # Berries Analysis Design
 
-This document describes the analysis Berries actually performs today, why that analysis has its present shape, and where the practical design deliberately differs from earlier exhaustive mathematical approaches.
-
-User/domain vocabulary is defined in `MODEL.md`. Interaction and execution are described in `WORKFLOW.md`.
+This document defines how Berries discovers Groups, derives structural evidence, and identifies promising Explorer foci. Terminology and invariants are defined in `MODEL.md`; interaction and execution are defined in `WORKFLOW.md`.
 
 ## Purpose
 
-Analysis exists to help the user find duplication likely to reward attention. It does not own the workflow and does not prescribe a mandatory Case queue.
+Analysis exists to help the user find duplication likely to reward attention. It supplies evidence to the Explorer; it does not prescribe a mandatory workflow.
 
-The stable interaction surface is the Duplicate Explorer. Analysis supplies:
+The useful viewpoints are complementary:
 
-    Groups of identical files
-    direct Directory evidence
-    Branch statistics
-    targeted Branch-Pair suggestions
-    on-demand structural counterparts
+    Group-centric
+    same-Directory
+    Branch/container-centric
 
-The governing heuristic remains practical rather than exhaustive:
+The governing presentation idea is:
 
-    find something likely to reward attention
+    identify something likely to reward attention
 
-and, among comparable candidates:
+and, when choosing among comparable possibilities:
 
-    prefer a comprehensible question with substantial simplifying effect
+    prefer the smallest comprehensible question with substantial downstream
+    simplifying effect
 
-## Initial discovery pipeline
+## Initial acquisition and Group discovery
 
-The implemented initial discovery chain is intentionally linear because every step is required to establish the session.
+Selected roots are normalized to a minimal disjoint Corpus.
 
-### 1. Normalize Corpus roots
+`BuildInitialPortraitAsync()` enumerates regular files beneath those roots, applying `Berries.config [exclude]` filtering during acquisition. The Portrait records path, parent Directory, length, and observed write time.
 
-Selected roots are canonicalized and reduced to a disjoint set so no retained root is beneath another retained root.
+Group discovery then:
 
-### 2. Acquire the scan Portrait
+1. groups files by length;
+2. discards singleton size groups from hashing work;
+3. hashes files in non-singleton size groups with SHA-256;
+4. groups equal hashes;
+5. retains hash groups containing at least two files as Groups;
+6. attaches the resulting ContentId to grouped files in the session Portrait.
 
-Enumerate ordinary files beneath the roots and record platform-neutral metadata needed by Core.
+Expected read failures (`IOException`, `UnauthorizedAccessException`, `SecurityException`) evict the affected file from the session. Programming failures propagate.
 
-`Berries.config` uses an `[exclude]` section. Matching paths are filtered during acquisition. Matching semantics are:
+Windows content reads request permissive sharing (`ReadWrite | Delete`) so files already open by other applications can often still be hashed.
 
-    pattern without a path separator
+The resulting Group discovery types are:
+
+    GroupDiscoveryProgress
+    GroupDiscoveryTiming
+    GroupDiscoveryResult
+
+A Group is the user/domain concept. `ContentId` remains the narrower internal identity used to establish and track byte-equal content.
+
+## Configuration Exclude
+
+`Berries.config` uses an `[exclude]` section.
+
+Current matching semantics:
+
+    pattern without path separator
         match any path component / filename
 
     pattern containing / or \
-        match a contiguous path segment in the normalized full path
+        match a contiguous path segment anywhere in the full path
 
     * and ?
         wildcard matching
@@ -50,202 +66,179 @@ Enumerate ordinary files beneath the roots and record platform-neutral metadata 
     # or ; at line start
         comment
 
-Configuration exclusion is operationally equivalent to beginning the session without those files in the working Corpus; no filesystem action is implied.
+Configuration Exclude and interactive Exclude have the same logical effect: excluded material does not participate in the Working Portrait. Configuration filtering happens earlier simply to avoid needless acquisition and hashing work.
 
-### 3. Group by length
+## Directory analysis
 
-Files whose length is unique cannot currently be duplicated and require no content hash. Equal-length files become hash candidates.
+Directory statistics describe directly contained files only.
 
-Unique files remain in the Portrait because they can constrain later operations such as Move destination collision checks.
-
-### 4. Hash candidates
-
-Current content identity uses SHA-256.
-
-Expected read failures (`IOException`, `UnauthorizedAccessException`, `SecurityException`) evict inaccessible files from the established session rather than aborting the entire scan. Programming failures still propagate.
-
-The Windows adapter opens content with permissive sharing (`ReadWrite | Delete`) where possible so ordinary files held open by other applications can still be hashed.
-
-### 5. Establish Groups and the session
-
-Equal hashes form internal `DuplicateSet` objects and user-facing Groups. Content identity is attached to the corresponding Portrait files and `BerriesSession` is created.
-
-At this point Berries has the fixed Initial Portrait, current Working Portrait, Groups, persistent selection state, portrait-operation history, and physical Action list.
-
-## Derived structural analysis
-
-After session construction, current `ScanAsync()` performs three derived analysis stages sequentially.
-
-### Directory analysis
-
-For duplicate-bearing exact directories, Berries derives direct records including values such as:
+`DirectoryRecord` contains:
 
     Path
     FileCount
-    DuplicateFileCount
-    DuplicateContentCount
+    GroupedFileCount
+    GroupCount
 
-Directory counts describe files directly in the Directory, not descendants.
+`DirectoryPair` describes two exact Directories sharing one or more Groups directly:
 
-A `DirectoryPair` represents two exact directories sharing duplicated content directly. `SharedContentCount` is the number of distinct shared Groups.
+    First
+    Second
+    SharedGroupCount
 
-Directory Pairs are useful evidence and projections. They are not comprehensively promoted into a separate mandatory work queue.
+There is no separate abstract "leverage" value here. Pair strength is the directly meaningful count of shared Groups.
 
-### Branch statistics
+### Directory graph diagnostics
 
-`BranchStatisticsAnalyzer` derives first-class statistics for directory-rooted Branches without first enumerating Branch Pairs:
+The Directory Pair network retains inexpensive graph measurements because they proved useful during empirical work and diagnostics:
+
+    degree
+    weighted degree
+    maximum shared Group count
+    mean shared Group count
+    strongest-pair concentration
+    connected components
+    pair density
+
+These values are evidence, not semantic classification.
+
+Same-Directory copies remain directly visible through a Directory projection even though no Directory Pair is needed to express them.
+
+## Branch statistics
+
+`BranchStatisticsAnalyzer` derives first-class statistics for Group-bearing Branches without enumerating all Branch Pairs:
 
     Path
     ParentPath
     FileCount
     DirectoryCount
-    DuplicateFileCount
-    DuplicateContentCount
-    DuplicateDirectoryCount
+    GroupedFileCount
+    GroupCount
+    GroupedDirectoryCount
 
-`DuplicateContentCount` is a distinct-content count across the entire Branch and must not be obtained by summing descendant Directory counts.
+`GroupCount` is a distinct Group count across the entire Branch. A Group represented in multiple descendant Directories contributes once to the Branch's GroupCount.
 
-This stage is intentionally cheap enough to run on large real corpora.
+Branch statistics are obtained by walking ancestry within the Corpus and are inexpensive compared with exhaustive Branch relationship construction.
 
-### Branch seed priority
+## Branch seed priority
 
-`BranchPriorityMetrics` scores a Branch relative to its parent using duplicate-content concentration rather than raw duplicate count alone.
+For a child Branch relative to its immediate parent:
 
-The current preferred family of metric is based on:
+    D = child GroupCount
 
-    D = child distinct duplicated Content
-    C = duplicated-Content retention / ordinary-file retention
+    group retention = child GroupCount / parent GroupCount
+    file retention  = child FileCount / parent FileCount
 
-with positive priority only when duplicate content is concentrated more strongly than ordinary files. The currently implemented score uses the bounded `D * (1 - 1/C)` form when `C > 1`.
+    C = group retention / file retention
 
-This answers:
+The current useful seed score is:
+
+    D * (1 - 1/C), for C > 1
+    0,             otherwise
+
+This is stored as `ExcessConcentratedGroups`.
+
+Interpretation: Groups are concentrated in the child beyond what would be expected from the child's ordinary share of parent files.
+
+Seed score answers only:
 
     where is it promising to look?
 
-It is not itself a Branch-Pair quality score.
+It does not measure the quality of any particular counterpart.
 
-## Targeted Branch counterpart analysis
+## Targeted Branch counterpart discovery
 
-Earlier versions attempted broad or exhaustive ancestor-pair expansion. Real-corpus experiments demonstrated that this creates large combinatorial populations, including millions of candidate pairs, without proportional user benefit.
+Exhaustive ancestor-Cartesian Branch Pair construction was abandoned after experiments produced very large pair populations and long runtimes without proportional user value.
 
-The current implementation therefore searches only promising Branch seeds.
+Current targeted analysis:
 
-`BranchCounterpartAnalyzer`:
+1. Rank eligible Branch seeds by `ExcessConcentratedGroups`.
+2. In each selection round, inspect the top 10 unblocked seeds.
+3. For each seed, identify non-nested candidate Branches sharing Groups.
+4. For each relationship compute:
 
-1. ranks eligible Branch seeds;
-2. considers a bounded top seed window;
-3. finds strong non-nested counterpart Branches sharing Groups with each seed;
-4. scores actual relationships using shared distinct duplicated content and overlap/Jaccard information;
-5. chooses a compact set of candidates while culling already represented Branch families;
-6. retains a few top counterparts per seed for diagnostics and UI use.
+       shared Group count
+       seed coverage
+       counterpart coverage
+       Jaccard overlap
+       score = shared Group count * Jaccard
 
-The current application calls this analyzer with a seed limit of 25 and counterpart limit of 5. These are implementation parameters, not semantic constants.
+5. Keep the strongest few counterparts for diagnostics.
+6. Choose the strongest relationship among the current top-10 seed window.
+7. Block the chosen seed Branch, chosen counterpart Branch, and their descendants from later seed selection.
+8. Repeat until the requested suggestion limit is reached or no candidate remains.
 
-The important distinction is:
+The winning relationship can originate from any seed in the window. Seed quality and relationship quality are therefore deliberately separate measurements.
 
-    seed score
-        promising place to search
+The analysis also records exact-root Directory Pair shared-Group count as a diagnostic when available; it does not drive Branch Pair ranking.
 
-    counterpart/pair score
-        promising relationship actually found
+## On-demand best Branch Pair
 
-The best relationship need not originate from the highest-ranked seed.
+When the user Pivots from a selected Branch to `Best Branch Pair`, Berries searches non-nested Branches on demand using the same Group-overlap/Jaccard idea.
 
-## Suggest and on-demand counterpart search
+This operation does not require a pre-enumerated population of Branch Pairs.
 
-The implemented `Suggest` command cycles through the compact analyzed Branch-Pair suggestions in `BerriesApplication.Counterparts`.
+## Suggest
 
-A selected Branch can also request its best current counterpart on demand through `FindBestBranchPairAsync()`. That search uses the established Branch statistics and current Groups without requiring exhaustive Branch-Pair enumeration.
+`Suggest` becomes available when targeted Branch counterpart results are present.
 
-Directory-Pair pivoting similarly selects the best direct Directory Pair for the chosen Directory from the current Directory analysis.
+The current implementation cycles through the compact suggestion list and opens the corresponding Branch Pair. Suggest changes focus only; the user may immediately Pivot elsewhere or operate on any selection.
 
-## Projections and analysis
+Future suggestion sources may include strong Group-centric or same-Directory signals, but they should enter through the same Explorer rather than create special workflow screens.
 
-`Berries.Projection` builds UI-independent views over the current `BerriesSession`:
+## Projection queries
+
+`PortraitQueries` answers factual questions about the current Working Portrait, including:
 
     Groups
-    Directory
-    Branch
-    Corpus Roots
-    shared-Group counts for pair views
+    Groups for current selection
+    grouped files in a Directory
+    grouped files in a Branch
+    grouped files arranged beneath Corpus Roots
+    best Directory Pair for a Directory
+    whether a Branch can have a counterpart
+    shared Group count between two scopes
 
-Directory-Pair and Branch-Pair views are composed from those projection/query services plus analyzed pair choices.
+`Berries.Projection` turns those facts into UI-independent projection models. Avalonia presentation remains above that layer.
 
-Projection construction operates on the current Working Portrait and current Groups; it does not require a separate persistent Case object.
+## Derived analysis after portrait operations
 
-## Portrait changes and invalidation
+Exclude/Delete/Move immediately rebuild the Working Portrait and current Groups in memory. Directory analysis, Branch statistics, and counterpart results then become stale.
 
-Exclude/Delete/Move/Undo can change Group membership and all higher structural evidence.
+Current application behavior is intentionally simple:
 
-Current behavior is deliberately broad and simple:
+1. a portrait command changes `BerriesSession`;
+2. `BerriesApplication` invalidates all three derived result objects;
+3. the GUI immediately refreshes the visible projection from the Working Portrait;
+4. Directory analysis, Branch statistics, and counterpart analysis are recomputed in the background;
+5. completed results restore capabilities such as Suggest.
 
-    any portrait-operation history change
-        -> DirectoryAnalysis = null
-        -> BranchStatistics = null
-        -> Counterparts = null
+Known ContentId values do not need to be reread or rehashed after virtual portrait operations.
 
-Known Content is not reread or rehashed merely because a virtual operation changes membership or location.
+### Initial scan lifecycle
 
-After a portrait command, the GUI:
+The initial path is still sequential:
 
-1. cancels any previous background analysis refresh;
-2. applies/rebuilds the Working Portrait;
-3. refreshes the current visible projection immediately;
-4. starts a cancellable background `RefreshAnalysisAsync()`;
-5. republishes capability state when that generation finishes.
+    Corpus / Portrait acquisition
+        -> Group discovery
+        -> Session construction
+        -> Directory analysis
+        -> Branch statistics
+        -> counterpart analysis
+        -> ScanAsync returns
 
-This prevents expensive structural analysis from blocking ordinary portrait editing after the session exists.
+This is an implementation fact, not a governing requirement.
 
-The current implementation does not yet maintain independent validity state per analysis product; invalidation is all-or-nothing for the three derived results.
-
-## Initial-scan orchestration
-
-Initial scan remains more monolithic than post-operation refresh.
-
-`BerriesApplication.ScanAsync()` currently performs:
-
-    normalize roots
-    acquire Portrait
-    discover Groups
-    construct BerriesSession
-    RefreshAnalysisAsync()
-        directory analysis
-        Branch statistics
-        targeted counterparts
-    return ScanResult
-
-The GUI shows the Corpus view and progress while this runs, but does not switch to the normal Group projection until `ScanAsync()` completes.
-
-This is current behavior, not a requirement that every future analysis remain sequential.
-
-## Transitional `DuplicateSettlements`
-
-The codebase still contains `DuplicateSettlements` and analyzer parameters from an earlier Accept/Settle design.
-
-The current application does not expose settlement semantics. Each derived-analysis refresh creates a new empty `DuplicateSettlements` solely to satisfy those older analyzer signatures. No user operation adds accepted content or accepted pairs, so the object has no filtering effect in current application behavior.
-
-The product model is therefore correctly described as having no user-facing settlement layer even though the transitional type remains in Core.
-
-## Same-directory and file-centric duplication
-
-Real-corpus experiments showed that widely repeated low-level content can manufacture large amounts of weak higher-level structure: generated files, template/support material, build artifacts, repository support files, saved-web assets, and similar content can produce many apparent Directory and Branch relationships.
-
-That finding remains important, but the earlier special distributed-DuplicateSet settlement screen is no longer part of the current application.
-
-Today such material is handled through ordinary Group/structural exploration and Exclude when the user decides it does not belong in the working Corpus.
-
-Same-directory duplication also remains naturally visible through Group and Directory projections without requiring a special Case pipeline.
+The current design work is moving toward an explicit dependency/validity model in which the front-end discovery chunk remains stable until the Corpus changes, while derived analyses can be independently invalidated and produced when prerequisites and demand justify them.
 
 ## Performance lessons retained
 
-The development experiments established several durable principles:
+Real-corpus testing established several durable principles:
 
-- hash only equal-size candidates;
-- first-class Branch statistics are much cheaper than exhaustive Branch-Pair construction;
-- seed quality and pair quality are different measurements;
-- targeted counterpart search is sufficient to surface meaningful real structures in large corpora;
-- repeated low-level content can create misleading higher-level structural evidence;
-- exact mathematical completeness is not the goal when it creates large combinatorial cost without improving user decisions;
-- analysis should surface promising attention targets, not infer semantic truth autonomously.
-
-These empirical findings take precedence over older planning documents that assumed comprehensive pair enumeration or Situation classification as central mechanics.
+- repeated low-level Groups can manufacture large amounts of weak structural evidence;
+- Group-centric and container-centric views are complementary;
+- Branch statistics are cheap and useful before relationship search;
+- targeted counterpart search is dramatically cheaper than exhaustive Branch Pair construction;
+- seed quality and relationship quality are different measurements;
+- mathematically perfect structural boundaries are unnecessary when nearby boundaries support the same useful user operation;
+- generated/repository/application-managed trees can create substantial real duplication evidence, making configurable Exclude valuable;
+- Berries should surface promising evidence, not pretend to infer semantic truth autonomously.
