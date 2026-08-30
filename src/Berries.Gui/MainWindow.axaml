@@ -59,7 +59,16 @@
               <Button x:Name="SuggestCaseButton" Content="Suggest" Click="SuggestCaseWithBreadcrumbs_Click" IsEnabled="False" />
             </StackPanel>
 
-            <Button x:Name="InvertButton" Grid.Column="2" Content="Invert Selection" Click="InvertButton_Click" IsEnabled="False" />
+            <Button x:Name="InvertButton" Grid.Column="2" Content="Invert ▾" IsEnabled="False">
+              <Button.Flyout>
+                <MenuFlyout>
+                  <MenuItem x:Name="InvertSelectedCopiesMenu" Header="Invert Selected Copies  ⓘ" Click="InvertSelectedCopies_Click"
+                            ToolTip.Tip="Invert the selection among identical copies of the selected files. Other Groups are unchanged." />
+                  <MenuItem x:Name="InvertAllGroupsMenu" Header="Invert All Groups  ⓘ" Click="InvertAllGroups_Click"
+                            ToolTip.Tip="Invert the selection of every file in every Group currently shown." />
+                </MenuFlyout>
+              </Button.Flyout>
+            </Button>
             <Button x:Name="ExcludeButton" Grid.Column="3" Content="Exclude" Click="ExcludeImmediateButton_Click" IsEnabled="False" />
             <Button x:Name="DeleteButton" Grid.Column="4" Content="Delete" Click="DeleteImmediateButton_Click" IsEnabled="False" />
 
@@ -81,7 +90,7 @@
             <TreeView x:Name="ExplorerTree" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged">
               <TreeView.ItemTemplate>
                 <TreeDataTemplate x:DataType="local:ExplorerNode" ItemsSource="{Binding Children}">
-                  <TextBlock Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" />
+                  <TextBlock Text="{Binding Label}" PointerPressed="ExplorerNode_PointerPressed" ContextRequested="ExplorerNode_ContextRequested" />
                 </TreeDataTemplate>
               </TreeView.ItemTemplate>
             </TreeView>
@@ -93,7 +102,7 @@
               <TreeView x:Name="LeftTree" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged">
                 <TreeView.ItemTemplate>
                   <TreeDataTemplate x:DataType="local:ExplorerNode" ItemsSource="{Binding Children}">
-                    <TextBlock Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" />
+                    <TextBlock Text="{Binding Label}" PointerPressed="ExplorerNode_PointerPressed" ContextRequested="ExplorerNode_ContextRequested" />
                   </TreeDataTemplate>
                 </TreeView.ItemTemplate>
               </TreeView>
@@ -103,7 +112,7 @@
               <TreeView x:Name="RightTree" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged">
                 <TreeView.ItemTemplate>
                   <TreeDataTemplate x:DataType="local:ExplorerNode" ItemsSource="{Binding Children}">
-                    <TextBlock Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" />
+                    <TextBlock Text="{Binding Label}" PointerPressed="ExplorerNode_PointerPressed" ContextRequested="ExplorerNode_ContextRequested" />
                   </TreeDataTemplate>
                 </TreeView.ItemTemplate>
               </TreeView>
@@ -114,9 +123,11 @@
     </Grid>
 
     <Border Grid.Row="2" Padding="10,6" BorderThickness="0,1,0,0">
-      <Grid ColumnDefinitions="*,260">
+      <Grid ColumnDefinitions="*,Auto,Auto,260" ColumnSpacing="10">
         <TextBlock x:Name="StatusText" Text="Select corpus roots to begin." VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-        <ProgressBar x:Name="StatusProgress" Grid.Column="1" Height="12" Minimum="0" Maximum="100" IsVisible="False" />
+        <TextBlock x:Name="SelectionText" Grid.Column="1" Text="Selected: none" VerticalAlignment="Center" />
+        <Button x:Name="ClearSelectionButton" Grid.Column="2" Content="Clear" Click="ClearSelectionButton_Click" IsEnabled="False" Padding="7,2" />
+        <ProgressBar x:Name="StatusProgress" Grid.Column="3" Height="12" Minimum="0" Maximum="100" IsVisible="False" />
       </Grid>
     </Border>
   </Grid>
