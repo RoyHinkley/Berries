@@ -13,18 +13,18 @@ public sealed class BerriesApplication
     private readonly IFileSystem fileSystem;
     private readonly BerriesEngine engine;
     private readonly BranchStatisticsAnalyzer branchStatisticsAnalyzer;
-    private readonly BranchPairAnalyzer branchPairAnalyzer;
+    private readonly BranchCounterpartAnalyzer branchCounterpartAnalyzer;
 
     public BerriesApplication(
         IFileSystem fileSystem,
         BerriesEngine engine,
         BranchStatisticsAnalyzer branchStatisticsAnalyzer,
-        BranchPairAnalyzer branchPairAnalyzer)
+        BranchCounterpartAnalyzer branchCounterpartAnalyzer)
     {
         this.fileSystem = fileSystem;
         this.engine = engine;
         this.branchStatisticsAnalyzer = branchStatisticsAnalyzer;
-        this.branchPairAnalyzer = branchPairAnalyzer;
+        this.branchCounterpartAnalyzer = branchCounterpartAnalyzer;
     }
 
     public event Action<OperationProgress>? AnalysisProgressChanged;
@@ -34,7 +34,7 @@ public sealed class BerriesApplication
     public ScanResult? Scan { get; private set; }
     public DirectoryAnalysisResult? DirectoryAnalysis { get; private set; }
     public BranchStatisticsResult? BranchStatistics { get; private set; }
-    public BranchPairAnalysisResult? BranchPairAnalysis { get; private set; }
+    public BranchPairSuggestionResult? Suggestions { get; private set; }
 
     public IReadOnlyList<string> NormalizeRoots(IEnumerable<string> rootPaths) =>
         engine.CreateCorpus(rootPaths.Select(path => new FileSystemPath(path)))
@@ -98,14 +98,10 @@ public sealed class BerriesApplication
         return Scan;
     }
 
-    public Task ExcludeAsync(
-        IReadOnlyList<FileInstance> files,
-        CancellationToken cancellationToken = default) =>
+    public Task ExcludeAsync(IReadOnlyList<FileInstance> files, CancellationToken cancellationToken = default) =>
         RunSessionCommandAsync(session => session.Exclude(files), cancellationToken);
 
-    public Task DeleteAsync(
-        IReadOnlyList<FileInstance> files,
-        CancellationToken cancellationToken = default) =>
+    public Task DeleteAsync(IReadOnlyList<FileInstance> files, CancellationToken cancellationToken = default) =>
         RunSessionCommandAsync(session => session.Delete(files), cancellationToken);
 
     public Task<MoveResult> MoveAsync(
@@ -151,22 +147,22 @@ public sealed class BerriesApplication
             engineProgress), cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
-        Debug.WriteLine("[Berries] Finding promising Branch Pairs...");
-        var branchPairs = await Task.Run(() => branchPairAnalyzer.Analyze(
+        Debug.WriteLine("[Berries] Finding Suggestions...");
+        var suggestions = await Task.Run(() => branchCounterpartAnalyzer.Analyze(
             corpus,
             branches.Branches,
             groups,
             directories.DirectoryPairs,
             suggestionLimit: 25,
-            candidateLimit: 5,
+            counterpartLimit: 5,
             cancellationToken: cancellationToken,
             progress: engineProgress), cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
         DirectoryAnalysis = directories;
         BranchStatistics = branches;
-        BranchPairAnalysis = branchPairs;
-        Debug.WriteLine($"[Berries] Analysis ready: {groups.Count:N0} Groups, {branchPairs.Suggestions.Count:N0} suggested Branch Pairs.");
+        Suggestions = suggestions;
+        Debug.WriteLine($"[Berries] Analysis ready: {groups.Count:N0} Groups, {suggestions.Suggestions.Count:N0} Suggestions.");
     }
 
     public Task<BestBranchPairResult?> FindBestBranchPairAsync(
@@ -176,36 +172,26 @@ public sealed class BerriesApplication
         if (Corpus is null || Session is null || BranchStatistics is null)
             return Task.FromResult<BestBranchPairResult?>(null);
 
-        var corpus = Corpus;
-        var groups = Session.Groups;
-        var branches = BranchStatistics.Branches;
-        var progress = ForwardProgress(null);
-        return Task.Run(() => branchPairAnalyzer.FindBestPair(
-            corpus,
+        return Task.Run(() => branchCounterpartAnalyzer.FindBestPair(
+            Corpus,
             branch,
-            branches,
-            groups,
+            BranchStatistics.Branches,
+            Session.Groups,
             cancellationToken,
-            progress), cancellationToken);
+            ForwardProgress(null)), cancellationToken);
     }
 
-    private async Task RunSessionCommandAsync(
-        Action<BerriesSession> command,
-        CancellationToken cancellationToken)
+    private async Task RunSessionCommandAsync(Action<BerriesSession> command, CancellationToken cancellationToken)
     {
-        var session = Session
-            ?? throw new InvalidOperationException("A session must exist before a portrait operation.");
+        var session = Session ?? throw new InvalidOperationException("A session must exist before a portrait operation.");
         var operationCount = session.Operations.Count;
         await Task.Run(() => command(session), cancellationToken);
         if (session.Operations.Count != operationCount) InvalidateAnalysis();
     }
 
-    private async Task<T> RunSessionCommandAsync<T>(
-        Func<BerriesSession, T> command,
-        CancellationToken cancellationToken)
+    private async Task<T> RunSessionCommandAsync<T>(Func<BerriesSession, T> command, CancellationToken cancellationToken)
     {
-        var session = Session
-            ?? throw new InvalidOperationException("A session must exist before a portrait operation.");
+        var session = Session ?? throw new InvalidOperationException("A session must exist before a portrait operation.");
         var operationCount = session.Operations.Count;
         var result = await Task.Run(() => command(session), cancellationToken);
         if (session.Operations.Count != operationCount) InvalidateAnalysis();
@@ -224,7 +210,7 @@ public sealed class BerriesApplication
     {
         DirectoryAnalysis = null;
         BranchStatistics = null;
-        BranchPairAnalysis = null;
+        Suggestions = null;
     }
 
     private IProgress<OperationProgress> ForwardProgress(IProgress<OperationProgress>? progress) =>
