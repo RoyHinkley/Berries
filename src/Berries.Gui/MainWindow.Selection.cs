@@ -102,7 +102,20 @@ public partial class MainWindow
         Berries.FileSystem.Abstractions.FileSystemPath? primary = null,
         Berries.FileSystem.Abstractions.FileSystemPath? secondary = null)
     {
-        currentProjection = new ProjectionState(kind, DistinctFilesFast(representedFiles), primary, secondary);
+        var represented = DistinctFilesFast(representedFiles);
+        if (kind is ProjectionKind.DirectoryPair or ProjectionKind.BranchPair && primary is not null && secondary is not null)
+        {
+            var descendants = kind == ProjectionKind.BranchPair;
+            SetPairProjectionState(
+                kind,
+                primary.Value,
+                Projections.FilesInContext(represented, primary.Value, descendants),
+                secondary.Value,
+                Projections.FilesInContext(represented, secondary.Value, descendants));
+            return;
+        }
+
+        currentProjection = new ProjectionState(kind, represented, primary, secondary);
         focusedNode = null;
     }
 
