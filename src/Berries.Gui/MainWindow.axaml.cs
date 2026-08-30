@@ -80,17 +80,15 @@ public partial class MainWindow : Window
     {
         RootsPanel.IsVisible = false; ExplorerPanel.IsVisible = true; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
         ProjectionTitle.Text = "Corpus";
-        ExplorerTree.ItemsSource = roots.Select(root => new ExplorerNode(root)).ToArray();
+        ExplorerTree.ItemsSource = roots.Select(root => new ExplorerNode(root, semanticPath: new FileSystemPath(root))).ToArray();
     }
 
     private void ShowContentProjection()
     {
         var session = controller.Session; if (session is null) return;
         leftScope = null; rightScope = null; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true; ProjectionTitle.Text = "Groups";
-        var nodes = session.DuplicateSets.OrderByDescending(set => set.Files.Count)
-            .ThenBy(set => set.Files[0].Path.Value, StringComparer.OrdinalIgnoreCase)
-            .Select(set => BuildGroupNode(set.Files)).ToArray();
-        ExplorerTree.ItemsSource = nodes; UpdateCapabilities();
+        ExplorerTree.ItemsSource = Projections.Groups(session).Select(set => BuildGroupNode(set.Files)).ToArray();
+        UpdateCapabilities();
     }
 
     private void SuggestCaseButton_Click(object? sender, RoutedEventArgs e)
@@ -102,28 +100,21 @@ public partial class MainWindow : Window
     private async Task ShowBranchPairAsync(BranchCounterpartSeed suggestion)
     {
         if (controller.Session is null || suggestion.Counterparts.Count == 0) return;
-        var first = suggestion.Seed.Branch.Path;
-        var second = suggestion.Counterparts[0].Branch.Path;
+        var first = suggestion.Seed.Branch.Path; var second = suggestion.Counterparts[0].Branch.Path;
         BeginProgress("Opening Branch Pair...", true);
         try
         {
-            var leftTask = BuildBranchExplorerNodeAsync(first);
-            var rightTask = BuildBranchExplorerNodeAsync(second);
+            var leftTask = BuildBranchExplorerNodeAsync(first); var rightTask = BuildBranchExplorerNodeAsync(second);
             await Task.WhenAll(leftTask, rightTask);
-            leftScope = first; rightScope = second;
-            PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
+            leftScope = first; rightScope = second; PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
             ProjectionTitle.Text = $"Branch Pair — {suggestion.Counterparts[0].SharedDuplicateContentCount:N0} shared groups";
             BuildPairBreadcrumbs(first, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
             BuildPairBreadcrumbs(second, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
-            LeftTree.ItemsSource = new[] { await leftTask };
-            RightTree.ItemsSource = new[] { await rightTask };
+            LeftTree.ItemsSource = new[] { await leftTask }; RightTree.ItemsSource = new[] { await rightTask };
             EndProgress($"Branch Pair — {suggestion.Counterparts[0].SharedDuplicateContentCount:N0} shared Groups.");
             SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
         }
-        catch (Exception ex)
-        {
-            EndProgress("Could not open Branch Pair: " + ex.Message);
-        }
+        catch (Exception ex) { EndProgress("Could not open Branch Pair: " + ex.Message); }
     }
 
     private void PivotContent_Click(object? sender, RoutedEventArgs e) => ShowContentProjection();
@@ -191,8 +182,7 @@ public partial class MainWindow : Window
     }
     private static string MoveStatus(int selectedCount, MoveResult result)
     {
-        var collisionCount = result.Collisions.Count;
-        var movedCount = selectedCount - collisionCount;
+        var collisionCount = result.Collisions.Count; var movedCount = selectedCount - collisionCount;
         var text = $"Move requested for {selectedCount:N0} file(s): {movedCount:N0} moved";
         if (collisionCount > 0) text += $", {collisionCount:N0} conflict(s) skipped";
         return text + ".";
@@ -282,43 +272,26 @@ public partial class MainWindow : Window
     }
     private async Task ShowMessageAsync(string title, string message)
     {
-        var close = new Button
-        {
-            Content = "Close",
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Avalonia.Thickness(0, 12, 0, 0)
-        };
+        var close = new Button { Content = "Close", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Avalonia.Thickness(0, 12, 0, 0) };
         Grid.SetRow(close, 1);
-
         var dialog = new Window
         {
-            Title = title,
-            Width = 700,
-            Height = 500,
+            Title = title, Width = 700, Height = 500,
             Content = new Grid
             {
-                RowDefinitions = new RowDefinitions("*,Auto"),
-                Margin = new Avalonia.Thickness(16),
+                RowDefinitions = new RowDefinitions("*,Auto"), Margin = new Avalonia.Thickness(16),
                 Children =
                 {
-                    new ScrollViewer
-                    {
-                        Content = new TextBlock
-                        {
-                            Text = message,
-                            TextWrapping = Avalonia.Media.TextWrapping.Wrap
-                        }
-                    },
-                    close
+                    new ScrollViewer { Content = new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap } }, close
                 }
             }
         };
-        close.Click += (_, _) => dialog.Close();
-        await dialog.ShowDialog(this);
+        close.Click += (_, _) => dialog.Close(); await dialog.ShowDialog(this);
     }
     private static Control BuildDialogContent(string message, string affirmative, out Button yes, out Button no)
     {
-        yes = new Button { Content = affirmative }; no = new Button { Content = "Cancel" }; var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
+        yes = new Button { Content = affirmative }; no = new Button { Content = "Cancel" };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
         buttons.Children.Add(no); buttons.Children.Add(yes); var panel = new StackPanel { Margin = new Avalonia.Thickness(18), Spacing = 18 };
         panel.Children.Add(new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap }); panel.Children.Add(buttons); return panel;
     }
@@ -329,9 +302,10 @@ public partial class MainWindow : Window
     private void ExitMenu_Click(object? sender, RoutedEventArgs e) => Close();
 }
 
-public sealed class ExplorerNode(string label, IReadOnlyList<FileInstance>? files = null)
+public sealed class ExplorerNode(string label, IReadOnlyList<FileInstance>? files = null, FileSystemPath? semanticPath = null)
 {
     public string Label { get; } = label;
     public IReadOnlyList<FileInstance> Files { get; set; } = files ?? [];
+    public FileSystemPath? SemanticPath { get; } = semanticPath;
     public List<ExplorerNode> Children { get; } = [];
 }
