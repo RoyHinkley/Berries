@@ -14,7 +14,7 @@ namespace Berries.Gui;
 public partial class MainWindow : Window
 {
     private readonly WindowsFileSystem fileSystem = new();
-    private readonly GuiController controller;
+    private readonly BerriesApplication controller;
     private readonly List<string> roots = [];
     private int suggestionIndex = -1;
     private FileSystemPath? leftScope;
@@ -24,7 +24,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         var engine = new BerriesEngine(fileSystem);
-        controller = new GuiController(fileSystem, engine, new BranchStatisticsAnalyzer(fileSystem), new BranchCounterpartAnalyzer(fileSystem));
+        controller = new BerriesApplication(fileSystem, engine, new BranchStatisticsAnalyzer(fileSystem), new BranchCounterpartAnalyzer(fileSystem));
         RefreshRoots();
     }
 
