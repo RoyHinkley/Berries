@@ -141,7 +141,7 @@ public partial class MainWindow
             {
                 var leftTask = BuildDirectoryExplorerNodeAsync(first);
                 var rightTask = BuildDirectoryExplorerNodeAsync(second);
-                var sharedTask = Task.Run(() => CountSharedContents(session, first, second, includeDescendants: false));
+                var sharedTask = Projections.SharedGroupCountAsync(session, first, second, includeDescendants: false);
                 await Task.WhenAll(leftTask, rightTask, sharedTask);
                 LeftTree.ItemsSource = new[] { await leftTask };
                 RightTree.ItemsSource = new[] { await rightTask };
@@ -151,7 +151,7 @@ public partial class MainWindow
 
             var branchLeftTask = BuildBranchExplorerNodeAsync(first);
             var branchRightTask = BuildBranchExplorerNodeAsync(second);
-            var branchSharedTask = Task.Run(() => CountSharedContents(session, first, second, includeDescendants: true));
+            var branchSharedTask = Projections.SharedGroupCountAsync(session, first, second, includeDescendants: true);
             await Task.WhenAll(branchLeftTask, branchRightTask, branchSharedTask);
             LeftTree.ItemsSource = new[] { await branchLeftTask };
             RightTree.ItemsSource = new[] { await branchRightTask };
@@ -178,27 +178,6 @@ public partial class MainWindow
             .Select(set => BuildGroupNode(set.Files))
             .ToArray());
         ExplorerTree.ItemsSource = groups;
-    }
-
-    private int CountSharedContents(BerriesSession session, FileSystemPath first, FileSystemPath second, bool includeDescendants)
-    {
-        static bool InScope(IFileSystem fs, FileInstance file, FileSystemPath scope, bool descendants) =>
-            fs.PathsEqual(file.ParentDirectory, scope) || (descendants && fs.IsDescendant(file.ParentDirectory, scope));
-
-        var count = 0;
-        foreach (var set in session.DuplicateSets)
-        {
-            var inFirst = false;
-            var inSecond = false;
-            foreach (var file in set.Files)
-            {
-                if (!inFirst && InScope(fileSystem, file, first, includeDescendants)) inFirst = true;
-                if (!inSecond && InScope(fileSystem, file, second, includeDescendants)) inSecond = true;
-                if (inFirst && inSecond) break;
-            }
-            if (inFirst && inSecond) count++;
-        }
-        return count;
     }
 
     private void BeginPortraitBusy(string message)
