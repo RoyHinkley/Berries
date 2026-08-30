@@ -17,7 +17,7 @@ public partial class MainWindow
         await RunPortraitCommandAsync(
             $"Excluding {files.Count:N0} files...",
             $"Excluded {files.Count:N0} file(s) from the Corpus.",
-            () => controller.Session.Exclude(files));
+            () => controller.ExcludeAsync(files));
     }
 
     private async void DeleteImmediateButton_Click(object? sender, RoutedEventArgs e)
@@ -27,7 +27,7 @@ public partial class MainWindow
         await RunPortraitCommandAsync(
             $"Scheduling deletion of {files.Count:N0} files...",
             $"Scheduled deletion of {files.Count:N0} file(s).",
-            () => controller.Session.Delete(files));
+            () => controller.DeleteAsync(files));
     }
 
     private async void MoveRightImmediateButton_Click(object? sender, RoutedEventArgs e)
@@ -40,7 +40,7 @@ public partial class MainWindow
         await RunPortraitCommandAsync(
             $"Moving {files.Count:N0} files...",
             null,
-            () => result = controller.Session.Move(files, leftScope.Value, rightScope.Value),
+            async () => result = await controller.MoveAsync(files, leftScope.Value, rightScope.Value),
             () => MoveStatus(files.Count, result!));
     }
 
@@ -54,7 +54,7 @@ public partial class MainWindow
         await RunPortraitCommandAsync(
             $"Moving {files.Count:N0} files...",
             null,
-            () => result = controller.Session.Move(files, rightScope.Value, leftScope.Value),
+            async () => result = await controller.MoveAsync(files, rightScope.Value, leftScope.Value),
             () => MoveStatus(files.Count, result!));
     }
 
@@ -65,7 +65,7 @@ public partial class MainWindow
         await RunPortraitCommandAsync(
             "Undoing the most recent operation...",
             null,
-            () => undone = controller.Session.Undo(),
+            async () => undone = await controller.UndoAsync(),
             () => undone ? "Undid the most recent operation." : "Nothing to undo.");
     }
 
@@ -84,16 +84,15 @@ public partial class MainWindow
     private async Task RunPortraitCommandAsync(
         string busyMessage,
         string? completedMessage,
-        Action command,
+        Func<Task> command,
         Func<string>? completedMessageFactory = null)
     {
         portraitCommandBusy = true;
         BeginPortraitBusy(busyMessage);
         try
         {
-            await Task.Yield();
             await StopBackgroundAnalysisAsync();
-            await Task.Run(command);
+            await command();
             await RefreshCurrentProjectionModelsAsync();
             SynchronizeVisibleSelection();
             UpdateSelectionSummary();
