@@ -15,8 +15,7 @@ public sealed class ProjectionService(PortraitQueries queries, IFileSystem fileS
         CancellationToken cancellationToken = default)
     {
         var files = await queries.DuplicateFilesInDirectoryAsync(session, directory, progress, cancellationToken);
-        return new DirectoryProjection(
-            directory,
+        return new DirectoryProjection(directory,
             files.Select(file => new DirectoryProjectionFile(Path.GetFileName(file.Path.Value), file)).ToArray());
     }
 
@@ -34,9 +33,7 @@ public sealed class ProjectionService(PortraitQueries queries, IFileSystem fileS
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relative = fileSystem.GetRelativePath(branch, file.Path).Value;
-            var parts = relative.Split(
-                [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
-                StringSplitOptions.RemoveEmptyEntries);
+            var parts = relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
             var current = root;
             var currentDirectory = branch;
 
@@ -54,23 +51,26 @@ public sealed class ProjectionService(PortraitQueries queries, IFileSystem fileS
                 current = child;
             }
 
-            current.Children.Add(new BranchProjectionNode(
-                parts.Length == 0 ? file.Path.Value : parts[^1],
-                file: file));
+            current.Children.Add(new BranchProjectionNode(parts.Length == 0 ? file.Path.Value : parts[^1], file: file));
         }
 
         PopulateFiles(root, cancellationToken);
         return new BranchProjection(branch, root);
     }
 
-    public DirectoryPair? BestDirectoryPair(
-        IReadOnlyList<DirectoryPair> pairs,
-        FileSystemPath directory) =>
+    public IReadOnlyList<DuplicateSet> Groups(BerriesSession session) => queries.Groups(session);
+    public IReadOnlyList<DuplicateSet> GroupsForSelection(BerriesSession session) => queries.GroupsForSelection(session);
+
+    public IReadOnlyList<FileInstance> SelectedFilesInContext(BerriesSession session, FileSystemPath context, bool includeDescendants) =>
+        queries.SelectedFilesInContext(session, context, includeDescendants);
+
+    public IReadOnlyList<FileSystemPath> Breadcrumbs(Corpus corpus, FileSystemPath path) =>
+        queries.AncestorsWithinCorpus(corpus, path);
+
+    public DirectoryPair? BestDirectoryPair(IReadOnlyList<DirectoryPair> pairs, FileSystemPath directory) =>
         queries.BestDirectoryPair(pairs, directory);
 
-    public bool HasBranchPairCandidate(
-        IReadOnlyList<BranchRecord> branches,
-        FileSystemPath branch) =>
+    public bool HasBranchPairCandidate(IReadOnlyList<BranchRecord> branches, FileSystemPath branch) =>
         queries.HasBranchPairCandidate(branches, branch);
 
     public Task<int> SharedGroupCountAsync(
@@ -80,19 +80,14 @@ public sealed class ProjectionService(PortraitQueries queries, IFileSystem fileS
         bool includeDescendants,
         IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default) =>
-        queries.SharedGroupCountAsync(
-            session, first, second, includeDescendants, progress, cancellationToken);
+        queries.SharedGroupCountAsync(session, first, second, includeDescendants, progress, cancellationToken);
 
-    private static IReadOnlyList<FileInstance> PopulateFiles(
-        BranchProjectionNode node,
-        CancellationToken cancellationToken)
+    private static IReadOnlyList<FileInstance> PopulateFiles(BranchProjectionNode node, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (node.Children.Count == 0) return node.Files;
-
         var files = new List<FileInstance>();
-        foreach (var child in node.Children)
-            files.AddRange(PopulateFiles(child, cancellationToken));
+        foreach (var child in node.Children) files.AddRange(PopulateFiles(child, cancellationToken));
         node.Files = files;
         return files;
     }
