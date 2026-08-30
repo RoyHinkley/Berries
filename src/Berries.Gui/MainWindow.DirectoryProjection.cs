@@ -31,8 +31,7 @@ public partial class MainWindow
         try
         {
             var node = await BuildDirectoryExplorerNodeAsync(directory);
-            currentScope = directory; scopeIncludesDescendants = false; scopeProjectionTitle = "Directory";
-            leftScope = null; rightScope = null; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
+            PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
             SetProjectionState(ProjectionKind.Directory, node.Files, directory);
             ProjectionTitle.Text = "Directory"; BuildBreadcrumbs(directory); ExplorerTree.ItemsSource = new[] { node };
             EndProgress("Directory"); SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
@@ -49,7 +48,7 @@ public partial class MainWindow
             var leftTask = BuildDirectoryExplorerNodeAsync(pair.First); var rightTask = BuildDirectoryExplorerNodeAsync(pair.Second);
             await Task.WhenAll(leftTask, rightTask);
             var left = await leftTask; var right = await rightTask;
-            currentScope = null; leftScope = pair.First; rightScope = pair.Second; PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
+            PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
             SetPairProjectionState(ProjectionKind.DirectoryPair, pair.First, left.Files, pair.Second, right.Files);
             BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear();
             ProjectionTitle.Text = $"Directory Pair — {pair.SharedContentCount:N0} shared Groups";
@@ -65,8 +64,10 @@ public partial class MainWindow
     private async Task NavigateDirectoryPairBreadcrumbAsync(BreadcrumbTarget target)
     {
         var session = controller.Session;
-        if (session is null || leftScope is null || rightScope is null || target.Side is null) return;
-        var side = target.Side.Value; var first = side == PairSide.Left ? target.Path : leftScope.Value; var second = side == PairSide.Right ? target.Path : rightScope.Value;
+        if (session is null || currentProjection is not { Primary: { } primary, Secondary: { } secondary } || target.Side is null) return;
+        var side = target.Side.Value;
+        var first = side == PairSide.Left ? target.Path : primary;
+        var second = side == PairSide.Right ? target.Path : secondary;
         BeginProgress("Opening Directory...", true);
         try
         {
@@ -74,11 +75,11 @@ public partial class MainWindow
             await Task.WhenAll(nodeTask, sharedTask); var node = await nodeTask;
             if (side == PairSide.Left)
             {
-                leftScope = target.Path; LeftTree.ItemsSource = new[] { node }; BuildPairBreadcrumbs(target.Path, LeftScopeBreadcrumbs, false, "Directory", PairSide.Left);
+                LeftTree.ItemsSource = new[] { node }; BuildPairBreadcrumbs(target.Path, LeftScopeBreadcrumbs, false, "Directory", PairSide.Left);
             }
             else
             {
-                rightScope = target.Path; RightTree.ItemsSource = new[] { node }; BuildPairBreadcrumbs(target.Path, RightScopeBreadcrumbs, false, "Directory", PairSide.Right);
+                RightTree.ItemsSource = new[] { node }; BuildPairBreadcrumbs(target.Path, RightScopeBreadcrumbs, false, "Directory", PairSide.Right);
             }
             UpdatePairProjectionSide(side, target.Path, node.Files);
             var shared = await sharedTask; ProjectionTitle.Text = $"Directory Pair — {shared:N0} shared Groups";
