@@ -8,7 +8,7 @@ namespace Berries.Core.Tests;
 public sealed class BranchStatisticsTests
 {
     [Fact]
-    public void Analyze_AggregatesDistinctDuplicateContentAcrossDescendants()
+    public void Analyze_AggregatesDistinctGroupsAcrossDescendants()
     {
         var root = Path(@"X:\Corpus");
         var a = Path(@"X:\Corpus\A");
@@ -16,15 +16,14 @@ public sealed class BranchStatisticsTests
         var a2 = Path(@"X:\Corpus\A\Two");
         var b = Path(@"X:\Corpus\B");
 
-        var first = new DuplicateSet(
+        var first = new Group(
             new ContentId("first"),
             new[] { File(a1, "f1"), File(a2, "f2"), File(b, "f3") });
-        var second = new DuplicateSet(
+        var second = new Group(
             new ContentId("second"),
             new[] { File(a1, "g1"), File(b, "g2") });
-        var duplicateSets = new[] { first, second };
-        var portrait = new Portrait(duplicateSets.SelectMany(set => set.Files).ToArray());
-        var settlements = new DuplicateSettlements();
+        var groups = new[] { first, second };
+        var portrait = new Portrait(groups.SelectMany(group => group.Files).ToArray());
 
         var directories = new[]
         {
@@ -37,16 +36,15 @@ public sealed class BranchStatisticsTests
         var result = analyzer.Analyze(
             new Corpus(new[] { new CorpusRoot(root) }),
             portrait,
-            duplicateSets,
-            settlements,
+            groups,
             directories);
 
         var branch = Assert.Single(result.Branches, item => item.Path == a);
         Assert.Equal(3, branch.FileCount);
         Assert.Equal(2, branch.DirectoryCount);
-        Assert.Equal(3, branch.DuplicateFileCount);
-        Assert.Equal(2, branch.DuplicateContentCount);
-        Assert.Equal(2, branch.DuplicateDirectoryCount);
+        Assert.Equal(3, branch.GroupedFileCount);
+        Assert.Equal(2, branch.GroupCount);
+        Assert.Equal(2, branch.GroupedDirectoryCount);
     }
 
     private static FileInstance File(FileSystemPath directory, string name) =>
@@ -63,8 +61,7 @@ public sealed class BranchStatisticsTests
         {
             var value = NormalizePath(path).Value;
             var separator = value.LastIndexOf('\\');
-            if (separator <= 2)
-                return null;
+            if (separator <= 2) return null;
             return new FileSystemPath(value[..separator]);
         }
 
