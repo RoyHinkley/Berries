@@ -31,10 +31,7 @@ public partial class MainWindow
         return roots.All(root => corpus.Roots.Any(existing => fileSystem.PathsEqual(existing.Path, new FileSystemPath(root))));
     }
 
-    private void ExplorerSelectionChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (synchronizingSelection) return; UpdateCapabilities();
-    }
+    private void ExplorerSelectionChanged(object? sender, SelectionChangedEventArgs e) { if (!synchronizingSelection) UpdateCapabilities(); }
 
     private void UpdatePivotCapabilities()
     {
@@ -43,8 +40,7 @@ public partial class MainWindow
         PivotDirectoryMenu.IsEnabled = scope is not null; PivotBranchMenu.IsEnabled = scope is not null; PivotBestDirectoryPairMenu.IsEnabled = scope is not null;
         var branches = controller.BranchStatistics?.Branches;
         PivotBestBranchPairMenu.IsEnabled = scope is not null && branches is not null && Projections.HasBranchPairCandidate(branches, scope.Value);
-        var suggestions = controller.Counterparts?.Seeds;
-        PivotBranchPairMenu.IsEnabled = suggestionIndex >= 0 && suggestions is { Count: > 0 };
+        var suggestions = controller.Counterparts?.Seeds; PivotBranchPairMenu.IsEnabled = suggestionIndex >= 0 && suggestions is { Count: > 0 };
     }
 
     private void UpdateSelectionStatus() => UpdateSelectionSummary();
@@ -58,9 +54,10 @@ public partial class MainWindow
         try
         {
             var tasks = corpus.Roots.Select(root => BuildBranchExplorerNodeAsync(root.Path)).ToArray(); await Task.WhenAll(tasks);
+            var nodes = tasks.Select(task => task.Result).ToArray();
             currentScope = null; leftScope = null; rightScope = null; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
-            BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear(); ProjectionTitle.Text = "Corpus Roots";
-            ExplorerTree.ItemsSource = tasks.Select(task => task.Result).ToArray();
+            SetProjectionState(ProjectionKind.CorpusRoots, nodes.SelectMany(node => node.Files));
+            BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear(); ProjectionTitle.Text = "Corpus Roots"; ExplorerTree.ItemsSource = nodes;
             EndProgress("Corpus Roots"); SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
         }
         catch (Exception ex) { EndProgress("Could not build Corpus Roots view: " + ex.Message); }
@@ -71,6 +68,7 @@ public partial class MainWindow
         var session = controller.Session; if (session is null) return;
         var groups = Projections.GroupsForSelection(session); if (groups.Count == 0) { ShowContentProjection(); return; }
         currentScope = null; leftScope = null; rightScope = null; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
+        SetProjectionState(ProjectionKind.Groups, groups.SelectMany(set => set.Files));
         BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear();
         ProjectionTitle.Text = groups.Count == 1 ? "Group" : $"Groups — {groups.Count:N0} selected";
         ExplorerTree.ItemsSource = groups.Select(set => BuildGroupNode(set.Files)).ToArray();
@@ -79,12 +77,10 @@ public partial class MainWindow
 
     private ExplorerNode BuildGroupNode(IReadOnlyList<FileInstance> files)
     {
-        var names = files.Select(file => Path.GetFileName(file.Path.Value)).Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+        var names = files.Select(file => Path.GetFileName(file.Path.Value)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
         var shownNames = string.Join(", ", names.Take(2)); if (names.Length > 2) shownNames += ", …";
         var node = new ExplorerNode($"{shownNames} — {files.Count:N0} files", files);
-        foreach (var file in files.OrderBy(file => file.Path.Value, StringComparer.OrdinalIgnoreCase))
-            node.Children.Add(new ExplorerNode(file.Path.Value, [file], file.ParentDirectory));
+        foreach (var file in files.OrderBy(file => file.Path.Value, StringComparer.OrdinalIgnoreCase)) node.Children.Add(new ExplorerNode(file.Path.Value, [file], file.ParentDirectory));
         return node;
     }
 
@@ -97,8 +93,7 @@ public partial class MainWindow
         var pairs = controller.DirectoryAnalysis?.DirectoryPairs; var pair = pairs is null ? null : Projections.BestDirectoryPair(pairs, scope.Value);
         if (pair is not null) { await ShowDirectoryPairProjectionAsync(pair); return; }
         var record = controller.DirectoryAnalysis?.Directories.FirstOrDefault(directory => fileSystem.PathsEqual(directory.Path, scope.Value));
-        StatusText.Text = record is null || record.DuplicateFileCount == 0 ? "The selected Directory contains no duplicate files."
-            : "The selected Directory has duplicate files, but none shared with another Directory.";
+        StatusText.Text = record is null || record.DuplicateFileCount == 0 ? "The selected Directory contains no duplicate files." : "The selected Directory has duplicate files, but none shared with another Directory.";
         StatusProgress.IsVisible = false;
     }
 
@@ -123,10 +118,12 @@ public partial class MainWindow
         try
         {
             var leftTask = BuildBranchExplorerNodeAsync(first); var rightTask = BuildBranchExplorerNodeAsync(second); await Task.WhenAll(leftTask, rightTask);
+            var left = await leftTask; var right = await rightTask;
             currentScope = null; leftScope = first; rightScope = second; PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
+            SetProjectionState(ProjectionKind.BranchPair, left.Files.Concat(right.Files), first, second);
             BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear(); ProjectionTitle.Text = $"Branch Pair — {sharedContentCount:N0} shared Groups";
             BuildPairBreadcrumbs(first, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left); BuildPairBreadcrumbs(second, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
-            LeftTree.ItemsSource = new[] { await leftTask }; RightTree.ItemsSource = new[] { await rightTask };
+            LeftTree.ItemsSource = new[] { left }; RightTree.ItemsSource = new[] { right };
             SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
         }
         finally { StatusProgress.IsVisible = false; }
@@ -152,24 +149,18 @@ public partial class MainWindow
 
     private void BuildBreadcrumbs(FileSystemPath scope)
     {
-        BuildBreadcrumbs(scope, BreadcrumbPanel, scopeIncludesDescendants, scopeProjectionTitle, null);
-        BreadcrumbPanel.IsVisible = BreadcrumbPanel.Children.Count > 0;
+        BuildBreadcrumbs(scope, BreadcrumbPanel, scopeIncludesDescendants, scopeProjectionTitle, null); BreadcrumbPanel.IsVisible = BreadcrumbPanel.Children.Count > 0;
     }
     private void BuildPairBreadcrumbs(FileSystemPath scope, StackPanel panel, bool includeDescendants, string title, PairSide side) => BuildBreadcrumbs(scope, panel, includeDescendants, title, side);
 
     private void BuildBreadcrumbs(FileSystemPath scope, StackPanel panel, bool includeDescendants, string title, PairSide? side)
     {
-        panel.Children.Clear(); var corpus = controller.Corpus; if (corpus is null) return;
-        var chain = Projections.Breadcrumbs(corpus, scope);
+        panel.Children.Clear(); var corpus = controller.Corpus; if (corpus is null) return; var chain = Projections.Breadcrumbs(corpus, scope);
         for (var i = 0; i < chain.Count; i++)
         {
             if (i > 0) panel.Children.Add(new TextBlock { Text = "›", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
             var path = chain[i];
-            var button = new Button
-            {
-                Content = i == 0 ? path.Value : Path.GetFileName(path.Value), Padding = new Avalonia.Thickness(4, 1),
-                Tag = new BreadcrumbTarget(path, includeDescendants, title, side), Cursor = new Cursor(StandardCursorType.Hand)
-            };
+            var button = new Button { Content = i == 0 ? path.Value : Path.GetFileName(path.Value), Padding = new Avalonia.Thickness(4, 1), Tag = new BreadcrumbTarget(path, includeDescendants, title, side), Cursor = new Cursor(StandardCursorType.Hand) };
             button.Click += Breadcrumb_Click; panel.Children.Add(button);
         }
     }
@@ -190,15 +181,11 @@ public partial class MainWindow
         try
         {
             var nodeTask = BuildBranchExplorerNodeAsync(target.Path); var sharedTask = Projections.SharedGroupCountAsync(session, first, second, includeDescendants: true);
-            await Task.WhenAll(nodeTask, sharedTask);
-            if (side == PairSide.Left)
-            {
-                leftScope = target.Path; LeftTree.ItemsSource = new[] { await nodeTask }; BuildPairBreadcrumbs(target.Path, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
-            }
-            else
-            {
-                rightScope = target.Path; RightTree.ItemsSource = new[] { await nodeTask }; BuildPairBreadcrumbs(target.Path, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
-            }
+            await Task.WhenAll(nodeTask, sharedTask); var node = await nodeTask;
+            if (side == PairSide.Left) { leftScope = target.Path; LeftTree.ItemsSource = new[] { node }; BuildPairBreadcrumbs(target.Path, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left); }
+            else { rightScope = target.Path; RightTree.ItemsSource = new[] { node }; BuildPairBreadcrumbs(target.Path, RightScopeBreadcrumbs, true, "Branch", PairSide.Right); }
+            var represented = EnumerateNodes(LeftTree.ItemsSource).Concat(EnumerateNodes(RightTree.ItemsSource)).Where(item => item.Children.Count == 0).SelectMany(item => item.Files);
+            SetProjectionState(ProjectionKind.BranchPair, represented, leftScope, rightScope);
             var shared = await sharedTask; ProjectionTitle.Text = $"Branch Pair — {shared:N0} shared Groups";
             EndProgress($"Branch Pair — {shared:N0} shared Groups."); SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
         }
