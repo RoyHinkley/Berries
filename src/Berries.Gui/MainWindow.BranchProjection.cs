@@ -26,8 +26,7 @@ public partial class MainWindow
         try
         {
             var node = await BuildBranchExplorerNodeAsync(branch);
-            currentScope = branch; scopeIncludesDescendants = true; scopeProjectionTitle = "Branch";
-            leftScope = null; rightScope = null; PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
+            PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
             SetProjectionState(ProjectionKind.Branch, node.Files, branch);
             ProjectionTitle.Text = "Branch"; BuildBreadcrumbs(branch); ExplorerTree.ItemsSource = new[] { node };
             EndProgress("Branch"); SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
