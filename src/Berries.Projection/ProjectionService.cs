@@ -73,6 +73,9 @@ public sealed class ProjectionService(PortraitQueries queries)
                 .Select(file => new GroupProjectionFile(file.Path.Value, file)).ToArray());
     }
 
+    public IReadOnlyList<FileInstance> DistinctFiles(IEnumerable<FileInstance> files) =>
+        queries.DistinctFiles(files);
+
     public IReadOnlyList<FileInstance> FilesInContext(
         IEnumerable<FileInstance> files,
         FileSystemPath context,
@@ -81,6 +84,9 @@ public sealed class ProjectionService(PortraitQueries queries)
 
     public IReadOnlyList<FileInstance> SelectedFilesInContext(BerriesSession session, FileSystemPath context, bool includeDescendants) =>
         queries.SelectedFilesInContext(session, context, includeDescendants);
+
+    public bool CorpusRootsMatch(Corpus corpus, IEnumerable<FileSystemPath> roots) =>
+        queries.CorpusRootsMatch(corpus, roots);
 
     public IReadOnlyList<FileSystemPath> Breadcrumbs(Corpus corpus, FileSystemPath path) =>
         queries.AncestorsWithinCorpus(corpus, path);
