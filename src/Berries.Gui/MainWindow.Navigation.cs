@@ -28,8 +28,7 @@ public partial class MainWindow
     private bool CorpusRootsMatchCurrentSelection()
     {
         var corpus = controller.Corpus;
-        if (corpus is null || corpus.Roots.Count != roots.Count) return false;
-        return roots.All(root => corpus.Roots.Any(existing => fileSystem.PathsEqual(existing.Path, new FileSystemPath(root))));
+        return corpus is not null && Projections.CorpusRootsMatch(corpus, roots.Select(root => new FileSystemPath(root)));
     }
 
     private void ExplorerSelectionChanged(object? sender, SelectionChangedEventArgs e) { if (!synchronizingSelection) UpdateCapabilities(); }
@@ -45,8 +44,6 @@ public partial class MainWindow
     }
 
     private void UpdateSelectionStatus() => UpdateSelectionSummary();
-    private IReadOnlyList<ExplorerNode> SelectedNodesFromActiveProjection() => focusedNode is not null ? [focusedNode] : [];
-    private static IEnumerable<object> SelectedObjects(TreeView tree) => tree.SelectedItems?.Cast<object>() ?? [];
 
     private async void PivotCorpusRoots_Click(object? sender, RoutedEventArgs e)
     {
@@ -95,7 +92,8 @@ public partial class MainWindow
         var scope = SelectedScope(); if (scope is null) return;
         var pairs = controller.DirectoryAnalysis?.DirectoryPairs; var pair = pairs is null ? null : Projections.BestDirectoryPair(pairs, scope.Value);
         if (pair is not null) { await ShowDirectoryPairProjectionAsync(pair); return; }
-        var record = controller.DirectoryAnalysis?.Directories.FirstOrDefault(directory => fileSystem.PathsEqual(directory.Path, scope.Value));
+        var directories = controller.DirectoryAnalysis?.Directories;
+        var record = directories is null ? null : Projections.DirectoryRecord(directories, scope.Value);
         StatusText.Text = record is null || record.DuplicateFileCount == 0 ? "The selected Directory contains no duplicate files." : "The selected Directory has duplicate files, but none shared with another Directory.";
         StatusProgress.IsVisible = false;
     }
