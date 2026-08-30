@@ -33,18 +33,18 @@ Target framework is .NET 10. The GUI is Avalonia and builds as `WinExe`. There i
 
 ## Vocabulary in code
 
-The code now follows current application language wherever the concepts coincide:
+The code follows current application language wherever the concepts coincide:
 
     Group
     GroupCount
     GroupedFileCount
     SharedGroupCount
     GroupDiscovery...
-    Suggest
+    Suggestion / Suggest
     Exclude
     Directory / Branch / DirectoryPair / BranchPair
 
-Two lower-level names intentionally remain:
+Several lower-level names intentionally remain because they denote narrower technical concepts:
 
     FileInstance
         one filesystem file instance at one exact path
@@ -52,7 +52,15 @@ Two lower-level names intentionally remain:
     ContentId
         established byte-content identity
 
-They are narrower technical concepts rather than alternative product vocabulary. `Group` is the current collection of at least two FileInstances having one ContentId.
+    Seed
+        a Branch selected as a promising starting point for Branch Pair search
+
+    Counterpart
+        a Branch scored relative to a particular Seed; the highest-scoring Counterpart forms that Seed's best Branch Pair
+
+They are not alternative product vocabulary. `Group` is the current collection of at least two FileInstances having one ContentId. Seed and Counterpart are internal search roles; the application-level result surfaced to the user is a Suggestion.
+
+A Suggestion is a view Berries has found worth the user's attention because its structure indicates that one or a few decisions may resolve a relatively large amount of duplicated material. The currently implemented Suggestions are Branch Pair views.
 
 The obsolete classification/acceptance framework has been removed from compiled code. There are no runtime model types for semantic classification, no separate acceptance state, and no exhaustive structural-pair analysis path.
 
@@ -83,7 +91,7 @@ Owns application-level orchestration and publishes:
     Scan
     DirectoryAnalysis
     BranchStatistics
-    Counterparts
+    Suggestions
 
 A portrait operation invalidates all three derived analysis objects.
 
@@ -128,11 +136,15 @@ Computes Branch records:
 
 ### `BranchPriorityMetrics`
 
-Computes parent-relative Group concentration metrics. The current seed ranking uses `ExcessConcentratedGroups`.
+Computes parent-relative Group concentration metrics. The current Seed ranking uses `ExcessConcentratedGroups`.
 
 ### `BranchCounterpartAnalyzer`
 
-Performs targeted Branch relationship discovery and on-demand best-pair search. It does not enumerate every Branch Pair.
+Uses ranked Seeds to search efficiently for strong Branch Pairs. For each Seed it finds and ranks Counterparts. It then compares the best pair from several candidate Seeds and emits the strongest one as a `BranchPairSuggestion`.
+
+The winning Suggestion is chosen primarily by Branch Pair score, not Seed rank. The highest-ranked Seed therefore often does not produce the best Branch Pair. Seed rank is only a later tie-breaker.
+
+The analyzer also supports on-demand best-pair search for an explicitly selected Branch. It does not enumerate every Branch Pair.
 
 ### `FileActionExecutor`
 
@@ -185,7 +197,7 @@ Current projections:
         -> RefreshAnalysisAsync
              -> Directory analysis
              -> Branch statistics
-             -> targeted counterpart analysis
+             -> Suggestion discovery via Seed/Counterpart search
         -> return ScanResult
 
 This entire path is awaited before the Groups projection becomes ready.
@@ -216,7 +228,7 @@ Strength is simply:
 
 No separate generic leverage abstraction is retained.
 
-### Branch seed
+### Branch Seed
 
 For a child Branch relative to its parent:
 
@@ -228,20 +240,28 @@ For a child Branch relative to its parent:
         child GroupCount * (1 - 1 / concentration), concentration > 1
         0,                                         otherwise
 
-### Branch relationship
+Branches are ranked by this Seed metric to provide an efficient starting set. A high Seed rank means "worth testing for a strong relationship"; it does not itself mean "best Branch Pair."
 
-Targeted search uses:
+### Counterpart and Branch Pair score
+
+For each candidate Seed, eligible non-nested Branches are considered as Counterparts. Pair scoring uses:
 
     shared Group count
-    seed coverage
-    counterpart coverage
+    Seed coverage
+    Counterpart coverage
     Jaccard overlap
 
     score = shared Group count * Jaccard
 
-Selection examines a top-10 seed window, chooses the strongest actual relationship, blocks both chosen Branch families, and repeats.
+Each Seed's Counterparts are ranked by this pair score.
 
-This practical approach replaced exhaustive ancestor-Cartesian Branch Pair construction because the latter produced combinatorial growth on real corpora.
+### Suggestion selection
+
+Suggestion discovery examines the top 10 currently eligible Seeds. It computes the best Counterpart relationship for each, then selects the strongest Branch Pair among that Seed window. Therefore the next Suggestion often comes from a Seed other than the highest-ranked one.
+
+After a Suggestion is selected, the chosen Seed and its highest-scoring Counterpart families are blocked and the process repeats. This culls closely related structural variants and produces a compact sequence of useful Suggestions.
+
+This empirically developed search replaced exhaustive ancestor-Cartesian Branch Pair construction, which produced combinatorial growth on challenging real corpora.
 
 ## Move implementation
 
@@ -311,6 +331,6 @@ The initial discovery chunk is required whenever the Corpus changes and can ther
         -> Branch statistics
 
     Directory analysis + Branch statistics + Groups
-        -> counterpart analysis
+        -> Suggestion discovery
 
 The current implementation still recomputes these as one sequential `RefreshAnalysisAsync()` operation. The intended next step is to define explicit validity/prerequisite state and demand-driven background scheduling without constructing an over-general analysis framework.
