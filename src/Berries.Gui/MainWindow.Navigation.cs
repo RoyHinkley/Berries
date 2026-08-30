@@ -84,6 +84,9 @@ public partial class MainWindow
         return node;
     }
 
+    private ExplorerNode BuildGroupNode(IReadOnlyList<FileInstance> files) =>
+        BuildGroupNode(Projections.Group(files));
+
     private async void PivotDirectory_Click(object? sender, RoutedEventArgs e) { var scope = SelectedScope(); if (scope is not null) await ShowDirectoryProjectionAsync(scope.Value); }
     private async void PivotBranch_Click(object? sender, RoutedEventArgs e) { var scope = SelectedScope(); if (scope is not null) await ShowBranchProjectionAsync(scope.Value); }
 
