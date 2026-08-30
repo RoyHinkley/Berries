@@ -22,7 +22,7 @@ public sealed class BerriesSession
         InitialPortrait = initialPortrait;
         WorkingPortrait = initialPortrait;
         Selection = new BerriesSelection(fileSystem, initialPortrait);
-        Rebuild();
+        duplicateSets = BuildDuplicateSets(initialPortrait);
     }
 
     public Portrait InitialPortrait { get; }
@@ -160,14 +160,17 @@ public sealed class BerriesSession
             Apply(operation, files);
 
         WorkingPortrait = new Portrait(files.Values.ToArray());
-        duplicateSets = WorkingPortrait.Files
+        duplicateSets = BuildDuplicateSets(WorkingPortrait);
+        Selection.Refresh(WorkingPortrait);
+    }
+
+    private static IReadOnlyList<DuplicateSet> BuildDuplicateSets(Portrait portrait) =>
+        portrait.Files
             .Where(file => file.Content is not null)
             .GroupBy(file => file.Content!.Value)
             .Where(group => group.Count() > 1)
             .Select(group => new DuplicateSet(group.Key, group.ToArray()))
             .ToArray();
-        Selection.Refresh(WorkingPortrait);
-    }
 
     private void Apply(PortraitOperation operation, Dictionary<string, FileInstance> files)
     {
