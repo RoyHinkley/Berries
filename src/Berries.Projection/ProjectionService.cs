@@ -53,10 +53,25 @@ public sealed class ProjectionService(PortraitQueries queries)
     }
 
     public IReadOnlyList<GroupProjection> Groups(BerriesSession session) =>
-        queries.Groups(session).Select(ProjectGroup).ToArray();
+        queries.Groups(session).Select(group => Group(group.Files)).ToArray();
 
     public IReadOnlyList<GroupProjection> GroupsForSelection(BerriesSession session) =>
-        queries.GroupsForSelection(session).Select(ProjectGroup).ToArray();
+        queries.GroupsForSelection(session).Select(group => Group(group.Files)).ToArray();
+
+    public GroupProjection Group(IReadOnlyList<FileInstance> files)
+    {
+        var names = files.Select(file => Path.GetFileName(file.Path.Value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var shownNames = string.Join(", ", names.Take(2));
+        if (names.Length > 2) shownNames += ", …";
+        return new GroupProjection(
+            $"{shownNames} — {files.Count:N0} files",
+            files,
+            files.OrderBy(file => file.Path.Value, StringComparer.OrdinalIgnoreCase)
+                .Select(file => new GroupProjectionFile(file.Path.Value, file)).ToArray());
+    }
 
     public IReadOnlyList<FileInstance> SelectedFilesInContext(BerriesSession session, FileSystemPath context, bool includeDescendants) =>
         queries.SelectedFilesInContext(session, context, includeDescendants);
@@ -78,21 +93,6 @@ public sealed class ProjectionService(PortraitQueries queries)
         IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default) =>
         queries.SharedGroupCountAsync(session, first, second, includeDescendants, progress, cancellationToken);
-
-    private static GroupProjection ProjectGroup(DuplicateSet group)
-    {
-        var names = group.Files.Select(file => Path.GetFileName(file.Path.Value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        var shownNames = string.Join(", ", names.Take(2));
-        if (names.Length > 2) shownNames += ", …";
-        return new GroupProjection(
-            $"{shownNames} — {group.Files.Count:N0} files",
-            group.Files,
-            group.Files.OrderBy(file => file.Path.Value, StringComparer.OrdinalIgnoreCase)
-                .Select(file => new GroupProjectionFile(file.Path.Value, file)).ToArray());
-    }
 
     private static IReadOnlyList<FileInstance> PopulateFiles(BranchProjectionNode node, CancellationToken cancellationToken)
     {
