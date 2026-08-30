@@ -41,7 +41,7 @@ public partial class MainWindow
         await RunPortraitCommandAsync(
             $"Moving {files.Count:N0} files...",
             null,
-            async () => result = await controller.MoveAsync(files, leftScope.Value, rightScope.Value),
+            async () => { result = await controller.MoveAsync(files, leftScope.Value, rightScope.Value); },
             () => MoveStatus(files.Count, result!));
     }
 
@@ -55,7 +55,7 @@ public partial class MainWindow
         await RunPortraitCommandAsync(
             $"Moving {files.Count:N0} files...",
             null,
-            async () => result = await controller.MoveAsync(files, rightScope.Value, leftScope.Value),
+            async () => { result = await controller.MoveAsync(files, rightScope.Value, leftScope.Value); },
             () => MoveStatus(files.Count, result!));
     }
 
@@ -66,7 +66,7 @@ public partial class MainWindow
         await RunPortraitCommandAsync(
             "Undoing the most recent operation...",
             null,
-            async () => undone = await controller.UndoAsync(),
+            async () => { undone = await controller.UndoAsync(); },
             () => undone ? "Undid the most recent operation." : "Nothing to undo.");
     }
 
