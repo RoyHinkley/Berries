@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Berries.Core\Berries.Core.csproj" />
+    <ProjectReference Include="..\Berries.FileSystem.Abstractions\Berries.FileSystem.Abstractions.csproj" />
+  </ItemGroup>
+</Project>
