@@ -54,6 +54,48 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
         return result;
     }
 
+    public Task<IReadOnlyList<CorpusRootPlacement>> DuplicateFilesInCorpusRootsWithPlacementAsync(
+        BerriesSession session,
+        Corpus corpus,
+        IProgress<Berries.Core.OperationProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.Run<IReadOnlyList<CorpusRootPlacement>>(() =>
+        {
+            var roots = corpus.Roots.Select(root => root.Path).ToArray();
+            var buckets = roots.Select(_ => new List<BranchFilePlacement>()).ToArray();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var sets = session.DuplicateSets;
+            progress?.Report(new Berries.Core.OperationProgress("Finding duplicate files in Corpus Roots", 0, sets.Count));
+
+            for (var i = 0; i < sets.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                foreach (var file in sets[i].Files)
+                {
+                    var key = fileSystem.NormalizePath(file.Path).Value;
+                    if (!seen.Add(key)) continue;
+
+                    for (var rootIndex = 0; rootIndex < roots.Length; rootIndex++)
+                    {
+                        var root = roots[rootIndex];
+                        if (!InBranch(file, root)) continue;
+                        buckets[rootIndex].Add(new BranchFilePlacement(file, DirectoryChain(root, file.ParentDirectory)));
+                        break;
+                    }
+                }
+
+                if ((i & 0xff) == 0 || i + 1 == sets.Count)
+                    progress?.Report(new Berries.Core.OperationProgress("Finding duplicate files in Corpus Roots", i + 1, sets.Count));
+            }
+
+            return roots.Select((root, index) =>
+                new CorpusRootPlacement(root, buckets[index]
+                    .OrderBy(item => item.File.Path.Value, StringComparer.OrdinalIgnoreCase)
+                    .ToArray())).ToArray();
+        }, cancellationToken);
+    }
+
     public IReadOnlyList<DuplicateSet> Groups(BerriesSession session) =>
         session.DuplicateSets
             .OrderByDescending(set => set.Files.Count)
