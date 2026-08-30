@@ -7,7 +7,7 @@ namespace Berries.Gui;
 public partial class MainWindow
 {
     private ProjectionService? projectionService;
-    private ProjectionService Projections => projectionService ??= new ProjectionService(new PortraitQueries(fileSystem));
+    private ProjectionService Projections => projectionService ??= new ProjectionService(new PortraitQueries(fileSystem), fileSystem);
 
     private async Task<ExplorerNode> BuildDirectoryExplorerNodeAsync(
         FileSystemPath directory,
