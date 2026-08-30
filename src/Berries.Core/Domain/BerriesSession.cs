@@ -14,6 +14,7 @@ public sealed class BerriesSession
     private readonly IFileSystem fileSystem;
     private readonly List<PortraitOperation> operations = [];
     private readonly List<FileAction> actions = [];
+    private IReadOnlyList<DuplicateSet> duplicateSets = [];
 
     public BerriesSession(IFileSystem fileSystem, Portrait initialPortrait)
     {
@@ -29,13 +30,7 @@ public sealed class BerriesSession
     public BerriesSelection Selection { get; }
     public IReadOnlyList<PortraitOperation> Operations => operations;
     public IReadOnlyList<FileAction> Actions => actions;
-
-    public IReadOnlyList<DuplicateSet> DuplicateSets => WorkingPortrait.Files
-        .Where(file => file.Content is not null)
-        .GroupBy(file => file.Content!.Value)
-        .Where(group => group.Count() > 1)
-        .Select(group => new DuplicateSet(group.Key, group.ToArray()))
-        .ToArray();
+    public IReadOnlyList<DuplicateSet> DuplicateSets => duplicateSets;
 
     public int SelectedGroupCount => Selection.CountGroups(DuplicateSets);
 
@@ -165,6 +160,12 @@ public sealed class BerriesSession
             Apply(operation, files);
 
         WorkingPortrait = new Portrait(files.Values.ToArray());
+        duplicateSets = WorkingPortrait.Files
+            .Where(file => file.Content is not null)
+            .GroupBy(file => file.Content!.Value)
+            .Where(group => group.Count() > 1)
+            .Select(group => new DuplicateSet(group.Key, group.ToArray()))
+            .ToArray();
         Selection.Refresh(WorkingPortrait);
     }
 
