@@ -3,11 +3,11 @@ using Berries.FileSystem.Abstractions;
 
 namespace Berries.Core.Analysis;
 
-/// <summary>Elementary graph metrics for the DirectoryPair network.</summary>
+/// <summary>Elementary graph metrics for the Directory Pair network.</summary>
 public sealed record DirectoryGraphAnalysis(
     int TotalDirectoryCount,
-    int DuplicateDirectoryCount,
-    int InternalDuplicateDirectoryCount,
+    int GroupedDirectoryCount,
+    int InternalGroupDirectoryCount,
     int PairParticipatingDirectoryCount,
     int DirectoryPairCount,
     int ConnectedComponentCount,
@@ -19,16 +19,16 @@ public sealed record DirectoryGraphNode(
     FileSystemPath Directory,
     int Degree,
     int WeightedDegree,
-    int MaxPairLeverage,
+    int MaxSharedGroupCount,
     int FileCount,
-    int DuplicateFileCount,
-    int DuplicateContentCount)
+    int GroupedFileCount,
+    int GroupCount)
 {
-    /// <summary>Mean leverage of incident DirectoryPairs. High degree with a low mean indicates diffuse sharing.</summary>
-    public double MeanPairLeverage => Degree == 0 ? 0 : (double)WeightedDegree / Degree;
+    /// <summary>Mean number of shared Groups across incident Directory Pairs.</summary>
+    public double MeanSharedGroupCount => Degree == 0 ? 0 : (double)WeightedDegree / Degree;
 
-    /// <summary>Fraction of weighted degree represented by the strongest incident DirectoryPair.</summary>
-    public double StrongestPairConcentration => WeightedDegree == 0 ? 0 : (double)MaxPairLeverage / WeightedDegree;
+    /// <summary>Fraction of weighted degree represented by the strongest incident Directory Pair.</summary>
+    public double StrongestPairConcentration => WeightedDegree == 0 ? 0 : (double)MaxSharedGroupCount / WeightedDegree;
 }
 
 internal static class DirectoryGraphAnalyzer
@@ -37,7 +37,7 @@ internal static class DirectoryGraphAnalyzer
         Portrait portrait,
         IReadOnlyList<DirectoryRecord> directories,
         IReadOnlyList<DirectoryPair> directoryPairs,
-        IReadOnlySet<FileSystemPath> internalDuplicateDirectories)
+        IReadOnlySet<FileSystemPath> internalGroupDirectories)
     {
         var totalDirectoryCount = portrait.Files
             .Select(file => file.ParentDirectory)
@@ -46,7 +46,7 @@ internal static class DirectoryGraphAnalyzer
 
         var degree = directories.ToDictionary(directory => directory.Path, _ => 0);
         var weightedDegree = directories.ToDictionary(directory => directory.Path, _ => 0);
-        var maxLeverage = directories.ToDictionary(directory => directory.Path, _ => 0);
+        var maxSharedGroups = directories.ToDictionary(directory => directory.Path, _ => 0);
         var adjacency = directories.ToDictionary(
             directory => directory.Path,
             _ => new HashSet<FileSystemPath>());
@@ -55,10 +55,10 @@ internal static class DirectoryGraphAnalyzer
         {
             degree[pair.First]++;
             degree[pair.Second]++;
-            weightedDegree[pair.First] += pair.Leverage;
-            weightedDegree[pair.Second] += pair.Leverage;
-            maxLeverage[pair.First] = Math.Max(maxLeverage[pair.First], pair.Leverage);
-            maxLeverage[pair.Second] = Math.Max(maxLeverage[pair.Second], pair.Leverage);
+            weightedDegree[pair.First] += pair.SharedGroupCount;
+            weightedDegree[pair.Second] += pair.SharedGroupCount;
+            maxSharedGroups[pair.First] = Math.Max(maxSharedGroups[pair.First], pair.SharedGroupCount);
+            maxSharedGroups[pair.Second] = Math.Max(maxSharedGroups[pair.Second], pair.SharedGroupCount);
             adjacency[pair.First].Add(pair.Second);
             adjacency[pair.Second].Add(pair.First);
         }
@@ -68,10 +68,10 @@ internal static class DirectoryGraphAnalyzer
                 directory.Path,
                 degree[directory.Path],
                 weightedDegree[directory.Path],
-                maxLeverage[directory.Path],
+                maxSharedGroups[directory.Path],
                 directory.FileCount,
-                directory.DuplicateFileCount,
-                directory.DuplicateContentCount))
+                directory.GroupedFileCount,
+                directory.GroupCount))
             .OrderByDescending(node => node.Degree)
             .ThenByDescending(node => node.WeightedDegree)
             .ThenBy(node => node.Directory.Value, StringComparer.Ordinal)
@@ -115,7 +115,7 @@ internal static class DirectoryGraphAnalyzer
         return new DirectoryGraphAnalysis(
             totalDirectoryCount,
             directories.Count,
-            internalDuplicateDirectories.Count,
+            internalGroupDirectories.Count,
             participating.Length,
             directoryPairs.Count,
             componentCount,
