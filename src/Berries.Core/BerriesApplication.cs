@@ -13,18 +13,18 @@ public sealed class BerriesApplication
     private readonly IFileSystem fileSystem;
     private readonly BerriesEngine engine;
     private readonly BranchStatisticsAnalyzer branchStatisticsAnalyzer;
-    private readonly BranchCounterpartAnalyzer counterpartAnalyzer;
+    private readonly BranchPairAnalyzer branchPairAnalyzer;
 
     public BerriesApplication(
         IFileSystem fileSystem,
         BerriesEngine engine,
         BranchStatisticsAnalyzer branchStatisticsAnalyzer,
-        BranchCounterpartAnalyzer counterpartAnalyzer)
+        BranchPairAnalyzer branchPairAnalyzer)
     {
         this.fileSystem = fileSystem;
         this.engine = engine;
         this.branchStatisticsAnalyzer = branchStatisticsAnalyzer;
-        this.counterpartAnalyzer = counterpartAnalyzer;
+        this.branchPairAnalyzer = branchPairAnalyzer;
     }
 
     public event Action<OperationProgress>? AnalysisProgressChanged;
@@ -34,7 +34,7 @@ public sealed class BerriesApplication
     public ScanResult? Scan { get; private set; }
     public DirectoryAnalysisResult? DirectoryAnalysis { get; private set; }
     public BranchStatisticsResult? BranchStatistics { get; private set; }
-    public BranchCounterpartResult? Counterparts { get; private set; }
+    public BranchPairAnalysisResult? BranchPairAnalysis { get; private set; }
 
     public IReadOnlyList<string> NormalizeRoots(IEnumerable<string> rootPaths) =>
         engine.CreateCorpus(rootPaths.Select(path => new FileSystemPath(path)))
@@ -151,22 +151,22 @@ public sealed class BerriesApplication
             engineProgress), cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
-        Debug.WriteLine("[Berries] Finding branch counterparts...");
-        var counterparts = await Task.Run(() => counterpartAnalyzer.Analyze(
+        Debug.WriteLine("[Berries] Finding promising Branch Pairs...");
+        var branchPairs = await Task.Run(() => branchPairAnalyzer.Analyze(
             corpus,
             branches.Branches,
             groups,
             directories.DirectoryPairs,
-            seedLimit: 25,
-            counterpartLimit: 5,
+            suggestionLimit: 25,
+            candidateLimit: 5,
             cancellationToken: cancellationToken,
             progress: engineProgress), cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
         DirectoryAnalysis = directories;
         BranchStatistics = branches;
-        Counterparts = counterparts;
-        Debug.WriteLine($"[Berries] Analysis ready: {groups.Count:N0} Groups, {counterparts.Seeds.Count:N0} suggested Branch seeds.");
+        BranchPairAnalysis = branchPairs;
+        Debug.WriteLine($"[Berries] Analysis ready: {groups.Count:N0} Groups, {branchPairs.Suggestions.Count:N0} suggested Branch Pairs.");
     }
 
     public Task<BestBranchPairResult?> FindBestBranchPairAsync(
@@ -180,7 +180,7 @@ public sealed class BerriesApplication
         var groups = Session.Groups;
         var branches = BranchStatistics.Branches;
         var progress = ForwardProgress(null);
-        return Task.Run(() => counterpartAnalyzer.FindBestPair(
+        return Task.Run(() => branchPairAnalyzer.FindBestPair(
             corpus,
             branch,
             branches,
@@ -224,7 +224,7 @@ public sealed class BerriesApplication
     {
         DirectoryAnalysis = null;
         BranchStatistics = null;
-        Counterparts = null;
+        BranchPairAnalysis = null;
     }
 
     private IProgress<OperationProgress> ForwardProgress(IProgress<OperationProgress>? progress) =>
