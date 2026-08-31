@@ -161,22 +161,42 @@ public sealed class BerriesEngine
         var contentHashingElapsed = phaseTimer.Elapsed;
 
         phaseTimer.Restart();
-        var groups = hashedFiles
+        var discovered = hashedFiles
             .GroupBy(item => item.Content)
             .Where(group => group.Count() > 1)
-            .Select(group => new Group(group.Key, group.Select(item => item.File).ToArray()))
+            .Select(group => (group.Key, Files: group.Select(item => item.File).ToArray()))
+            .ToArray();
+
+        var contentByPath = discovered
+            .SelectMany(group => group.Files.Select(file => (file.Path, Content: group.Key)))
+            .ToDictionary(item => item.Path, item => item.Content);
+        var retainedFiles = portrait.Files
+            .Where(file => !evictedFiles.Contains(file))
+            .ToArray();
+        var uniqueFileCountsByDirectory = retainedFiles
+            .Where(file => !contentByPath.ContainsKey(file.Path))
+            .GroupBy(file => file.ParentDirectory)
+            .ToDictionary(group => group.Key, group => group.Count());
+        var groupedPortrait = new Portrait(retainedFiles
+            .Where(file => contentByPath.ContainsKey(file.Path))
+            .Select(file => file with { Content = contentByPath[file.Path] })
+            .ToArray());
+        var groupedFilesByPath = groupedPortrait.Files.ToDictionary(file => file.Path);
+        var groups = discovered
+            .Select(group => new Group(
+                group.Key,
+                group.Files.Select(file => groupedFilesByPath[file.Path]).ToArray()))
             .ToArray();
         phaseTimer.Stop();
         var groupConstructionElapsed = phaseTimer.Elapsed;
 
-        var currentPortrait = evictedFiles.Count == 0
-            ? portrait
-            : new Portrait(portrait.Files.Where(file => !evictedFiles.Contains(file)));
-
         totalTimer.Stop();
         return new GroupDiscoveryResult(
-            currentPortrait,
+            groupedPortrait,
             groups,
+            uniqueFileCountsByDirectory,
+            retainedFiles.Length,
+            retainedFiles.Sum(file => file.Length),
             evictions,
             new GroupDiscoveryTiming(
                 sizeGroupingElapsed,
