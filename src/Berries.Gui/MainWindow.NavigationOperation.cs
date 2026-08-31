@@ -1,5 +1,5 @@
 using System.Collections.ObjectModel;
-using Berries.Core.Analysis;
+using Berries.Core;
 using Berries.Core.Domain;
 using Berries.Projection;
 
