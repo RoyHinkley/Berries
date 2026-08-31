@@ -1,6 +1,6 @@
 # Berries Analysis Design
 
-This document defines how Berries discovers Groups, derives structural evidence, and finds useful Suggestions for the Explorer. Terminology and invariants are defined in `MODEL.md`; interaction and execution are defined in `WORKFLOW.md`.
+This document defines how Berries discovers Groups, derives structural evidence, and finds useful Suggestions for the Explorer. Terminology and invariants are defined in `MODEL.md`; architectural placement and responsiveness rules are defined in `ARCHITECTURE.md`; interaction and execution are defined in `WORKFLOW.md`.
 
 ## Purpose
 
@@ -48,14 +48,18 @@ Group discovery:
 2. skips singleton size groups for hashing;
 3. hashes candidates with SHA-256;
 4. groups equal hashes;
-5. retains groups containing at least two files as Groups;
-6. attaches ContentId to grouped files;
+5. establishes Groups from content identities having at least two files at initial discovery;
+6. attaches `ContentId` to grouped files;
 7. counts files that belong to no Group by physical Directory;
 8. removes those unique `FileInstance`s before constructing the session Portrait.
 
+The Group set is established once. Later portrait operations change Group membership but do not rediscover or redefine Groups. A discovered Group may therefore have two or more, one, or zero current members.
+
 Expected read failures (`IOException`, `UnauthorizedAccessException`, `SecurityException`) evict the affected file from the session. Programming failures propagate.
 
-The retained unique counts are fixed for the session. A file that began in a Group and later becomes the sole surviving copy remains a Portrait file; it is not reclassified into the fixed unique population.
+The retained unique counts are fixed for the session. A file that began in a Group remains a member of that session Group while it survives in the Working Portrait; it is never reclassified into the fixed unique population.
+
+The discovery stages are Core computation. Countable phases report a user-facing phase plus completed/total values and check cancellation inside their scaling loops. Filesystem enumeration remains indeterminate because a total is not cheaply knowable without duplicating the traversal.
 
 ## Directory analysis
 
@@ -63,15 +67,14 @@ The retained unique counts are fixed for the session. A file that began in a Gro
 
     Path
     UniqueFileCount
-    PortraitFileCount
     GroupedFileCount
     GroupCount
 
 with:
 
-    FileCount = UniqueFileCount + PortraitFileCount
+    FileCount = UniqueFileCount + GroupedFileCount
 
-`PortraitFileCount` is the current population retained in the Working Portrait. `GroupedFileCount` is the subset currently belonging to active Groups, so the two values intentionally differ after a Group collapses to one surviving file.
+`GroupedFileCount` is the current number of files belonging to discovered Groups in that Directory, including a Group's sole remaining member. A zero-member Group contributes no files.
 
 `DirectoryPair` describes two exact Directories sharing Groups directly:
 
@@ -79,7 +82,11 @@ with:
     Second
     SharedGroupCount
 
-`SharedGroupCount` is exactly what it says; it is not called leverage. Directory graph diagnostics retain inexpensive measurements such as degree, weighted degree, maximum/mean shared Group count, strongest-pair concentration, connected components, and pair density.
+`SharedGroupCount` is exactly what it says; it is not called leverage. A Group contributes only when it currently has at least one member directly in each Directory.
+
+Directory graph diagnostics retain inexpensive measurements such as degree, weighted degree, maximum/mean shared Group count, strongest-pair concentration, connected components, and pair density.
+
+Directory-pair enumeration is countable from current Group membership. Cancellation checks belong inside the pair loops, not merely once per Group.
 
 ## Branch statistics
 
@@ -88,7 +95,6 @@ with:
     Path
     ParentPath
     UniqueFileCount
-    PortraitFileCount
     DirectoryCount
     GroupedFileCount
     GroupCount
@@ -96,11 +102,13 @@ with:
 
 with:
 
-    FileCount = UniqueFileCount + PortraitFileCount
+    FileCount = UniqueFileCount + GroupedFileCount
 
-`UniqueFileCount` is accumulated from the fixed per-Directory initial unique counts. `PortraitFileCount` is accumulated from the current Working Portrait. This preserves the original total-file denominator used by Seed concentration while allowing unique `FileInstance`s to be discarded.
+`UniqueFileCount` is accumulated from the fixed per-Directory initial unique counts. `GroupedFileCount` is accumulated from current members of session-stable Groups. This preserves the original total-file denominator used by Seed concentration while allowing unique `FileInstance`s to be discarded.
 
-`GroupCount` is distinct across the entire Branch. These statistics are cheap enough to use as the first stage of targeted structural discovery.
+`GroupCount` is distinct across the entire Branch. A zero-member Group touches no Branch and therefore contributes to no current Branch `GroupCount`.
+
+These statistics are cheap enough to use as the first stage of targeted structural discovery.
 
 ## Branch Seed priority
 
@@ -189,9 +197,11 @@ This observation has several architectural consequences:
 
 ## Projection queries
 
-`PortraitQueries` answers factual questions about the current Working Portrait, including Groups, files in Directory/Branch scopes, breadcrumbs, best Directory Pair, Branch counterpart eligibility, and shared Group counts.
+`PortraitQueries` answers factual questions about the current Working Portrait. Factual/domain computation belongs in Core whenever practical.
 
-`Berries.Projection` turns those facts into UI-independent projection models. `ProjectionState` records presentation/navigation state only; it is not a Case.
+`Berries.Projection` turns established facts into UI-independent presentation models where presentation-specific computation is actually warranted: Explorer hierarchy construction, labels, and presentation ordering. `ProjectionState` records presentation/navigation state only; it is not a Case.
+
+Projection is not a general-purpose place to move arbitrary work out of the GUI. The GUI should only initiate Core/Projection work, display progress, and bind completed presentation models.
 
 ## Dependency-driven background analysis
 
@@ -219,7 +229,7 @@ Analyzers run against captured Portrait/Group references for one generation. Cor
 
 `RefreshAnalysisAsync()` remains as an awaitable synchronization point for callers that require the complete current chain; it is no longer the owner of the analysis lifecycle.
 
-Known ContentId values are not reread or rehashed after virtual portrait operations.
+Known `ContentId` values are not reread or rehashed after virtual portrait operations.
 
 ## Performance lessons retained
 
@@ -234,3 +244,4 @@ Known ContentId values are not reread or rehashed after virtual portrait operati
 - Exact maximum duplicate count is not necessarily the most comprehensible Case.
 - Repeated resolution plus re-analysis can collapse very large duplicate problems quickly.
 - Berries should surface useful Suggestions, not pretend to infer semantic truth autonomously.
+- Responsiveness is an architectural invariant: scaling loops belong in Core or warranted Projection work, remain cancellable, and report determinate progress whenever practical.
