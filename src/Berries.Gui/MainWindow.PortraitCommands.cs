@@ -33,9 +33,9 @@ public partial class MainWindow
 
     private async void MoveRightImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
-        if (currentProjection is not { IsPair: true, Primary: { } first, Secondary: { } second }
+        if (currentCase is not { IsPair: true, Primary: { } first, Secondary: { } second }
             || controller.Session is null || portraitCommandBusy) return;
-        var descendants = currentProjection.Kind == ProjectionKind.BranchPair;
+        var descendants = currentCase.Kind == ProjectionKind.BranchPair;
         var files = SemanticSelectionInScope(first, descendants);
         if (files.Count == 0) return;
         MoveResult? result = null;
@@ -48,9 +48,9 @@ public partial class MainWindow
 
     private async void MoveLeftImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
-        if (currentProjection is not { IsPair: true, Primary: { } first, Secondary: { } second }
+        if (currentCase is not { IsPair: true, Primary: { } first, Secondary: { } second }
             || controller.Session is null || portraitCommandBusy) return;
-        var descendants = currentProjection.Kind == ProjectionKind.BranchPair;
+        var descendants = currentCase.Kind == ProjectionKind.BranchPair;
         var files = SemanticSelectionInScope(second, descendants);
         if (files.Count == 0) return;
         MoveResult? result = null;
@@ -102,9 +102,9 @@ public partial class MainWindow
     private async Task RefreshCurrentProjectionModelsAsync()
     {
         var session = controller.Session;
-        if (session is null || currentProjection is null) return;
+        if (session is null || currentCase is null) return;
 
-        if (currentProjection is { Kind: ProjectionKind.DirectoryPair, Primary: { } firstDirectory, Secondary: { } secondDirectory })
+        if (currentCase is { Kind: ProjectionKind.DirectoryPair, Primary: { } firstDirectory, Secondary: { } secondDirectory })
         {
             var leftTask = BuildDirectoryExplorerNodeAsync(firstDirectory);
             var rightTask = BuildDirectoryExplorerNodeAsync(secondDirectory);
@@ -117,7 +117,7 @@ public partial class MainWindow
             return;
         }
 
-        if (currentProjection is { Kind: ProjectionKind.BranchPair, Primary: { } firstBranch, Secondary: { } secondBranch })
+        if (currentCase is { Kind: ProjectionKind.BranchPair, Primary: { } firstBranch, Secondary: { } secondBranch })
         {
             var leftTask = BuildBranchExplorerNodeAsync(firstBranch);
             var rightTask = BuildBranchExplorerNodeAsync(secondBranch);
@@ -130,7 +130,7 @@ public partial class MainWindow
             return;
         }
 
-        if (currentProjection is { Kind: ProjectionKind.Directory, Primary: { } directory })
+        if (currentCase is { Kind: ProjectionKind.Directory, Primary: { } directory })
         {
             var node = await BuildDirectoryExplorerNodeAsync(directory);
             ExplorerTree.ItemsSource = new[] { node };
@@ -138,7 +138,7 @@ public partial class MainWindow
             return;
         }
 
-        if (currentProjection is { Kind: ProjectionKind.Branch, Primary: { } branch })
+        if (currentCase is { Kind: ProjectionKind.Branch, Primary: { } branch })
         {
             var node = await BuildBranchExplorerNodeAsync(branch);
             ExplorerTree.ItemsSource = new[] { node };
@@ -146,7 +146,7 @@ public partial class MainWindow
             return;
         }
 
-        if (currentProjection.Kind == ProjectionKind.Groups)
+        if (currentCase.Kind == ProjectionKind.Groups)
         {
             var groups = Projections.Groups(session);
             ExplorerTree.ItemsSource = groups.Select(BuildGroupNode).ToArray();
