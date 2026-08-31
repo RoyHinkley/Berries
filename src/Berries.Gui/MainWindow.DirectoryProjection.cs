@@ -87,7 +87,7 @@ public partial class MainWindow
     {
         var session = controller.Session;
         if (session is null
-            || currentProjection is not { Primary: { } primary, Secondary: { } secondary }
+            || currentCase is not { Primary: { } primary, Secondary: { } secondary }
             || target.Side is null)
             return;
 
