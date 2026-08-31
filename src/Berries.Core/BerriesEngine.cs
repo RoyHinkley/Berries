@@ -207,14 +207,15 @@ public sealed class BerriesEngine
             cancellationToken.ThrowIfCancellationRequested();
             var files = group.Files;
 
+            foreach (var file in files)
+                AddGroupedFile(file, group.Content, groupedFilesByDirectory, groupsByDirectory);
+
             for (var firstIndex = 0; firstIndex < files.Count - 1; firstIndex++)
             {
                 var first = files[firstIndex];
                 for (var secondIndex = firstIndex + 1; secondIndex < files.Count; secondIndex++)
                 {
                     var second = files[secondIndex];
-                    AddGroupedFile(first, group.Content, groupedFilesByDirectory, groupsByDirectory);
-                    AddGroupedFile(second, group.Content, groupedFilesByDirectory, groupsByDirectory);
 
                     if (first.ParentDirectory == second.ParentDirectory)
                     {
@@ -236,15 +237,10 @@ public sealed class BerriesEngine
             progress?.Report(new OperationProgress("Analyzing directories", examinedPairs, totalPairs));
         }
 
-        var portraitFilesByDirectory = portrait.Files
-            .GroupBy(file => file.ParentDirectory)
-            .ToDictionary(group => group.Key, group => group.Count());
-
         var directories = groupsByDirectory.Keys
             .Select(path => new DirectoryRecord(
                 path,
                 uniqueFileCountsByDirectory.TryGetValue(path, out var uniqueFileCount) ? uniqueFileCount : 0,
-                portraitFilesByDirectory.TryGetValue(path, out var portraitFileCount) ? portraitFileCount : 0,
                 groupedFilesByDirectory[path].Count,
                 groupsByDirectory[path].Count))
             .OrderBy(directory => directory.Path.Value, StringComparer.Ordinal)
