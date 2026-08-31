@@ -6,7 +6,6 @@ public sealed record BranchRecord(
     FileSystemPath Path,
     FileSystemPath? ParentPath,
     int UniqueFileCount,
-    int PortraitFileCount,
     int DirectoryCount,
     int GroupedFileCount,
     int GroupCount,
@@ -14,7 +13,7 @@ public sealed record BranchRecord(
 {
     /// <summary>
     /// Current total file population represented by this Branch: initial unique files
-    /// plus files still present in the Working Portrait.
+    /// plus current members of Groups discovered during the primary scan.
     /// </summary>
-    public int FileCount => UniqueFileCount + PortraitFileCount;
+    public int FileCount => UniqueFileCount + GroupedFileCount;
 }
