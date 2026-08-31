@@ -10,41 +10,37 @@ namespace Berries.Core.Queries;
 /// </summary>
 public sealed class PortraitQueries(IFileSystem fileSystem)
 {
-    public Task<IReadOnlyList<FileInstance>> DuplicateFilesInDirectoryAsync(
+    public Task<IReadOnlyList<FileInstance>> GroupedFilesInDirectoryAsync(
         BerriesSession session,
         FileSystemPath directory,
-        IProgress<Berries.Core.OperationProgress>? progress = null,
-        CancellationToken cancellationToken = default)
-    {
-        return FindDuplicateFilesAsync(
+        IProgress<OperationProgress>? progress = null,
+        CancellationToken cancellationToken = default) =>
+        FindGroupedFilesAsync(
             session,
             file => fileSystem.PathsEqual(file.ParentDirectory, directory),
-            "Finding duplicate files in directory",
+            "Finding grouped files in Directory",
             progress,
             cancellationToken);
-    }
 
-    public Task<IReadOnlyList<FileInstance>> DuplicateFilesInBranchAsync(
+    public Task<IReadOnlyList<FileInstance>> GroupedFilesInBranchAsync(
         BerriesSession session,
         FileSystemPath branch,
-        IProgress<Berries.Core.OperationProgress>? progress = null,
-        CancellationToken cancellationToken = default)
-    {
-        return FindDuplicateFilesAsync(
+        IProgress<OperationProgress>? progress = null,
+        CancellationToken cancellationToken = default) =>
+        FindGroupedFilesAsync(
             session,
             file => InBranch(file, branch),
-            "Finding duplicate files in branch",
+            "Finding grouped files in Branch",
             progress,
             cancellationToken);
-    }
 
-    public async Task<IReadOnlyList<BranchFilePlacement>> DuplicateFilesInBranchWithPlacementAsync(
+    public async Task<IReadOnlyList<BranchFilePlacement>> GroupedFilesInBranchWithPlacementAsync(
         BerriesSession session,
         FileSystemPath branch,
-        IProgress<Berries.Core.OperationProgress>? progress = null,
+        IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        var files = await DuplicateFilesInBranchAsync(session, branch, progress, cancellationToken);
+        var files = await GroupedFilesInBranchAsync(session, branch, progress, cancellationToken);
         var result = new BranchFilePlacement[files.Count];
         for (var i = 0; i < files.Count; i++)
         {
@@ -54,10 +50,10 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
         return result;
     }
 
-    public Task<IReadOnlyList<CorpusRootPlacement>> DuplicateFilesInCorpusRootsWithPlacementAsync(
+    public Task<IReadOnlyList<CorpusRootPlacement>> GroupedFilesInCorpusRootsWithPlacementAsync(
         BerriesSession session,
         Corpus corpus,
-        IProgress<Berries.Core.OperationProgress>? progress = null,
+        IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
         return Task.Run<IReadOnlyList<CorpusRootPlacement>>(() =>
@@ -65,13 +61,13 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
             var roots = corpus.Roots.Select(root => root.Path).ToArray();
             var buckets = roots.Select(_ => new List<BranchFilePlacement>()).ToArray();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var sets = session.DuplicateSets;
-            progress?.Report(new Berries.Core.OperationProgress("Finding duplicate files in Corpus Roots", 0, sets.Count));
+            var groups = session.Groups;
+            progress?.Report(new OperationProgress("Finding grouped files in Corpus Roots", 0, groups.Count));
 
-            for (var i = 0; i < sets.Count; i++)
+            for (var i = 0; i < groups.Count; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                foreach (var file in sets[i].Files)
+                foreach (var file in groups[i].Files)
                 {
                     var key = fileSystem.NormalizePath(file.Path).Value;
                     if (!seen.Add(key)) continue;
@@ -85,8 +81,8 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
                     }
                 }
 
-                if ((i & 0xff) == 0 || i + 1 == sets.Count)
-                    progress?.Report(new Berries.Core.OperationProgress("Finding duplicate files in Corpus Roots", i + 1, sets.Count));
+                if ((i & 0xff) == 0 || i + 1 == groups.Count)
+                    progress?.Report(new OperationProgress("Finding grouped files in Corpus Roots", i + 1, groups.Count));
             }
 
             return roots.Select((root, index) =>
@@ -96,19 +92,19 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
         }, cancellationToken);
     }
 
-    public IReadOnlyList<DuplicateSet> Groups(BerriesSession session) =>
-        session.DuplicateSets
-            .OrderByDescending(set => set.Files.Count)
-            .ThenBy(set => set.Files[0].Path.Value, StringComparer.OrdinalIgnoreCase)
+    public IReadOnlyList<Group> Groups(BerriesSession session) =>
+        session.Groups
+            .OrderByDescending(group => group.Files.Count)
+            .ThenBy(group => group.Files[0].Path.Value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-    public IReadOnlyList<DuplicateSet> GroupsForSelection(BerriesSession session)
+    public IReadOnlyList<Group> GroupsForSelection(BerriesSession session)
     {
         var contents = session.Selection.Files
             .Where(file => file.Content is not null)
             .Select(file => file.Content!.Value)
             .ToHashSet();
-        return Groups(session).Where(set => contents.Contains(set.Content)).ToArray();
+        return Groups(session).Where(group => contents.Contains(group.Content)).ToArray();
     }
 
     public IReadOnlyList<FileInstance> DistinctFiles(IEnumerable<FileInstance> files)
@@ -179,7 +175,7 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
         FileSystemPath directory) =>
         pairs
             .Where(pair => fileSystem.PathsEqual(pair.First, directory) || fileSystem.PathsEqual(pair.Second, directory))
-            .OrderByDescending(pair => pair.SharedContentCount)
+            .OrderByDescending(pair => pair.SharedGroupCount)
             .FirstOrDefault();
 
     public bool HasBranchPairCandidate(
@@ -187,13 +183,13 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
         FileSystemPath branch)
     {
         var selected = branches.FirstOrDefault(candidate => fileSystem.PathsEqual(candidate.Path, branch));
-        if (selected is null || selected.DuplicateContentCount == 0) return false;
+        if (selected is null || selected.GroupCount == 0) return false;
 
         return branches.Any(candidate =>
-            candidate.DuplicateContentCount > 0 &&
-            !fileSystem.PathsEqual(candidate.Path, branch) &&
-            !fileSystem.IsDescendant(candidate.Path, branch) &&
-            !fileSystem.IsDescendant(branch, candidate.Path));
+            candidate.GroupCount > 0
+            && !fileSystem.PathsEqual(candidate.Path, branch)
+            && !fileSystem.IsDescendant(candidate.Path, branch)
+            && !fileSystem.IsDescendant(branch, candidate.Path));
     }
 
     public Task<int> SharedGroupCountAsync(
@@ -201,22 +197,22 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
         FileSystemPath first,
         FileSystemPath second,
         bool includeDescendants,
-        IProgress<Berries.Core.OperationProgress>? progress = null,
+        IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
         return Task.Run(() =>
         {
-            var sets = session.DuplicateSets;
+            var groups = session.Groups;
             var count = 0;
-            progress?.Report(new Berries.Core.OperationProgress("Counting shared Groups", 0, sets.Count));
+            progress?.Report(new OperationProgress("Counting shared Groups", 0, groups.Count));
 
-            for (var i = 0; i < sets.Count; i++)
+            for (var i = 0; i < groups.Count; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var inFirst = false;
                 var inSecond = false;
 
-                foreach (var file in sets[i].Files)
+                foreach (var file in groups[i].Files)
                 {
                     if (!inFirst && InContext(file, first, includeDescendants)) inFirst = true;
                     if (!inSecond && InContext(file, second, includeDescendants)) inSecond = true;
@@ -224,8 +220,8 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
                 }
 
                 if (inFirst && inSecond) count++;
-                if ((i & 0xff) == 0 || i + 1 == sets.Count)
-                    progress?.Report(new Berries.Core.OperationProgress("Counting shared Groups", i + 1, sets.Count));
+                if ((i & 0xff) == 0 || i + 1 == groups.Count)
+                    progress?.Report(new OperationProgress("Counting shared Groups", i + 1, groups.Count));
             }
 
             return count;
@@ -252,39 +248,40 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
     }
 
     private bool InContext(FileInstance file, FileSystemPath context, bool includeDescendants) =>
-        fileSystem.PathsEqual(file.ParentDirectory, context) ||
-        (includeDescendants && fileSystem.IsDescendant(file.ParentDirectory, context));
+        fileSystem.PathsEqual(file.ParentDirectory, context)
+        || (includeDescendants && fileSystem.IsDescendant(file.ParentDirectory, context));
 
     private bool InBranch(FileInstance file, FileSystemPath branch) => InContext(file, branch, true);
 
-    private Task<IReadOnlyList<FileInstance>> FindDuplicateFilesAsync(
+    private Task<IReadOnlyList<FileInstance>> FindGroupedFilesAsync(
         BerriesSession session,
         Func<FileInstance, bool> includes,
         string progressMessage,
-        IProgress<Berries.Core.OperationProgress>? progress,
+        IProgress<OperationProgress>? progress,
         CancellationToken cancellationToken)
     {
         return Task.Run<IReadOnlyList<FileInstance>>(() =>
         {
-            var sets = session.DuplicateSets;
+            var groups = session.Groups;
             var files = new List<FileInstance>();
             var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            progress?.Report(new Berries.Core.OperationProgress(progressMessage, 0, sets.Count));
+            progress?.Report(new OperationProgress(progressMessage, 0, groups.Count));
 
-            for (var i = 0; i < sets.Count; i++)
+            for (var i = 0; i < groups.Count; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                foreach (var file in sets[i].Files)
+                foreach (var file in groups[i].Files)
                 {
                     var key = fileSystem.NormalizePath(file.Path).Value;
                     if (includes(file) && paths.Add(key)) files.Add(file);
                 }
 
-                if ((i & 0xff) == 0 || i + 1 == sets.Count)
-                    progress?.Report(new Berries.Core.OperationProgress(progressMessage, i + 1, sets.Count));
+                if ((i & 0xff) == 0 || i + 1 == groups.Count)
+                    progress?.Report(new OperationProgress(progressMessage, i + 1, groups.Count));
             }
 
-            files.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Path.Value, right.Path.Value));
+            files.Sort((left, right) =>
+                StringComparer.OrdinalIgnoreCase.Compare(left.Path.Value, right.Path.Value));
             return files;
         }, cancellationToken);
     }

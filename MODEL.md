@@ -1,231 +1,211 @@
 # Berries Domain Model
 
-This document defines the current architectural vocabulary and invariants used by Berries. `PROJECT.md` gives the overview; `ANALYSIS.md`, `WORKFLOW.md`, `SITUATIONS.md`, and `BOUNDARY.md` cover specialized topics.
+This document defines the architectural vocabulary and semantic invariants used throughout Berries. `PROJECT.md` is the governing overview; `ANALYSIS.md` and `WORKFLOW.md` contain the corresponding detailed designs.
 
-## Public language versus internal types
+## Vocabulary layers
 
-The user-facing application deliberately uses simpler terminology than parts of Core.
+Berries keeps user-facing language simple while retaining narrower technical names where they carry real information.
 
-    Group
-        the UI term for one currently duplicated content identity
-        internal analysis type: DuplicateSet
+- **Group** — all files in the current Working Portrait having one `ContentId`, when at least two remain.
+- **file / copy** — ordinary UI language for one `FileInstance`.
+- **Directory** — one exact directory.
+- **Branch** — a Directory together with all descendants.
+- **Directory Pair / Branch Pair** — two structural scopes considered together.
+- **Case** — an objective bounded set of files considered together for one coherent disposition.
+- **Projection** — an Explorer presentation of Working-Portrait material.
+- **Suggestion** — a promising place Berries offers for the user's attention.
 
-    file / copy
-        one displayed filesystem instance
-        internal domain type: FileInstance
+Technical terms:
 
-    shared Groups
-        distinct duplicated content represented on both sides of a structural pair
+- `FileInstance` — one filesystem instance at one exact path.
+- `ContentId` — established byte-content identity.
+- **Seed** — a Branch selected as a promising starting point for targeted relationship search.
+- **Counterpart** — a Branch scored relative to a particular Seed.
 
-    Directory
-        one exact directory
-
-    Branch
-        a directory together with all descendants
-
-    Directory Pair / Branch Pair
-        the corresponding two-sided structural views
-
-The internal names `ContentId`, `DuplicateSet`, and `FileInstance` remain precise implementation terms. They should not leak into ordinary UI wording unless needed for developer documentation.
+Seed and Counterpart are search roles, not alternate names for Branches, Branch Pairs, Cases, or Suggestions.
 
 ## Core terminology
 
 ### Filesystem
 
-The physical storage state observed at scan time and modified only at Execute. The filesystem is larger than the logical Corpus.
+The physical universe Berries observes and eventually modifies. It is larger than the logical Corpus.
 
 ### Corpus
 
-The logical material Berries is working with. A new Corpus begins with one or more selected filesystem roots. Roots are normalized so no retained root is a descendant of another retained root.
-
-Configuration exclusion filters material during acquisition. Interactive Exclude removes material from the Working Portrait. Both have the same user-visible meaning: the excluded file is no longer part of the working Corpus and is not physically changed merely by being excluded.
+The logical filesystem material the user intends Berries to consider. Selected roots add material; configuration and interactive Exclude subtract material from consideration.
 
 ### Corpus root
 
-A selected top-level directory contributing a tree to the Corpus.
+A selected top-level Directory contributing its tree to the Corpus. Roots are normalized so no retained root is a descendant of another retained root.
 
 ### FileInstance
 
-One filesystem instance of bytes at one path. The UI normally calls this a file or copy.
+One filesystem instance of content at one path. It carries path, parent Directory, size, observed timestamp, and, when established, `ContentId`.
 
-### Content / ContentId
+### ContentId
 
-The byte content of a file and the identity Berries assigns to equal bytes. Current duplicate discovery uses SHA-256 after size grouping.
+Internal identity for byte-identical file content. Current discovery establishes it with SHA-256 after size grouping.
 
-### Group / DuplicateSet
+### Group
 
-All current Working-Portrait FileInstances having one identical ContentId, provided at least two such instances remain.
-
-`DuplicateSet` is the Core/analysis type. `Group` is the user-facing term.
+All files in the current Working Portrait having one ContentId, when at least two such files remain. A Group therefore changes with the Working Portrait and disappears when fewer than two instances remain.
 
 ### Initial Portrait
 
-The fixed modeled scan result for a session after duplicate discovery and expected access evictions have established the usable file population and content identities.
-
-The current implementation retains unique files as well as duplicate files. Unique files are not resolution targets, but they are needed for filesystem constraints such as Move destination collisions.
-
-The Initial Portrait is treated as fixed session truth. Berries does not continuously reconcile it with external filesystem changes.
+The modeled state established for a new session by scanning the selected roots and completing Group discovery. It is fixed session truth; Berries does not continuously reconcile it with external filesystem changes.
 
 ### Working Portrait
 
-The modeled state of the user's desired Corpus during the session.
+The modeled state of the user's desired Corpus during the session. It is deterministically rebuilt from the Initial Portrait plus ordered portrait operations.
 
-It is deterministically rebuilt from the Initial Portrait plus the ordered portrait-operation history. It is not required to match current physical disk state before Execute.
-
-### Portrait operation
-
-An undoable virtual transformation of the Working Portrait. Current operations are:
+Current portrait-changing operations are:
 
     Exclude
     Delete
     Move
 
-One top-level user command is stored as one Undo step, potentially as a batch of per-file operations.
+### Case
 
-### Exclude
+A bounded set of files in the current portrait, containing at least one duplicate, considered together for one coherent disposition.
 
-Remove selected files from the Working Portrait without producing physical filesystem Actions.
+A Case is objective and program-discovered. A Situation is not required to discover a Case, but semantic context can alter how a Case is explained or presented.
 
-Excluded files disappear from Groups, structural projections, selection, and derived analysis. Undo can restore them.
+The Case boundary limits disposition authority. Duplicate instances outside the Case may provide context or evidence, but remain unchanged unless independently brought under disposition authority.
 
-### Delete
+Earlier work allowed structural Cases to contain unique files inside their bounds. Whether unique files should remain members of Cases is an unresolved design question and is intentionally separate from the terminology cleanup. Unique-file counts and other structural measures may still be analytically useful even if Case membership is later narrowed.
 
-Remove selected files from the Working Portrait and add corresponding physical delete work to the Action list.
+A Case is **not** projection state. The Explorer may display material that is not a Case, and the user may navigate away from or adjust the scope of a suggested Case.
 
-### Move
+### Situation
 
-Relocate selected duplicate files virtually from an explicit source scope to an explicit destination scope while preserving source-relative structure.
+Optional human semantic context explaining why a Case exists: backup, migration, reorganization, staging residue, and so forth. Filesystem evidence can make a Situation plausible but generally cannot prove intent; the user is the semantic authority.
 
-For each source file, compute the exact destination directory from its relative path beneath the selected source scope.
+Situation classification is not required before the user can navigate or act.
 
-1. If identical content already exists directly in that computed destination directory, preserve the destination copy and reduce the source operation to Delete.
-2. Otherwise use the source filename in the computed destination directory.
-3. If that path is free, Move there.
-4. If that path already contains identical content, preserve the destination copy and Delete the source.
-5. If that path contains different content, report a collision and leave that source unchanged while continuing other requested files.
+### Disposition
 
-Unique destination files participate in collision detection. Berries does not invent filenames or overwrite different content.
-
-### Selection
-
-A persistent set of Working-Portrait file paths shared across projections.
-
-Every visible selection resolves to files. Selecting a Group or structural node is shorthand for selecting its applicable descendant files.
-
-The current UI provides two inversion behaviors:
-
-    Invert Selected Copies
-        for Groups represented in the current selection, swap selected and
-        unselected copies of those same Groups
-
-    Invert All Groups
-        invert every file in every Group represented in the current view
+The operational outcome applied under a Case's authority. Historical Situation/Resolution/Disposition research remains useful vocabulary for reasoning about coherent outcomes, but the current UI does not impose a classification wizard before Exclude/Delete/Move.
 
 ### Directory
 
-For direct-directory statistics, one exact directory. Descendant files are not folded into its direct counts.
+One exact filesystem Directory. Direct Directory statistics concern directly contained files only.
+
+### Directory Pair
+
+An unordered pair of exact Directories sharing one or more Groups directly. `SharedGroupCount` is the number of distinct Groups represented directly in both Directories.
 
 ### Branch
 
-A directory together with all descendants.
+A Directory together with all descendants. Branch statistics aggregate file and Group information through ancestry.
 
-### DirectoryPair
+### Seed
 
-An unordered pair of exact directories sharing one or more duplicated content identities directly. The UI term is Directory Pair.
+A Branch chosen as a promising starting point for targeted Branch relationship search because its Group concentration makes it worth investigating.
 
-### BranchPair
+Seed priority answers only:
 
-A pair of non-nested Branches sharing duplicated content. The UI term is Branch Pair.
+    where is it worth looking?
 
-The current analysis does not comprehensively enumerate every possible BranchPair. It searches targeted promising seeds and can also find the best counterpart for a selected Branch on demand.
+It does not measure the quality of a Counterpart, Branch Pair, Case, or Suggestion.
+
+### Counterpart
+
+A non-nested Branch evaluated relative to one Seed. Counterparts are ranked by the strength of their relationship with that Seed.
+
+### Branch Pair
+
+Two non-nested Branches analyzed together for relationship and promise. A Branch Pair need not arise from Seed/Counterpart discovery; the Explorer can also request the best Branch Pair for an explicitly selected Branch.
+
+### Suggestion
+
+Something Berries has found worth the user's attention. Current Suggestions are Branch Pair views produced by targeted Seed/Counterpart analysis.
+
+A Suggestion is an attention aid, not a command, semantic diagnosis, mandatory queue item, or guarantee that its exact scope is the best Case boundary. The user may resolve it directly, broaden or narrow either side, Pivot elsewhere, or simply follow nearby structural evidence.
 
 ### Projection
 
-A UI-independent organization of Working-Portrait duplicate files. Current projections are:
+A UI-independent organization of Working-Portrait files for Explorer presentation. Current projections are:
 
     Groups
     Directory
     Branch
+    Corpus Roots
     Directory Pair
     Branch Pair
-    Corpus Roots
 
-Projection construction lives in `Berries.Projection`, separate from Avalonia presentation.
+`ProjectionState` records the current presentation/navigation state. It is not a Case and carries no disposition authority.
 
 ### Pivot
 
-A navigation command that changes the current projection or scope without changing the Working Portrait.
+Navigate to another projection, scope, or structural interpretation without changing the Working Portrait.
 
 ### Suggest
 
-A UI command that presents a promising analyzed Branch Pair. Suggestions are attention aids, not required work items or persistent Cases.
+Navigate to the next available Suggestion. Suggest is navigation, not a portrait operation and not a required workflow step.
 
-The code and older research still contain `Case` terminology in places, but the current user interaction is projection- and operation-oriented.
+### Selection
 
-### Situation
+A persistent set of files in the current Working Portrait. Selection is independent of projection; higher Explorer nodes are shorthand for the files represented beneath them.
 
-Historical/optional semantic vocabulary describing why duplication may exist, such as backup, migration, archive, or reorganization.
+### Exclude
 
-Situation classification is not required by the current Explorer and does not gate Exclude/Delete/Move. `SITUATIONS.md` preserves that research separately.
+Remove selected files from the Working Portrait without changing the physical filesystem or creating filesystem Actions.
+
+### Delete
+
+Remove selected files from the Working Portrait and add corresponding physical deletion work.
+
+### Move
+
+Duplicate-motivated relocation from an explicit source scope to an explicit destination scope. Relative source structure is preserved beneath the destination scope.
+
+For each source file:
+
+1. compute the exact destination Directory from its relative source path;
+2. if identical content already exists directly there, retain the destination and reduce the source to Delete;
+3. otherwise use the source filename;
+4. free path -> Move;
+5. same filename and same content -> retain destination, Delete source;
+6. same filename and different content -> collision; leave both unchanged and continue.
+
+Berries does not invent filenames or overwrite different content.
 
 ### Action
 
-A primitive physical filesystem operation used at Execute. Current planning/execution types include delete, move, and copy where required by execution mechanics.
-
-### Action list / plan
-
-The physical work accumulated from the current portrait-operation history. It is derivative of the desired Working Portrait.
-
-Exclude contributes no physical Action. Delete and Move do.
+A primitive physical filesystem operation used to realize the Working Portrait at Execute time. Current primitives include Delete, Move, Copy, and necessary directory creation.
 
 ### Undo
 
-Remove the most recent top-level portrait operation and rebuild the Working Portrait, Groups, selection validity, and Action list from the fixed Initial Portrait plus remaining operations.
+Remove the most recent top-level portrait operation and deterministically rebuild Working Portrait, Groups, Actions, and selection binding.
 
 ### Execute
 
-The explicit physical commitment boundary.
+The explicit physical commitment boundary. Berries does not globally rescan immediately before execution; encountered failures are handled locally and independent safe work continues.
 
-Before Execute, Berries summarizes planned Actions and counts content identities that would have no surviving physical file after the plan. After approval, it attempts the Action list against current disk state.
+## Interaction principle
 
-There is no global pre-execution rescan/reconciliation. Failures are handled locally. Independent safe work continues. Dependent destructive work is suppressed if its prerequisite fails.
+The Explorer is primary. Berries does not attempt a wizard-like sequence of mandatory Cases.
 
-### Saved session
+The product objective is deliberately loose:
 
-Save/Load commands exist in the shell but are currently disabled. No persistence schema is authoritative yet.
+> Give the user the ability to resolve duplicates with minimum practical effort.
 
-## Current analysis state
-
-`BerriesApplication` owns the currently published derived results:
-
-    DirectoryAnalysis
-    BranchStatistics
-    Counterparts
-
-Any portrait-changing command invalidates all three by clearing them. The GUI refreshes the current visible projection immediately, then starts a cancellable background recomputation of the derived analysis.
-
-Initial scan is currently more linear: `ScanAsync()` establishes the session and then awaits the full derived-analysis refresh before returning.
-
-## Transitional internal terminology
-
-`DuplicateSettlements` and some `Case`-oriented types remain in Core from earlier experimental designs. They are not user-facing concepts in the current application.
-
-The active application constructs a new empty `DuplicateSettlements` object only as a compatibility input to older analyzer signatures; no UI operation records accepted/settled relationships. Consequently it has no semantic effect on current Explorer behavior.
-
-Developer documentation should describe these as transitional internals rather than reviving Accept/Settle as product concepts.
+Analysis reduces search effort by surfacing promising structure. The user remains free to adjust scope and follow recognizable relationships through the Explorer.
 
 ## Governing invariants
 
-1. The Corpus is logical working scope, not the whole filesystem.
-2. The Initial Portrait is fixed for a session.
+1. The Corpus is logical material Berries is considering; it is not the filesystem.
+2. The Initial Portrait is fixed for the lifetime of a session.
 3. The Working Portrait is reconstructible from the Initial Portrait plus ordered portrait operations.
-4. Groups are derived from equal known Content in the current Working Portrait.
-5. Selection ultimately denotes files, regardless of projection node type.
-6. Exclude changes only virtual working scope.
-7. Delete and Move change the Working Portrait immediately and contribute physical Actions.
-8. There is no user-facing Keep, Accept, Settle, or Apply step.
-9. Pivot and Suggest change attention/view, not filesystem intent.
-10. Unique files remain modeled even though duplicate-resolution commands do not target them.
-11. No physical filesystem change occurs before Execute.
-12. Execute attempts the approved plan and reports encountered results rather than requiring a global revalidation pass.
-13. Core remains independent of Avalonia and Windows-specific filesystem behavior.
+4. A Group is the current set of at least two files sharing one ContentId.
+5. A Case is objective, bounded, contains duplication, and limits disposition authority.
+6. A Projection is presentation/navigation state, not a Case.
+7. Selection always denotes files.
+8. Exclude changes the Working Portrait but creates no filesystem Action.
+9. Delete and Move change the Working Portrait immediately and contribute physical Actions.
+10. There is no Keep, Accept, or Apply state in the current interaction model.
+11. Seed priority, Counterpart/pair score, and Case presentation priority are distinct concepts.
+12. Suggestions guide attention but do not prescribe workflow or exact final scope.
+13. Unique-file membership in Cases remains an explicit unresolved design question; do not silently settle it during unrelated cleanup.
+14. No physical filesystem change occurs before Execute.
+15. Core remains independent of UI and platform-specific filesystem behavior.

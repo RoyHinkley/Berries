@@ -5,18 +5,18 @@ using Xunit;
 
 namespace Berries.Core.Tests;
 
-public sealed class IgnoreFilterTests
+public sealed class ExcludeFilterTests
 {
     [Fact]
-    public async Task BuildInitialPortraitAsync_ExcludesIgnoredPathsBeforeDuplicateAnalysis()
+    public async Task BuildInitialPortraitAsync_ExcludesConfiguredPathsBeforeGroupDiscovery()
     {
         var root = Path(@"X:\Corpus");
         var keep = Path(@"X:\Corpus\keep.txt");
-        var ignored = Path(@"X:\Corpus\.git\objects\aa\object");
+        var excluded = Path(@"X:\Corpus\.git\objects\aa\object");
         var files = new[]
         {
             new FileSystemFile(keep, root, 10),
-            new FileSystemFile(ignored, Path(@"X:\Corpus\.git\objects\aa"), 20)
+            new FileSystemFile(excluded, Path(@"X:\Corpus\.git\objects\aa"), 20)
         };
 
         var engine = new BerriesEngine(new TestFileSystem(root, files));

@@ -32,7 +32,7 @@ public partial class MainWindow
         PivotBestDirectoryPairMenu.IsEnabled = hasSession && canResolveScope;
         PivotBestBranchPairMenu.IsEnabled = hasSession && canResolveScope;
 
-        var suggestions = controller.Counterparts?.Seeds;
+        var suggestions = controller.Suggestions?.Suggestions;
         PivotBranchPairMenu.IsEnabled = suggestionIndex >= 0 && suggestions is { Count: > 0 };
     }
 

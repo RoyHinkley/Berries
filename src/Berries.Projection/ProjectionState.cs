@@ -14,6 +14,10 @@ public enum ProjectionKind
     BranchPair
 }
 
+/// <summary>
+/// Presentation state for the current Explorer projection.
+/// This is navigation/view state, not a domain Case and not disposition authority.
+/// </summary>
 public sealed record ProjectionState(
     ProjectionKind Kind,
     IReadOnlyList<FileInstance> RepresentedFiles,

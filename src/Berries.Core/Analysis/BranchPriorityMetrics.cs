@@ -1,17 +1,17 @@
 namespace Berries.Core.Analysis;
 
 /// <summary>
-/// Experimental parent-relative measurements for finding duplication-rich branches
-/// without enumerating BranchPairs. These are objective ranking aids, not Case semantics.
+/// Parent-relative measurements for finding Group-rich Branches without exhaustively
+/// enumerating Branch Pairs. These are objective ranking aids, not semantic classifications.
 /// </summary>
 public sealed record BranchPriorityMetric(
     BranchRecord Branch,
-    double DuplicateContentRetention,
+    double GroupRetention,
     double FileRetention,
     double Concentration,
-    double ContentTimesConcentration,
-    double ContentTimesLogConcentration,
-    double ExcessConcentratedContent);
+    double GroupsTimesConcentration,
+    double GroupsTimesLogConcentration,
+    double ExcessConcentratedGroups);
 
 public static class BranchPriorityMetrics
 {
@@ -24,31 +24,31 @@ public static class BranchPriorityMetrics
         {
             if (branch.ParentPath is not { } parentPath || !byPath.TryGetValue(parentPath, out var parent))
                 continue;
-            if (parent.DuplicateContentCount <= 0 || parent.FileCount <= 0 || branch.FileCount <= 0)
+            if (parent.GroupCount <= 0 || parent.FileCount <= 0 || branch.FileCount <= 0)
                 continue;
 
-            var contentRetention = (double)branch.DuplicateContentCount / parent.DuplicateContentCount;
+            var groupRetention = (double)branch.GroupCount / parent.GroupCount;
             var fileRetention = (double)branch.FileCount / parent.FileCount;
             if (fileRetention <= 0)
                 continue;
 
-            var concentration = contentRetention / fileRetention;
-            var contentTimesConcentration = branch.DuplicateContentCount * concentration;
-            var contentTimesLogConcentration = concentration > 1
-                ? branch.DuplicateContentCount * Math.Log(concentration)
+            var concentration = groupRetention / fileRetention;
+            var groupsTimesConcentration = branch.GroupCount * concentration;
+            var groupsTimesLogConcentration = concentration > 1
+                ? branch.GroupCount * Math.Log(concentration)
                 : 0;
-            var excessConcentratedContent = concentration > 1
-                ? branch.DuplicateContentCount * (1 - 1 / concentration)
+            var excessConcentratedGroups = concentration > 1
+                ? branch.GroupCount * (1 - 1 / concentration)
                 : 0;
 
             metrics.Add(new BranchPriorityMetric(
                 branch,
-                contentRetention,
+                groupRetention,
                 fileRetention,
                 concentration,
-                contentTimesConcentration,
-                contentTimesLogConcentration,
-                excessConcentratedContent));
+                groupsTimesConcentration,
+                groupsTimesLogConcentration,
+                excessConcentratedGroups));
         }
 
         return metrics;

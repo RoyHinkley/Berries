@@ -2,8 +2,8 @@ using Berries.FileSystem.Abstractions;
 
 namespace Berries.Core;
 
-/// <summary>Platform-neutral progress reported while hashing duplicate candidates.</summary>
-public sealed record DuplicateDiscoveryProgress(
+/// <summary>Platform-neutral progress reported while hashing Group candidates.</summary>
+public sealed record GroupDiscoveryProgress(
     long FilesHashed,
     long CandidateFiles,
     long BytesHashed,

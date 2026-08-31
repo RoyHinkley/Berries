@@ -49,8 +49,6 @@ public sealed class BerriesSelection
         var current = Current(files).ToArray();
         if (current.Length == 0) return;
 
-        // Aggregate nodes behave as set selectors: if every represented file is already
-        // selected, remove the set; otherwise add the entire set.
         var remove = current.All(file => selected.Contains(PathKey(file.Path)));
         foreach (var file in current)
         {
@@ -75,7 +73,7 @@ public sealed class BerriesSelection
     }
 
     /// <summary>Invert among complete Groups containing at least one selected file: G(S) - S.</summary>
-    public void InvertSelectedCopies(IReadOnlyList<DuplicateSet> groups)
+    public void InvertSelectedCopies(IReadOnlyList<Group> groups)
     {
         if (selected.Count == 0) return;
         var universe = groups
@@ -94,7 +92,7 @@ public sealed class BerriesSelection
         }
     }
 
-    public int CountGroups(IReadOnlyList<DuplicateSet> groups) =>
+    public int CountGroups(IReadOnlyList<Group> groups) =>
         groups.Count(group => group.Files.Any(Contains));
 
     public int CountOutside(IEnumerable<FileInstance> representedFiles)
@@ -103,10 +101,6 @@ public sealed class BerriesSelection
         return selected.Count(key => !represented.Contains(key));
     }
 
-    /// <summary>
-    /// Rebind the selection to a new Working Portrait. Removed files cease to be selected;
-    /// unchanged paths retain selection. Call MovePath before Refresh when a selected file moves.
-    /// </summary>
     internal void Refresh(Portrait portrait)
     {
         filesByPath = portrait.Files.ToDictionary(file => PathKey(file.Path), StringComparer.OrdinalIgnoreCase);

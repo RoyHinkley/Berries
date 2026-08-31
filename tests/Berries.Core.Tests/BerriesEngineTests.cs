@@ -76,7 +76,7 @@ public sealed class BerriesEngineTests
     }
 
     [Fact]
-    public async Task DiscoverDuplicatesAsync_HashesOnlyEqualSizeCandidates_AndFindsOnlyEqualContent()
+    public async Task DiscoverGroupsAsync_HashesOnlyEqualSizeCandidates_AndFindsOnlyEqualContent()
     {
         var root = new FileSystemPath(@"X:\Corpus");
         var paths = new[]
@@ -115,20 +115,20 @@ public sealed class BerriesEngineTests
         var engine = new BerriesEngine(fileSystem);
         var portrait = await engine.BuildInitialPortraitAsync(new Corpus(new[] { new CorpusRoot(root) }));
 
-        var result = await engine.DiscoverDuplicatesAsync(portrait);
+        var result = await engine.DiscoverGroupsAsync(portrait);
 
-        var duplicateSet = Assert.Single(result.DuplicateSets);
-        Assert.Equal(2, duplicateSet.InstanceCount);
-        Assert.Equal(new[] { paths[0], paths[1] }, duplicateSet.Files.Select(file => file.Path));
+        var group = Assert.Single(result.Groups);
+        Assert.Equal(2, group.FileCount);
+        Assert.Equal(new[] { paths[0], paths[1] }, group.Files.Select(file => file.Path));
         Assert.Equal(3, fileSystem.OpenedPaths.Count);
         Assert.DoesNotContain(paths[3], fileSystem.OpenedPaths);
-        Assert.Equal(2, result.DuplicateFileCount);
+        Assert.Equal(2, result.GroupedFileCount);
         Assert.Empty(result.Evictions);
         Assert.Same(portrait, result.Portrait);
     }
 
     [Fact]
-    public async Task DiscoverDuplicatesAsync_EvictsFileOnIoFailure_AndContinues()
+    public async Task DiscoverGroupsAsync_EvictsFileOnIoFailure_AndContinues()
     {
         var root = new FileSystemPath(@"X:\Corpus");
         var a = new FileSystemPath(@"X:\Corpus\a.txt");
@@ -160,19 +160,19 @@ public sealed class BerriesEngineTests
         var engine = new BerriesEngine(fileSystem);
         var portrait = await engine.BuildInitialPortraitAsync(new Corpus(new[] { new CorpusRoot(root) }));
 
-        var result = await engine.DiscoverDuplicatesAsync(portrait);
+        var result = await engine.DiscoverGroupsAsync(portrait);
 
         Assert.DoesNotContain(result.Portrait.Files, file => file.Path == busy);
         Assert.Equal(2, result.Portrait.Files.Count);
         var eviction = Assert.Single(result.Evictions);
         Assert.Equal(busy, eviction.File.Path);
         Assert.Contains("busy", eviction.Reason, StringComparison.OrdinalIgnoreCase);
-        var duplicateSet = Assert.Single(result.DuplicateSets);
-        Assert.Equal(new[] { a, c }, duplicateSet.Files.Select(file => file.Path));
+        var group = Assert.Single(result.Groups);
+        Assert.Equal(new[] { a, c }, group.Files.Select(file => file.Path));
     }
 
     [Fact]
-    public async Task DiscoverDuplicatesAsync_DoesNotHideProgrammingErrors()
+    public async Task DiscoverGroupsAsync_DoesNotHideProgrammingErrors()
     {
         var root = new FileSystemPath(@"X:\Corpus");
         var a = new FileSystemPath(@"X:\Corpus\a.txt");
@@ -201,7 +201,7 @@ public sealed class BerriesEngineTests
         var portrait = await engine.BuildInitialPortraitAsync(new Corpus(new[] { new CorpusRoot(root) }));
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => engine.DiscoverDuplicatesAsync(portrait));
+            () => engine.DiscoverGroupsAsync(portrait));
     }
 
     private sealed class SyntheticFileSystem(
@@ -226,9 +226,7 @@ public sealed class BerriesEngineTests
         {
             var value = NormalizePath(path).Value;
             var separator = value.LastIndexOf('\\');
-            if (separator <= 2)
-                return null;
-
+            if (separator <= 2) return null;
             return new FileSystemPath(value[..separator]);
         }
 
@@ -240,13 +238,9 @@ public sealed class BerriesEngineTests
         public Stream OpenRead(FileSystemPath path)
         {
             OpenedPaths.Add(path);
-
-            if (openFailures.TryGetValue(path, out var failure))
-                throw failure;
-
+            if (openFailures.TryGetValue(path, out var failure)) throw failure;
             if (!contentByPath.TryGetValue(path, out var content))
                 throw new InvalidOperationException($"Unexpected content read: {path}");
-
             return new MemoryStream(content, writable: false);
         }
 
@@ -259,10 +253,7 @@ public sealed class BerriesEngineTests
         {
             var child = NormalizePath(candidate).Value;
             var parent = NormalizePath(ancestor).Value;
-
-            if (StringComparer.OrdinalIgnoreCase.Equals(child, parent))
-                return false;
-
+            if (StringComparer.OrdinalIgnoreCase.Equals(child, parent)) return false;
             return child.StartsWith(parent + "\\", StringComparison.OrdinalIgnoreCase);
         }
 

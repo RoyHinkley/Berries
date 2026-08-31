@@ -4,22 +4,27 @@ using Berries.FileSystem.Abstractions;
 namespace Berries.Core.Planning;
 
 /// <summary>
-/// Executes the concrete filesystem actions compiled from a Working Portrait.
-/// Execution is the physical commit boundary; independent failures are reported
-/// without abandoning unrelated later actions.
+/// Executes concrete filesystem Actions derived from the Working Portrait.
+/// Execute is the physical commit boundary; independent failures are reported
+/// without abandoning unrelated later Actions.
 /// </summary>
-public sealed class ActionPlanExecutor(IFileSystem fileSystem)
+public sealed class FileActionExecutor(IFileSystem fileSystem)
 {
     public int CountPhysicalContentLosses(BerriesSession session)
     {
-        var physicallyDeleted = session.Actions.OfType<DeleteFileAction>().Select(action => action.Path).ToArray();
+        var physicallyDeleted = session.Actions
+            .OfType<DeleteFileAction>()
+            .Select(action => action.Path)
+            .ToArray();
+
         return session.InitialPortrait.Files
             .Where(file => file.Content is not null)
             .GroupBy(file => file.Content!.Value)
-            .Count(group => group.All(file => physicallyDeleted.Any(path => fileSystem.PathsEqual(path, file.Path))));
+            .Count(group => group.All(file =>
+                physicallyDeleted.Any(path => fileSystem.PathsEqual(path, file.Path))));
     }
 
-    public Task<ActionPlanExecutionResult> ExecuteAsync(
+    public Task<FileActionExecutionResult> ExecuteAsync(
         IReadOnlyList<FileAction> actions,
         IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default)
@@ -28,14 +33,14 @@ public sealed class ActionPlanExecutor(IFileSystem fileSystem)
         return Task.Run(() => Execute(snapshot, progress, cancellationToken), cancellationToken);
     }
 
-    private ActionPlanExecutionResult Execute(
+    private FileActionExecutionResult Execute(
         IReadOnlyList<FileAction> actions,
         IProgress<OperationProgress>? progress,
         CancellationToken cancellationToken)
     {
         var completed = 0;
         var skipped = 0;
-        var failures = new List<ActionPlanExecutionFailure>();
+        var failures = new List<FileActionExecutionFailure>();
         var failedMoveDestinations = new List<FileSystemPath>();
         progress?.Report(new OperationProgress("Executing filesystem actions", 0, actions.Count));
 
@@ -43,6 +48,7 @@ public sealed class ActionPlanExecutor(IFileSystem fileSystem)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var action = actions[i];
+
             try
             {
                 switch (action)
@@ -82,13 +88,16 @@ public sealed class ActionPlanExecutor(IFileSystem fileSystem)
             {
                 if (action is MoveFileAction failedMove)
                     failedMoveDestinations.Add(failedMove.Destination);
-                failures.Add(new ActionPlanExecutionFailure(action, ex.Message));
+                failures.Add(new FileActionExecutionFailure(action, ex.Message));
             }
 
-            progress?.Report(new OperationProgress("Executing filesystem actions", i + 1, actions.Count));
+            progress?.Report(new OperationProgress(
+                "Executing filesystem actions",
+                i + 1,
+                actions.Count));
         }
 
-        return new ActionPlanExecutionResult(completed, skipped, failures);
+        return new FileActionExecutionResult(completed, skipped, failures);
     }
 
     private void EnsureParent(FileSystemPath destination)
@@ -99,9 +108,9 @@ public sealed class ActionPlanExecutor(IFileSystem fileSystem)
     }
 }
 
-public sealed record ActionPlanExecutionResult(
+public sealed record FileActionExecutionResult(
     int CompletedCount,
     int SkippedCount,
-    IReadOnlyList<ActionPlanExecutionFailure> Failures);
+    IReadOnlyList<FileActionExecutionFailure> Failures);
 
-public sealed record ActionPlanExecutionFailure(FileAction Action, string Message);
+public sealed record FileActionExecutionFailure(FileAction Action, string Message);

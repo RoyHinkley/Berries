@@ -4,100 +4,124 @@ using Berries.FileSystem.Abstractions;
 
 namespace Berries.Core.Analysis;
 
-/// <summary>Computes inexpensive branch-local statistics independently of BranchPair enumeration.</summary>
+/// <summary>Computes inexpensive Branch-local statistics independently of Branch Pair enumeration.</summary>
 public sealed class BranchStatisticsAnalyzer(IFileSystem fileSystem)
 {
-    public BranchStatisticsResult Analyze(Corpus corpus, Portrait portrait, IReadOnlyList<DuplicateSet> duplicateSets,
-        DuplicateSettlements settlements, IReadOnlyList<DirectoryRecord> duplicateDirectories,
-        CancellationToken cancellationToken = default, IProgress<OperationProgress>? progress = null)
+    public BranchStatisticsResult Analyze(
+        Corpus corpus,
+        Portrait portrait,
+        IReadOnlyList<Group> groups,
+        IReadOnlyList<DirectoryRecord> groupedDirectories,
+        CancellationToken cancellationToken = default,
+        IProgress<OperationProgress>? progress = null)
     {
         var timer = Stopwatch.StartNew();
         var ancestorsByDirectory = new Dictionary<FileSystemPath, IReadOnlyList<FileSystemPath>>();
         var accumulators = new Dictionary<FileSystemPath, Accumulator>();
         var physicalDirectories = portrait.Files.GroupBy(file => file.ParentDirectory).ToArray();
-        var totalWork = (long)physicalDirectories.Length + duplicateDirectories.Count + duplicateSets.Count;
+        var totalWork = (long)physicalDirectories.Length + groupedDirectories.Count + groups.Count;
         long completed = 0;
         progress?.Report(new OperationProgress("Analyzing branches", completed, totalWork));
 
-        foreach (var group in physicalDirectories)
+        foreach (var directoryFiles in physicalDirectories)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var fileCount = group.Count();
-            foreach (var branch in GetAncestorsWithinCorpus(group.Key, corpus, ancestorsByDirectory))
+            var fileCount = directoryFiles.Count();
+            foreach (var branch in GetAncestorsWithinCorpus(directoryFiles.Key, corpus, ancestorsByDirectory))
             {
                 var accumulator = GetAccumulator(accumulators, branch);
-                accumulator.FileCount += fileCount; accumulator.DirectoryCount++;
+                accumulator.FileCount += fileCount;
+                accumulator.DirectoryCount++;
             }
             progress?.Report(new OperationProgress("Analyzing branches", ++completed, totalWork));
         }
 
-        foreach (var directory in duplicateDirectories)
+        foreach (var directory in groupedDirectories)
         {
             cancellationToken.ThrowIfCancellationRequested();
             foreach (var branch in GetAncestorsWithinCorpus(directory.Path, corpus, ancestorsByDirectory))
             {
                 var accumulator = GetAccumulator(accumulators, branch);
-                accumulator.DuplicateFileCount += directory.DuplicateFileCount; accumulator.DuplicateDirectoryCount++;
+                accumulator.GroupedFileCount += directory.GroupedFileCount;
+                accumulator.GroupedDirectoryCount++;
             }
             progress?.Report(new OperationProgress("Analyzing branches", ++completed, totalWork));
         }
 
-        foreach (var duplicateSet in duplicateSets)
+        foreach (var group in groups)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (settlements.HasUnresolvedRelationship(duplicateSet))
-            {
-                var participatingDirectories = GetUnresolvedParticipatingDirectories(duplicateSet, settlements);
-                var touchedBranches = new HashSet<FileSystemPath>();
-                foreach (var directory in participatingDirectories)
-                    foreach (var branch in GetAncestorsWithinCorpus(directory, corpus, ancestorsByDirectory)) touchedBranches.Add(branch);
-                foreach (var branch in touchedBranches) GetAccumulator(accumulators, branch).DuplicateContentCount++;
-            }
+            var touchedBranches = new HashSet<FileSystemPath>();
+            foreach (var directory in group.Files.Select(file => file.ParentDirectory).Distinct())
+            foreach (var branch in GetAncestorsWithinCorpus(directory, corpus, ancestorsByDirectory))
+                touchedBranches.Add(branch);
+
+            foreach (var branch in touchedBranches)
+                GetAccumulator(accumulators, branch).GroupCount++;
+
             progress?.Report(new OperationProgress("Analyzing branches", ++completed, totalWork));
         }
 
-        var branches = accumulators.Where(item => item.Value.DuplicateContentCount > 0).Select(item =>
-        {
-            var parent = fileSystem.GetParentDirectory(item.Key);
-            if (parent is not null && !accumulators.ContainsKey(parent.Value)) parent = null;
-            return new BranchRecord(item.Key, parent, item.Value.FileCount, item.Value.DirectoryCount,
-                item.Value.DuplicateFileCount, item.Value.DuplicateContentCount, item.Value.DuplicateDirectoryCount);
-        }).OrderByDescending(branch => branch.DuplicateContentCount).ThenByDescending(branch => branch.DuplicateFileCount)
-          .ThenBy(branch => branch.Path.Value, StringComparer.Ordinal).ToArray();
+        var branches = accumulators
+            .Where(item => item.Value.GroupCount > 0)
+            .Select(item =>
+            {
+                var parent = fileSystem.GetParentDirectory(item.Key);
+                if (parent is not null && !accumulators.ContainsKey(parent.Value)) parent = null;
+                return new BranchRecord(
+                    item.Key,
+                    parent,
+                    item.Value.FileCount,
+                    item.Value.DirectoryCount,
+                    item.Value.GroupedFileCount,
+                    item.Value.GroupCount,
+                    item.Value.GroupedDirectoryCount);
+            })
+            .OrderByDescending(branch => branch.GroupCount)
+            .ThenByDescending(branch => branch.GroupedFileCount)
+            .ThenBy(branch => branch.Path.Value, StringComparer.Ordinal)
+            .ToArray();
+
         timer.Stop();
         return new BranchStatisticsResult(branches, timer.Elapsed);
     }
 
-    private static IReadOnlyCollection<FileSystemPath> GetUnresolvedParticipatingDirectories(DuplicateSet duplicateSet, DuplicateSettlements settlements)
-    {
-        if (settlements.AcceptedPairCount == 0) return duplicateSet.Files.Select(file => file.ParentDirectory).Distinct().ToArray();
-        var directories = new HashSet<FileSystemPath>(); var files = duplicateSet.Files;
-        for (var firstIndex = 0; firstIndex < files.Count - 1; firstIndex++)
-        for (var secondIndex = firstIndex + 1; secondIndex < files.Count; secondIndex++)
-        {
-            if (settlements.IsPairAccepted(duplicateSet.Content, files[firstIndex], files[secondIndex])) continue;
-            directories.Add(files[firstIndex].ParentDirectory); directories.Add(files[secondIndex].ParentDirectory);
-        }
-        return directories;
-    }
-
-    private IReadOnlyList<FileSystemPath> GetAncestorsWithinCorpus(FileSystemPath directory, Corpus corpus, IDictionary<FileSystemPath, IReadOnlyList<FileSystemPath>> cache)
+    private IReadOnlyList<FileSystemPath> GetAncestorsWithinCorpus(
+        FileSystemPath directory,
+        Corpus corpus,
+        IDictionary<FileSystemPath, IReadOnlyList<FileSystemPath>> cache)
     {
         if (cache.TryGetValue(directory, out var cached)) return cached;
-        var corpusRoot = corpus.Roots.Select(root => root.Path).SingleOrDefault(root => fileSystem.PathsEqual(directory, root) || fileSystem.IsDescendant(directory, root));
-        if (corpusRoot.Value is null) throw new InvalidOperationException($"Directory is outside the corpus: {directory}");
-        var ancestors = new List<FileSystemPath>(); var current = directory;
+
+        var corpusRoot = corpus.Roots
+            .Select(root => root.Path)
+            .SingleOrDefault(root => fileSystem.PathsEqual(directory, root) || fileSystem.IsDescendant(directory, root));
+        if (corpusRoot.Value is null)
+            throw new InvalidOperationException($"Directory is outside the corpus: {directory}");
+
+        var ancestors = new List<FileSystemPath>();
+        var current = directory;
         while (true)
         {
-            ancestors.Add(current); if (fileSystem.PathsEqual(current, corpusRoot)) break;
-            current = fileSystem.GetParentDirectory(current) ?? throw new InvalidOperationException($"Could not reach corpus root {corpusRoot} while walking ancestors of {directory}.");
+            ancestors.Add(current);
+            if (fileSystem.PathsEqual(current, corpusRoot)) break;
+            current = fileSystem.GetParentDirectory(current)
+                ?? throw new InvalidOperationException($"Could not reach corpus root {corpusRoot} while walking ancestors of {directory}.");
         }
-        cache[directory] = ancestors; return ancestors;
+
+        cache[directory] = ancestors;
+        return ancestors;
     }
 
-    private static Accumulator GetAccumulator(IDictionary<FileSystemPath, Accumulator> accumulators, FileSystemPath path)
+    private static Accumulator GetAccumulator(
+        IDictionary<FileSystemPath, Accumulator> accumulators,
+        FileSystemPath path)
     {
-        if (!accumulators.TryGetValue(path, out var accumulator)) { accumulator = new Accumulator(); accumulators[path] = accumulator; }
+        if (!accumulators.TryGetValue(path, out var accumulator))
+        {
+            accumulator = new Accumulator();
+            accumulators[path] = accumulator;
+        }
         return accumulator;
     }
 
@@ -105,8 +129,8 @@ public sealed class BranchStatisticsAnalyzer(IFileSystem fileSystem)
     {
         public int FileCount { get; set; }
         public int DirectoryCount { get; set; }
-        public int DuplicateFileCount { get; set; }
-        public int DuplicateContentCount { get; set; }
-        public int DuplicateDirectoryCount { get; set; }
+        public int GroupedFileCount { get; set; }
+        public int GroupCount { get; set; }
+        public int GroupedDirectoryCount { get; set; }
     }
 }

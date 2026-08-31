@@ -144,13 +144,13 @@ public partial class MainWindow
         Berries.FileSystem.Abstractions.FileSystemPath path,
         IReadOnlyList<FileInstance> files)
     {
-        if (currentProjection is not { IsPair: true, Primary: { } primary, Secondary: { } secondary } projection)
+        if (currentProjection is not { IsPair: true, Primary: { } primary, Secondary: { } secondary } current)
             return;
 
         var firstPath = side == PairSide.Left ? path : primary;
         var secondPath = side == PairSide.Right ? path : secondary;
-        var firstFiles = side == PairSide.Left ? DistinctFilesFast(files) : projection.PrimaryFiles ?? [];
-        var secondFiles = side == PairSide.Right ? DistinctFilesFast(files) : projection.SecondaryFiles ?? [];
-        SetPairProjectionState(projection.Kind, firstPath, firstFiles, secondPath, secondFiles);
+        var firstFiles = side == PairSide.Left ? DistinctFilesFast(files) : current.PrimaryFiles ?? [];
+        var secondFiles = side == PairSide.Right ? DistinctFilesFast(files) : current.SecondaryFiles ?? [];
+        SetPairProjectionState(current.Kind, firstPath, firstFiles, secondPath, secondFiles);
     }
 }

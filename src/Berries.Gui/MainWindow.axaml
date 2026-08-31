@@ -51,12 +51,12 @@
                     <MenuItem x:Name="PivotBranchMenu" Header="Branch" Click="PivotBranch_Click" IsEnabled="False" />
                     <MenuItem x:Name="PivotBestDirectoryPairMenu" Header="Best Directory Pair" Click="PivotBestDirectoryPair_Click" IsEnabled="False" />
                     <MenuItem x:Name="PivotBestBranchPairMenu" Header="Best Branch Pair" Click="PivotBestBranchPair_Click" IsEnabled="False" />
-                    <MenuItem x:Name="PivotBranchPairMenu" Header="Current Suggested Branch Pair" Click="PivotSuggestedBranchPairWithBreadcrumbs_Click" IsEnabled="False" />
+                    <MenuItem x:Name="PivotBranchPairMenu" Header="Current Suggested Branch Pair" Click="PivotSuggestedBranchPair_Click" IsEnabled="False" />
                   </MenuFlyout>
                 </Button.Flyout>
               </Button>
               <Button x:Name="ForwardButton" Content="Forward" IsEnabled="False" />
-              <Button x:Name="SuggestCaseButton" Content="Suggest" Click="SuggestCaseWithBreadcrumbs_Click" IsEnabled="False" />
+              <Button x:Name="SuggestButton" Content="Suggest" Click="Suggest_Click" IsEnabled="False" />
             </StackPanel>
 
             <Button x:Name="InvertButton" Grid.Column="2" Content="Invert ▾" IsEnabled="False">

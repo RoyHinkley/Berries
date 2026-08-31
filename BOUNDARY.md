@@ -1,125 +1,96 @@
 # Berries Problem Boundary — Empirical Findings
 
-This document records empirical findings that shaped Berries' current practical boundary. It is research context, not a competing workflow specification. Governing behavior is defined in `MODEL.md`, `ANALYSIS.md`, and `WORKFLOW.md`.
+This document records empirical findings about Berries' practical problem boundary. It is research context, not a competing workflow specification. Governing behavior is defined in `MODEL.md`, `ANALYSIS.md`, and `WORKFLOW.md`.
 
 ## What the experiments established
 
-Berries reliably discovers real duplicate structure. The difficult question is not whether files are byte-identical but which duplication is useful for the user to act on.
+Berries reliably discovers real identical-content Groups. The difficult question is not whether files are byte-identical but which duplication is useful for the user to act on.
 
-Real corpora contain both user-managed organization and application/generated structure. Exact duplicate identity alone does not explain why copies exist.
+Real corpora contain both user-managed organization and application/generated structure. Content identity alone does not explain why copies exist.
 
-Developer/source corpora were intentionally useful stress tests because they contain repositories, generated output, package material, copied source trees, saved web assets, and many repeated support files. They exposed analysis failure modes early.
+Developer/source corpora were useful stress tests because they contain repositories, generated output, package material, copied source trees, saved web assets, and many repeated support files. They exposed analysis failure modes early.
 
-## File-centric duplication can manufacture container noise
+## Group-level duplication can manufacture structural noise
 
-Widely repeated content can induce many Directory Pairs and apparent Branch relationships even when the containing directories do not represent one coherent user question.
+Widely repeated Groups can induce many Directory Pairs and apparent Branch relationships even when the containing Directories do not represent one coherent user problem.
 
-Earlier experiments with a special distributed-duplicate checklist demonstrated this dramatically: resolving or removing a relatively small number of repeated contents could collapse a large amount of downstream structural evidence.
+Early experiments showed that excluding a relatively small number of diffusely repeated files could collapse a large amount of downstream structural evidence.
 
-The lasting lesson is not that experimental checklist. The current Explorer does not use it. The lasting lessons are:
+The lasting lessons are:
 
-    file-centric and container-centric duplication are complementary viewpoints
+    Group-centric and container-centric duplication are complementary viewpoints
 
 and:
 
-    low-level repeated content can manufacture weak higher-level structure
-
-The current Group projection plus ordinary Exclude gives the user a general way to remove such material from the Working Portrait when it should not participate in analysis.
+    low-level repeated Groups can manufacture weak higher-level structure
 
 ## Application-managed/generated material
 
-Observed examples included Git hook samples and object storage, build outputs, DLL/PDB groups, UUID-like generated artifacts, saved-web-page support files, package/runtime trees, and other repeated infrastructure.
+Generated and application-managed material can be genuinely duplicated and can reveal real ancestry among Branches without being useful deletion targets.
 
-These can be genuine duplicate files and can even reveal real ancestry/relationships among branches. That does not make them automatically useful deletion targets.
-
-Berries therefore avoids producer-specific semantic rules. The practical boundary is instead controlled by Corpus choice and exclusion:
-
-    selected roots define what is scanned
-    Berries.config [exclude] filters known unwanted paths during acquisition
-    interactive Exclude removes files from the Working Portrait during a session
-
-No additional "analytically visible but protected" taxonomy is currently implemented.
+Rather than encode producer-specific knowledge, Berries gives the user direct control over the logical Corpus through selected roots and Exclude.
 
 ## User-managed material remains the clearest target
 
-Berries is particularly well matched to accumulated user-managed trees such as:
+Berries is particularly well matched to accumulated user-managed trees such as documents, photographs, downloads, old-machine copies, backups, archives, migrations, partial moves, reorganized trees, and staging/import areas.
 
-    documents and photographs
-    downloads
-    old machine copies
-    backups and archives
-    migrations
-    partial moves
-    reorganized directory trees
-    staging/import areas
-
-Here the user is the authority on organization, and duplicate relationships can support useful explicit operations such as the current source/destination Move behavior.
+Here the user is the authority on organization, and Group relationships can support coherent structural dispositions.
 
 ## Structural discovery findings
 
-Exhaustive Branch-Pair enumeration is unnecessary to exploit structural evidence. Large-corpus experiments showed combinatorial growth without proportional user benefit.
+Exhaustive Branch Pair enumeration is unnecessary. Large-corpus experiments showed combinatorial growth without proportional user benefit.
 
-The current practical alternative is:
+Cheap Branch statistics plus targeted Seed/Counterpart search repeatedly surfaced recognizable high-value structures while remaining tractable.
 
-    direct Directory evidence
-    first-class Branch statistics
-    bounded Branch seed ranking
-    targeted counterpart search
-    on-demand best-counterpart search for a selected Branch
+The earliest "leverage" idea—maximize duplicate instances addressed by one Case—was useful but incomplete. Very broad scopes can have high resolving power while presenting an unclear question. A nearby narrower Branch Pair can be easier for the user to recognize and dispose of coherently.
 
-This repeatedly surfaced recognizable high-value structures while remaining tractable on much larger corpora.
+This led to the current two-stage discovery idea:
 
-Boundary precision also proved less important than initially feared. A mathematically broader counterpart can differ from an intuitively neat child boundary by little duplicated content and still support the same useful user operation. Ranking should not become substantially more complicated merely to perfect such boundaries unless real Explorer use shows a resolution difference.
+    promising local Branches -> Seeds
+    strong relationships to those Branches -> Counterparts / candidate Branch Pairs
+
+Several Seeds must be evaluated before choosing a Suggestion because the best Branch Pair often does not come from the highest-ranked Seed.
+
+## Rapid problem reduction
+
+A central empirical result is that useful Case-level decisions can reduce the remaining problem extremely quickly. Large corpora with tens of thousands of duplicate instances could often be potentially resolved through only a handful of structural Cases.
+
+This supports repeated local discovery and re-analysis rather than exhaustive global planning.
+
+## Explorer rather than wizard
+
+A wizard-like sequence proved impractical. Suggested scopes can be close to the useful human question without being exactly right.
+
+The Explorer therefore treats Suggestions as attention aids. The user can broaden or narrow scopes, Pivot among projections, inspect nearby evidence, and follow recognizable structure before acting.
 
 ## Current practical boundary
 
-The current implementation can be summarized as follows:
+1. Berries scans the roots the user chooses.
+2. Configuration or interactive Exclude removes material from consideration.
+3. Group-oriented resolution operations target current duplicate structure.
+4. Unique files remain modeled because they affect structural statistics and can constrain valid operations.
+5. General rename and arbitrary filesystem reorganization are out of scope.
+6. Berries does not require semantic knowledge of Git, build systems, package managers, browsers, or other producers.
+7. Physical filesystem modification is deferred until Execute.
 
-1. Berries scans the disjoint roots the user chooses.
-2. Configuration exclusion can remove known paths before they enter the session.
-3. Duplicate-resolution commands target duplicate files represented in current Groups.
-4. Unique files remain in the Portrait because they can constrain valid operations such as Move destination paths; they are not general maintenance targets.
-5. Interactive Exclude/Delete/Move alter the virtual Working Portrait immediately.
-6. Rename and general unique-file reorganization are outside scope.
-7. Berries does not require semantic knowledge of Git, build systems, package managers, browsers, or other producers.
-8. Structural analysis is deliberately targeted rather than exhaustive.
-9. Physical filesystem changes occur only at Execute.
+## Cases, Situations, and dispositions
 
-This boundary can widen later if real use demonstrates a coherent need. It should not widen merely because another detectable filesystem phenomenon exists.
+Case remains a valid domain concept: an objective bounded set of current-Portrait files containing duplication and considered together for one coherent disposition. The boundary limits disposition authority.
 
-## Situation-catalogue implications
+Situation remains useful optional semantic vocabulary for recognizable human histories such as backup, migration, reorganization, archive, and staging. Berries does not require Situation classification before direct Explorer operations.
 
-The discovery of a new producer-specific artifact does not justify a new Situation.
+The old mandatory Situation -> Resolution -> Disposition workflow machinery is not part of the current UI, but the semantic research remains relevant to judging whether a Case is comprehensible and what natural actions it evokes.
 
-`SITUATIONS.md` is now explicitly retained research rather than current workflow. The useful historical criterion remains:
+## Unique-file question
 
-    A useful Situation evokes one or more natural resolutions that can be
-    mapped to fully specified operations/outcomes.
-
-But the current Explorer does not require Situation -> Resolution -> Disposition classification. When the user's intent is clear, Exclude/Delete/Move expresses it directly.
-
-## Current implementation consequences
-
-Several important product choices came directly from the empirical work:
-
-- the UI says Group rather than exposing internal DuplicateSet terminology;
-- Group, Directory, Branch, Directory Pair, Branch Pair, and Corpus Roots are projections over one Working Portrait rather than separate workflow stages;
-- Suggest is an attention aid, not a mandatory Case queue;
-- comprehensive Branch-Pair generation was dropped in favor of targeted search;
-- the Initial/Working Portrait retains unique files for operational constraints even though ordinary Explorer operations remain duplicate-oriented;
-- broad derived-analysis invalidation is currently preferred over complicated incremental bookkeeping;
-- after portrait operations, expensive derived analysis can refresh in the background without taking over the current Explorer view.
+Earlier structural Cases could include unique files within their bounds. The current Portrait and statistical measures also retain unique files. Whether unique files should remain members of Cases is unresolved and must be reviewed separately; it should not be decided indirectly through terminology cleanup.
 
 ## Questions intentionally left empirical
 
-The following remain appropriate to learn from real use rather than solve speculatively:
-
-- How often semantic Situation labels would add value beyond direct operations.
-- Whether recurring interactive exclusions motivate richer persistent configuration/rules.
-- Whether same-directory duplication needs specialized presentation beyond Group/Directory views.
-- Whether any application-managed material needs a future "visible but protected" state rather than simple exclusion.
-- Whether the current Suggest/targeted-counterpart heuristics consistently find useful work across varied non-source corpora.
-- Whether saved sessions are valuable enough to justify persistence.
-- Whether analysis recomputation should become independently lazy/validity-driven rather than the current coarse invalidation and refresh model.
-
-These are empirical development questions, not contradictions in the current implementation.
+- whether recurring Exclude patterns motivate richer configuration/rules;
+- whether same-Directory copies need specialized presentation;
+- whether semantic Situation hints add practical value;
+- whether current Suggest heuristics consistently find useful work across varied corpora;
+- whether unique files should remain members of structural Cases and how their counts should influence ranking;
+- whether saved sessions are valuable enough to justify persistence;
+- whether analysis recomputation should become independently validity/demand driven.

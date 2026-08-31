@@ -20,7 +20,8 @@ public partial class MainWindow
     {
         var files = projection.Files.Select(item => item.File).ToArray();
         var root = new ExplorerNode(projection.Directory.Value, files, projection.Directory);
-        foreach (var item in projection.Files) root.Children.Add(new ExplorerNode(item.Label, [item.File], item.File.ParentDirectory));
+        foreach (var item in projection.Files)
+            root.Children.Add(new ExplorerNode(item.Label, [item.File], item.File.ParentDirectory));
         return root;
     }
 
@@ -31,12 +32,22 @@ public partial class MainWindow
         try
         {
             var node = await BuildDirectoryExplorerNodeAsync(directory);
-            PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
+            PairExplorer.IsVisible = false;
+            SingleExplorer.IsVisible = true;
             SetProjectionState(ProjectionKind.Directory, node.Files, directory);
-            ProjectionTitle.Text = "Directory"; BuildBreadcrumbs(directory); ExplorerTree.ItemsSource = new[] { node };
-            EndProgress("Directory"); SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
+            ProjectionTitle.Text = "Directory";
+            BuildBreadcrumbs(directory);
+            ExplorerTree.ItemsSource = new[] { node };
+            EndProgress("Directory");
+            SynchronizeVisibleSelection();
+            UpdateSelectionSummary();
+            UpdateCapabilities();
+            UpdatePivotCapabilities();
         }
-        catch (Exception ex) { EndProgress("Could not open Directory: " + ex.Message); }
+        catch (Exception ex)
+        {
+            EndProgress("Could not open Directory: " + ex.Message);
+        }
     }
 
     private async Task ShowDirectoryPairProjectionAsync(Berries.Core.Analysis.DirectoryPair pair)
@@ -45,46 +56,79 @@ public partial class MainWindow
         BeginProgress("Opening Directory Pair...", true);
         try
         {
-            var leftTask = BuildDirectoryExplorerNodeAsync(pair.First); var rightTask = BuildDirectoryExplorerNodeAsync(pair.Second);
+            var leftTask = BuildDirectoryExplorerNodeAsync(pair.First);
+            var rightTask = BuildDirectoryExplorerNodeAsync(pair.Second);
             await Task.WhenAll(leftTask, rightTask);
-            var left = await leftTask; var right = await rightTask;
-            PairExplorer.IsVisible = true; SingleExplorer.IsVisible = false;
+            var left = await leftTask;
+            var right = await rightTask;
+            PairExplorer.IsVisible = true;
+            SingleExplorer.IsVisible = false;
             SetPairProjectionState(ProjectionKind.DirectoryPair, pair.First, left.Files, pair.Second, right.Files);
-            BreadcrumbPanel.IsVisible = false; BreadcrumbPanel.Children.Clear();
-            ProjectionTitle.Text = $"Directory Pair — {pair.SharedContentCount:N0} shared Groups";
+            BreadcrumbPanel.IsVisible = false;
+            BreadcrumbPanel.Children.Clear();
+            ProjectionTitle.Text = $"Directory Pair — {pair.SharedGroupCount:N0} shared Groups";
             BuildPairBreadcrumbs(pair.First, LeftScopeBreadcrumbs, false, "Directory", PairSide.Left);
             BuildPairBreadcrumbs(pair.Second, RightScopeBreadcrumbs, false, "Directory", PairSide.Right);
-            LeftTree.ItemsSource = new[] { left }; RightTree.ItemsSource = new[] { right };
-            EndProgress($"Directory Pair — {pair.SharedContentCount:N0} shared Groups.");
-            SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
+            LeftTree.ItemsSource = new[] { left };
+            RightTree.ItemsSource = new[] { right };
+            EndProgress($"Directory Pair — {pair.SharedGroupCount:N0} shared Groups.");
+            SynchronizeVisibleSelection();
+            UpdateSelectionSummary();
+            UpdateCapabilities();
+            UpdatePivotCapabilities();
         }
-        catch (Exception ex) { EndProgress("Could not open Directory Pair: " + ex.Message); }
+        catch (Exception ex)
+        {
+            EndProgress("Could not open Directory Pair: " + ex.Message);
+        }
     }
 
     private async Task NavigateDirectoryPairBreadcrumbAsync(BreadcrumbTarget target)
     {
         var session = controller.Session;
-        if (session is null || currentProjection is not { Primary: { } primary, Secondary: { } secondary } || target.Side is null) return;
+        if (session is null
+            || currentProjection is not { Primary: { } primary, Secondary: { } secondary }
+            || target.Side is null)
+            return;
+
         var side = target.Side.Value;
         var first = side == PairSide.Left ? target.Path : primary;
         var second = side == PairSide.Right ? target.Path : secondary;
         BeginProgress("Opening Directory...", true);
         try
         {
-            var nodeTask = BuildDirectoryExplorerNodeAsync(target.Path); var sharedTask = Projections.SharedGroupCountAsync(session, first, second, includeDescendants: false);
-            await Task.WhenAll(nodeTask, sharedTask); var node = await nodeTask;
+            var nodeTask = BuildDirectoryExplorerNodeAsync(target.Path);
+            var sharedTask = Projections.SharedGroupCountAsync(
+                session,
+                first,
+                second,
+                includeDescendants: false);
+            await Task.WhenAll(nodeTask, sharedTask);
+            var node = await nodeTask;
+
             if (side == PairSide.Left)
             {
-                LeftTree.ItemsSource = new[] { node }; BuildPairBreadcrumbs(target.Path, LeftScopeBreadcrumbs, false, "Directory", PairSide.Left);
+                LeftTree.ItemsSource = new[] { node };
+                BuildPairBreadcrumbs(target.Path, LeftScopeBreadcrumbs, false, "Directory", PairSide.Left);
             }
             else
             {
-                RightTree.ItemsSource = new[] { node }; BuildPairBreadcrumbs(target.Path, RightScopeBreadcrumbs, false, "Directory", PairSide.Right);
+                RightTree.ItemsSource = new[] { node };
+                BuildPairBreadcrumbs(target.Path, RightScopeBreadcrumbs, false, "Directory", PairSide.Right);
             }
+
             UpdatePairProjectionSide(side, target.Path, node.Files);
-            var shared = await sharedTask; ProjectionTitle.Text = $"Directory Pair — {shared:N0} shared Groups";
-            EndProgress($"Directory Pair — {shared:N0} shared Groups."); SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
+            var shared = await sharedTask;
+            ProjectionTitle.Text = $"Directory Pair — {shared:N0} shared Groups";
+            EndProgress($"Directory Pair — {shared:N0} shared Groups.");
+            SynchronizeVisibleSelection();
+            UpdateSelectionSummary();
+            UpdateCapabilities();
+            UpdatePivotCapabilities();
         }
-        catch (Exception ex) { EndProgress("Could not open Directory: " + ex.Message); }
+        catch (Exception ex)
+        {
+            EndProgress("Could not open Directory: " + ex.Message);
+        }
     }
 }
