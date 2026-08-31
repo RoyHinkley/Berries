@@ -49,18 +49,29 @@ Group discovery:
 3. hashes candidates with SHA-256;
 4. groups equal hashes;
 5. retains groups containing at least two files as Groups;
-6. attaches ContentId to grouped files in the session Portrait.
+6. attaches ContentId to grouped files;
+7. counts files that belong to no Group by physical Directory;
+8. removes those unique `FileInstance`s before constructing the session Portrait.
 
 Expected read failures (`IOException`, `UnauthorizedAccessException`, `SecurityException`) evict the affected file from the session. Programming failures propagate.
+
+The retained unique counts are fixed for the session. A file that began in a Group and later becomes the sole surviving copy remains a Portrait file; it is not reclassified into the fixed unique population.
 
 ## Directory analysis
 
 `DirectoryRecord` contains direct-Directory statistics:
 
     Path
-    FileCount
+    UniqueFileCount
+    PortraitFileCount
     GroupedFileCount
     GroupCount
+
+with:
+
+    FileCount = UniqueFileCount + PortraitFileCount
+
+`PortraitFileCount` is the current population retained in the Working Portrait. `GroupedFileCount` is the subset currently belonging to active Groups, so the two values intentionally differ after a Group collapses to one surviving file.
 
 `DirectoryPair` describes two exact Directories sharing Groups directly:
 
@@ -76,11 +87,18 @@ Expected read failures (`IOException`, `UnauthorizedAccessException`, `SecurityE
 
     Path
     ParentPath
-    FileCount
+    UniqueFileCount
+    PortraitFileCount
     DirectoryCount
     GroupedFileCount
     GroupCount
     GroupedDirectoryCount
+
+with:
+
+    FileCount = UniqueFileCount + PortraitFileCount
+
+`UniqueFileCount` is accumulated from the fixed per-Directory initial unique counts. `PortraitFileCount` is accumulated from the current Working Portrait. This preserves the original total-file denominator used by Seed concentration while allowing unique `FileInstance`s to be discarded.
 
 `GroupCount` is distinct across the entire Branch. These statistics are cheap enough to use as the first stage of targeted structural discovery.
 
@@ -149,7 +167,7 @@ A `BranchPairSuggestion` contains the Seed used to reach a relationship and its 
 
 A Suggestion is not necessarily the final Case boundary. It is a promising place to begin looking. Pair breadcrumbs and Pivot let the user broaden or narrow scope, inspect related structure, and arrive at a more comprehensible Case before acting.
 
-Future Suggestion sources may include strong Group-centric or same-Directory signals, but they should enter through the same Explorer rather than create special wizard stages.
+The terminal Suggestions product is intentionally broader than the current Branch-Pair-only producer. Future work may fold Groups, Directories, Directory Pairs, and Branch Pairs into the same presentation sequence and cull diminishing-return Suggestions.
 
 ## On-demand best Branch Pair
 
@@ -175,31 +193,39 @@ This observation has several architectural consequences:
 
 `Berries.Projection` turns those facts into UI-independent projection models. `ProjectionState` records presentation/navigation state only; it is not a Case.
 
-## Derived analysis after portrait operations
+## Dependency-driven background analysis
 
-Exclude/Delete/Move immediately rebuild the Working Portrait and current Groups. Directory analysis, Branch statistics, and Suggestions then become stale.
+The primary scan ends once Groups are established, unique counts are retained, unique `FileInstance`s are pruned, and `BerriesSession` exists. Derived analysis is then scheduled in the background.
 
-Current behavior:
+Current dependency chain:
 
-1. a portrait command changes `BerriesSession`;
-2. `BerriesApplication` invalidates the derived result objects;
-3. the GUI immediately refreshes the visible projection;
-4. Directory analysis, Branch statistics, and Suggestion discovery recompute in the background;
-5. completed results restore capabilities such as Suggest.
+    Working Portrait + Groups + retained unique counts
+        -> Directory analysis / Directory Pairs
+        -> Branch statistics
+        -> Suggestions
+
+Each derived result is managed by `AnalysisProduct<T>`, which retains:
+
+    latest completed result
+    result generation
+    running generation
+    cancellation for the active run
+
+A result is valid only when its generation equals the current `PortraitGeneration`. Old completed results may remain stored after becoming stale, but ordinary decision-facing application properties expose only current-generation results.
+
+Exclude/Delete/Move/Undo are serialized by `BerriesApplication`. A successful portrait mutation increments `PortraitGeneration`, requests cancellation of obsolete analysis, and schedules the dependency chain for the new generation.
+
+Analyzers run against captured Portrait/Group references for one generation. Correctness does not depend on immediate cancellation: a stale computation is discarded at publication if its generation is no longer current.
+
+`RefreshAnalysisAsync()` remains as an awaitable synchronization point for callers that require the complete current chain; it is no longer the owner of the analysis lifecycle.
 
 Known ContentId values are not reread or rehashed after virtual portrait operations.
-
-The initial scan is still sequential through derived analysis. A more explicit dependency/validity model remains the next architectural topic after terminology cleanup.
-
-## Unique-file question
-
-The current structural statistics include ordinary `FileCount`, so unique files influence concentration measures even though they are not Group-resolution targets. Earlier Case definitions also allowed unique files within structural Case bounds.
-
-Whether unique files should remain Case members is unresolved. Do not remove them from the model or ranking mathematics merely as a terminology cleanup; their analytical role must be evaluated separately.
 
 ## Performance lessons retained
 
 - Group-centric and container-centric views are complementary.
+- Unique `FileInstance`s are unnecessary after their structural population counts have been captured.
+- Repeated Portrait traversals should scale with the remaining duplicate-resolution problem where practical.
 - Repeated low-level Groups can manufacture weak higher-level structure.
 - Branch statistics are cheap and useful before relationship search.
 - Seed priority and Branch Pair quality are distinct measurements.
