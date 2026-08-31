@@ -83,27 +83,38 @@ public partial class MainWindow
         }
     }
 
-    private void PivotSelectedContent_Click(object? sender, RoutedEventArgs e)
+    private async void PivotSelectedContent_Click(object? sender, RoutedEventArgs e)
     {
         var session = controller.Session;
         if (session is null) return;
-        var groups = Projections.GroupsForSelection(session);
-        if (groups.Count == 0)
+        BeginProgress("Building selected Groups view...", true);
+        try
         {
-            ShowContentProjection();
-            return;
-        }
+            var groups = await Projections.GroupsForSelectionAsync(
+                session,
+                new Progress<OperationProgress>(ShowAnalysisProgress));
+            if (groups.Count == 0)
+            {
+                await ShowContentProjectionAsync();
+                return;
+            }
 
-        PairExplorer.IsVisible = false;
-        SingleExplorer.IsVisible = true;
-        SetProjectionState(ProjectionKind.Groups, groups.SelectMany(group => group.Files));
-        BreadcrumbPanel.IsVisible = false;
-        BreadcrumbPanel.Children.Clear();
-        ProjectionTitle.Text = groups.Count == 1 ? "Group" : $"Groups — {groups.Count:N0} selected";
-        ExplorerTree.ItemsSource = groups.Select(BuildGroupNode).ToArray();
-        SynchronizeVisibleSelection();
-        UpdateSelectionSummary();
-        UpdateCapabilities();
+            PairExplorer.IsVisible = false;
+            SingleExplorer.IsVisible = true;
+            SetProjectionState(ProjectionKind.Groups, groups.SelectMany(group => group.Files));
+            BreadcrumbPanel.IsVisible = false;
+            BreadcrumbPanel.Children.Clear();
+            ProjectionTitle.Text = groups.Count == 1 ? "Group" : $"Groups — {groups.Count:N0} selected";
+            ExplorerTree.ItemsSource = groups.Select(BuildGroupNode).ToArray();
+            EndProgress(ProjectionTitle.Text ?? "Groups");
+            SynchronizeVisibleSelection();
+            UpdateSelectionSummary();
+            UpdateCapabilities();
+        }
+        catch (Exception ex)
+        {
+            EndProgress("Could not build Groups view: " + ex.Message);
+        }
     }
 
     private static ExplorerNode BuildGroupNode(GroupProjection projection)
