@@ -10,7 +10,7 @@ public partial class MainWindow
 {
     private ExplorerNode? focusedNode;
     private bool synchronizingSelection;
-    private ProjectionState? currentProjection;
+    private Case? currentProjection;
 
     private void ExplorerNode_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -116,7 +116,7 @@ public partial class MainWindow
             return;
         }
 
-        currentProjection = new ProjectionState(kind, represented, primary, secondary);
+        currentProjection = new Case(kind, represented, primary, secondary);
         focusedNode = null;
     }
 
@@ -129,7 +129,7 @@ public partial class MainWindow
     {
         var first = DistinctFilesFast(primaryFiles);
         var second = DistinctFilesFast(secondaryFiles);
-        currentProjection = new ProjectionState(
+        currentProjection = new Case(
             kind,
             DistinctFilesFast(first.Concat(second)),
             primary,
