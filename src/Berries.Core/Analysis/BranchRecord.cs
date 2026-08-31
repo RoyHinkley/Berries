@@ -5,8 +5,16 @@ namespace Berries.Core.Analysis;
 public sealed record BranchRecord(
     FileSystemPath Path,
     FileSystemPath? ParentPath,
-    int FileCount,
+    int UniqueFileCount,
+    int PortraitFileCount,
     int DirectoryCount,
     int GroupedFileCount,
     int GroupCount,
-    int GroupedDirectoryCount);
+    int GroupedDirectoryCount)
+{
+    /// <summary>
+    /// Current total file population represented by this Branch: initial unique files
+    /// plus files still present in the Working Portrait.
+    /// </summary>
+    public int FileCount => UniqueFileCount + PortraitFileCount;
+}
