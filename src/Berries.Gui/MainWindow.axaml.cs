@@ -142,16 +142,52 @@ public partial class MainWindow : Window
     {
         var session = controller.Session;
         if (session is null) return;
-        BeginProgress("Building Groups view...", true);
-        var groups = await Projections.GroupsAsync(
-            session,
-            new Progress<OperationProgress>(ShowAnalysisProgress));
-        PairExplorer.IsVisible = false;
-        SingleExplorer.IsVisible = true;
-        SetProjectionState(ProjectionKind.Groups, groups.SelectMany(group => group.Files));
-        ProjectionTitle.Text = "Groups";
-        ExplorerTree.ItemsSource = groups.Select(BuildGroupNode).ToArray();
-        UpdateCapabilities();
+
+        var operation = BeginNavigation("Building Groups view...", true);
+        try
+        {
+            var groups = await Projections.GroupsAsync(
+                session,
+                new Progress<OperationProgress>(progress => ShowNavigationProgress(operation, progress)),
+                operation.Token);
+            operation.Token.ThrowIfCancellationRequested();
+            if (!IsCurrentNavigation(operation))
+                throw new OperationCanceledException(operation.Token);
+
+            PairExplorer.IsVisible = false;
+            SingleExplorer.IsVisible = true;
+            SetProjectionState(ProjectionKind.Groups, groups.SelectMany(group => group.Files));
+            BreadcrumbPanel.IsVisible = false;
+            BreadcrumbPanel.Children.Clear();
+            ProjectionTitle.Text = "Groups";
+
+            var cache = GetGroupsExplorerCache(session.WorkingPortrait);
+            ExplorerTree.ItemsSource = cache.Nodes;
+            await Task.Yield();
+            await BuildGroupsExplorerTreeAsync(
+                groups,
+                cache.Nodes,
+                cache.BuiltCount,
+                operation,
+                completed => cache.BuiltCount = completed);
+
+            if (!IsCurrentNavigation(operation))
+                throw new OperationCanceledException(operation.Token);
+
+            SynchronizeVisibleSelection();
+            UpdateSelectionSummary();
+            UpdateCapabilities();
+            UpdatePivotCapabilities();
+            CompleteNavigation(operation, "Groups");
+        }
+        catch (OperationCanceledException) when (operation.Token.IsCancellationRequested || !IsCurrentNavigation(operation))
+        {
+            RetireNavigation(operation);
+        }
+        catch (Exception ex)
+        {
+            CompleteNavigation(operation, "Could not build Groups view: " + ex.Message);
+        }
     }
 
     private async Task ShowBranchPairAsync(BranchPairSuggestion suggestion)
