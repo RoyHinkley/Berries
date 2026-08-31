@@ -1,6 +1,6 @@
 # Berries Development Guide
 
-This document describes the current implementation state of Berries and the experimentally developed reasoning that must be preserved during refinement. Governing semantics are in `PROJECT.md`, `MODEL.md`, `ANALYSIS.md`, and `WORKFLOW.md`.
+This document describes the current implementation state of Berries and the experimentally developed reasoning that must be preserved during refinement. Governing semantics are in `PROJECT.md`, `MODEL.md`, `ARCHITECTURE.md`, `ANALYSIS.md`, and `WORKFLOW.md`.
 
 ## Solution structure
 
@@ -30,6 +30,8 @@ This document describes the current implementation state of Berries and the expe
         synthetic platform-independent tests
 
 Target framework is .NET 10.
+
+The architectural placement rule is **Core whenever possible, Projection only when warranted by presentation-specific meaning, GUI only for interaction and bounded control work**. Corpus-, Portrait-, Group-, Directory-, or Branch-scale computation does not belong in GUI event handlers or GUI helper methods. See `ARCHITECTURE.md` for the full responsiveness, cancellation, and progress contract.
 
 ## Vocabulary in code
 
@@ -71,7 +73,7 @@ Situation/Resolution/Disposition classification is not a required runtime workfl
 
 ### `BerriesEngine`
 
-Owns Corpus normalization, Initial Portrait acquisition, Group discovery, and direct Directory analysis.
+Owns Corpus normalization, Initial Portrait acquisition, Group discovery, unique-file accounting/pruning, and direct Directory analysis. Computation belongs here by default when it is domain or factual model work rather than presentation construction.
 
 ### `BerriesApplication`
 
@@ -111,31 +113,35 @@ Owns:
 
 After initial Group discovery, unique `FileInstance`s are removed from the session Portrait. `UniqueFileCountsByDirectory` retains the fixed number of files in each physical directory that were unique at initial discovery.
 
-`Rebuild()` replays operations from the Initial Portrait and reconstructs Working Portrait, Groups, Actions, and selection binding. Because Initial Portrait now contains only Group-originating files, its traversals scale with the duplicate-resolution problem rather than the complete scanned corpus.
+Group identity is also fixed by initial discovery. `Rebuild()` replays operations from the Initial Portrait and reconstructs Working Portrait, current Group membership, Actions, and selection binding. A Group may have two or more, one, or zero current members without losing its session identity.
+
+Because Initial Portrait now contains only Group-originating files, its traversals scale with the duplicate-resolution problem rather than the complete scanned corpus.
 
 ### `PortraitQueries`
 
-Answers model questions without UI dependencies: Groups, files in structural scopes, breadcrumbs, best Directory Pair, Branch counterpart eligibility, and shared Group counts.
+Answers factual model questions without UI dependencies: files in structural scopes, breadcrumbs, best Directory Pair, Branch counterpart eligibility, shared Group counts, and related model queries.
 
 ### `ProjectionService` / `ProjectionState`
 
-`ProjectionService` builds UI-independent Explorer representations. `ProjectionState` records the current projection kind, represented files, and applicable one- or two-sided scopes.
+`ProjectionService` builds UI-independent Explorer representations. It is the correct home for work whose result is inherently presentation-shaped, such as Explorer hierarchy construction, Group display ordering, and projection labels.
 
-This is view/navigation state only. It does not establish a Case or disposition authority.
+`ProjectionState` records the current projection kind, represented files, and applicable one- or two-sided scopes. This is view/navigation state only. It does not establish a Case or disposition authority.
+
+Projection is not a general-purpose overflow layer for work that should have been in Core.
 
 ### `BranchStatisticsAnalyzer`
 
-Computes Branch records including `UniqueFileCount`, `PortraitFileCount`, `DirectoryCount`, `GroupedFileCount`, `GroupCount`, and `GroupedDirectoryCount`.
+Computes Branch records including `UniqueFileCount`, `DirectoryCount`, `GroupedFileCount`, `GroupCount`, and `GroupedDirectoryCount`.
 
 `FileCount` is derived as:
 
-    FileCount = UniqueFileCount + PortraitFileCount
+    FileCount = UniqueFileCount + GroupedFileCount
 
-`PortraitFileCount` is deliberately distinct from `GroupedFileCount`: a file that began in a Group can later become the sole surviving copy and remain in the Working Portrait even though it no longer belongs to an active Group.
+`GroupedFileCount` means current files belonging to session-stable Groups, including a Group's sole remaining member. A zero-member Group contributes no files.
 
 ### `BranchPriorityMetrics`
 
-Computes parent-relative Group concentration metrics. Current Seed ranking uses `ExcessConcentratedGroups` and continues to use total `FileCount`, reconstructed from fixed unique counts plus the current Portrait population.
+Computes parent-relative Group concentration metrics. Current Seed ranking uses `ExcessConcentratedGroups` and continues to use total `FileCount`, reconstructed from fixed unique counts plus the current Group-member population.
 
 ### `BranchCounterpartAnalyzer`
 
@@ -148,6 +154,29 @@ The analyzer also supports on-demand best-pair search for an explicitly selected
 ### `FileActionExecutor`
 
 Executes concrete filesystem Actions, continues independent safe work after failures, and performs Move -> Copy/Delete fallback when required.
+
+## Responsiveness and scaling-work rule
+
+Any operation whose runtime can grow materially with user data is reviewed as an architectural concern, not merely a performance concern.
+
+The required pattern is:
+
+    place factual/domain computation in Core whenever possible
+    use Projection only for inherently presentation-shaped computation
+    expose an asynchronous API to the GUI
+    accept CancellationToken
+    check cancellation inside the scaling loop
+    report a meaningful user-facing phase
+    report completed/total whenever the total is practical to know
+    leave the GUI thread to bounded presentation/control updates
+
+A `Task.Run` added in GUI code is not a substitute for putting the work in the correct project.
+
+Determinate progress is preferred when the work population is already available or cheaply countable. Indeterminate progress is appropriate when obtaining a total would duplicate or materially increase the work, such as open-ended filesystem enumeration.
+
+Core/Projection own the wording and counts that describe their work. GUI code renders those reports in the status bar; it should not hard-code one phase name for a multi-phase operation.
+
+Cancellation is for responsiveness and avoiding wasted work. Generation validation remains the correctness mechanism for background analysis: stale results cannot publish even if cancellation is delayed.
 
 ## Analysis mathematics
 
@@ -225,18 +254,23 @@ Treat unexplained complexity in this algorithm as experimental evidence until it
 
 ## Current initial scan path
 
-`BerriesApplication.ScanAsync()` now performs the primary scan only:
+`BerriesApplication.ScanAsync()` orchestrates the primary scan while `BerriesEngine` performs the scaling computation:
 
     normalize Corpus
         -> acquire complete Portrait
         -> DiscoverGroupsAsync
-        -> attach ContentIds
-        -> count unique files by physical Directory
-        -> prune unique FileInstances
+            -> size-group candidates
+            -> hash candidates
+            -> construct Groups
+            -> attach ContentIds
+            -> count unique files by physical Directory
+            -> prune unique FileInstances
         -> construct BerriesSession
         -> establish a new portrait generation
         -> schedule derived analysis
         -> return ScanResult
+
+The countable discovery phases report phase-specific progress and are cooperatively cancellable. Filesystem enumeration reports observed scan counts but remains indeterminate because a total is not cheaply known in advance.
 
 The Groups projection can therefore become usable as soon as primary discovery is complete. Directory/Branch/Suggestion work continues in the background.
 
@@ -265,7 +299,7 @@ Exclude/Delete/Move/Undo are serialized by `BerriesApplication`. A successful po
 
 Analyzers run against captured Portrait/Group references for one generation. A later portrait mutation does not modify those captured objects. Cancellation avoids wasted work; correctness does not depend on prompt cancellation because a result can publish only when its generation is still current.
 
-The GUI may continue displaying immediately refreshed Explorer content while analysis-dependent capabilities remain unavailable until current-generation products publish.
+The GUI does not own a second background-analysis scheduler or wait for obsolete analysis to finish before starting a portrait operation. It observes progress/product publication and updates capabilities.
 
 ## Unique-file representation
 
@@ -274,7 +308,8 @@ Unique files participate concretely only through initial discovery. Once Groups 
 - unique files are counted per physical Directory;
 - their `FileInstance`s are removed from the session Portrait;
 - fixed `UniqueFileCount` statistics preserve their influence on Directory/Branch population measures;
-- current Group-originating files remain concrete and continue to respond to Exclude/Delete/Move/Undo.
+- current files belonging to discovered Groups remain concrete and continue to respond to Exclude/Delete/Move/Undo;
+- Group identity persists even when current membership reaches one or zero.
 
 This preserves the empirically developed Seed denominator while reducing long-lived memory use and repeated Portrait traversal cost.
 
@@ -287,6 +322,7 @@ Active tests cover Corpus/Portrait acquisition, Group discovery, Exclude, Direct
 The lifecycle/scheduler foundation is now present. Important follow-on work includes:
 
 - empirical validation of memory and traversal improvements from unique pruning;
+- continued audit of scaling loops for cancellation/progress granularity under large real corpora;
 - deciding whether any derived analyses can run independently/concurrently rather than through the current dependency chain;
 - deciding the final scheduler wake-up strategy if the current event-triggered drain model proves insufficient;
 - folding Groups, Directories, Directory Pairs, and Branch Pairs into a common Suggest sequence;
