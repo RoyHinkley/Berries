@@ -42,6 +42,8 @@ A selected top-level Directory contributing its tree to the Corpus. Roots are no
 
 One filesystem instance of content at one path. It carries path, parent Directory, size, observed timestamp, and, when established, `ContentId`.
 
+During primary acquisition Berries temporarily models all accessible Corpus files as `FileInstance`s. After Group discovery, files that belonged to no Group are represented only by fixed per-Directory unique-file counts and their individual `FileInstance`s are discarded.
+
 ### ContentId
 
 Internal identity for byte-identical file content. Current discovery establishes it with SHA-256 after size grouping.
@@ -50,13 +52,17 @@ Internal identity for byte-identical file content. Current discovery establishes
 
 All files in the current Working Portrait having one ContentId, when at least two such files remain. A Group therefore changes with the Working Portrait and disappears when fewer than two instances remain.
 
+A file that began in a Group may remain in the Working Portrait after its Group collapses to one instance. It remains a concrete Portrait file even though it no longer belongs to an active Group.
+
 ### Initial Portrait
 
-The modeled state established for a new session by scanning the selected roots and completing Group discovery. It is fixed session truth; Berries does not continuously reconcile it with external filesystem changes.
+The fixed session Portrait established after primary acquisition and Group discovery. It contains Group-originating files with established `ContentId`s; initially unique files have already been counted and pruned.
+
+The per-Directory counts of initially unique files are retained separately as fixed session statistics. Berries does not continuously reconcile either the Initial Portrait or those counts with external filesystem changes.
 
 ### Working Portrait
 
-The modeled state of the user's desired Corpus during the session. It is deterministically rebuilt from the Initial Portrait plus ordered portrait operations.
+The modeled state of the user's desired duplicate-relevant Corpus material during the session. It is deterministically rebuilt from the Initial Portrait plus ordered portrait operations.
 
 Current portrait-changing operations are:
 
@@ -72,7 +78,7 @@ A Case is objective and program-discovered. A Situation is not required to disco
 
 The Case boundary limits disposition authority. Duplicate instances outside the Case may provide context or evidence, but remain unchanged unless independently brought under disposition authority.
 
-Earlier work allowed structural Cases to contain unique files inside their bounds. Whether unique files should remain members of Cases is an unresolved design question and is intentionally separate from the terminology cleanup. Unique-file counts and other structural measures may still be analytically useful even if Case membership is later narrowed.
+Initially unique filesystem files are not Case members because they are no longer concrete members of the session Portrait. A Group-originating file that later becomes the sole surviving instance remains a Portrait file and may still lie within a structural Case boundary.
 
 A Case is **not** projection state. The Explorer may display material that is not a Case, and the user may navigate away from or adjust the scope of a suggested Case.
 
@@ -90,13 +96,24 @@ The operational outcome applied under a Case's authority. Historical Situation/R
 
 One exact filesystem Directory. Direct Directory statistics concern directly contained files only.
 
+Directory population distinguishes:
+
+    UniqueFileCount
+        fixed count of files initially found unique in the Directory
+
+    PortraitFileCount
+        current concrete files retained in the Working Portrait
+
+    FileCount
+        UniqueFileCount + PortraitFileCount
+
 ### Directory Pair
 
 An unordered pair of exact Directories sharing one or more Groups directly. `SharedGroupCount` is the number of distinct Groups represented directly in both Directories.
 
 ### Branch
 
-A Directory together with all descendants. Branch statistics aggregate file and Group information through ancestry.
+A Directory together with all descendants. Branch statistics aggregate file and Group information through ancestry. Branch `FileCount` likewise combines the fixed initial unique population with the current concrete Portrait population.
 
 ### Seed
 
@@ -195,17 +212,18 @@ Analysis reduces search effort by surfacing promising structure. The user remain
 ## Governing invariants
 
 1. The Corpus is logical material Berries is considering; it is not the filesystem.
-2. The Initial Portrait is fixed for the lifetime of a session.
-3. The Working Portrait is reconstructible from the Initial Portrait plus ordered portrait operations.
-4. A Group is the current set of at least two files sharing one ContentId.
-5. A Case is objective, bounded, contains duplication, and limits disposition authority.
-6. A Projection is presentation/navigation state, not a Case.
-7. Selection always denotes files.
-8. Exclude changes the Working Portrait but creates no filesystem Action.
-9. Delete and Move change the Working Portrait immediately and contribute physical Actions.
-10. There is no Keep, Accept, or Apply state in the current interaction model.
-11. Seed priority, Counterpart/pair score, and Case presentation priority are distinct concepts.
-12. Suggestions guide attention but do not prescribe workflow or exact final scope.
-13. Unique-file membership in Cases remains an explicit unresolved design question; do not silently settle it during unrelated cleanup.
-14. No physical filesystem change occurs before Execute.
-15. Core remains independent of UI and platform-specific filesystem behavior.
+2. The Initial Portrait is fixed for the lifetime of a session and contains Group-originating files only.
+3. Initial unique-file counts are fixed session statistics retained by physical Directory after unique `FileInstance`s are pruned.
+4. The Working Portrait is reconstructible from the Initial Portrait plus ordered portrait operations.
+5. A Group is the current set of at least two files sharing one ContentId.
+6. A Case is objective, bounded, contains duplication, and limits disposition authority.
+7. A Projection is presentation/navigation state, not a Case.
+8. Selection always denotes files.
+9. Exclude changes the Working Portrait but creates no filesystem Action.
+10. Delete and Move change the Working Portrait immediately and contribute physical Actions.
+11. There is no Keep, Accept, or Apply state in the current interaction model.
+12. Seed priority, Counterpart/pair score, and Case presentation priority are distinct concepts.
+13. Suggestions guide attention but do not prescribe workflow or exact final scope.
+14. Derived analysis is valid only for the portrait generation from which it was computed.
+15. No physical filesystem change occurs before Execute.
+16. Core remains independent of UI and platform-specific filesystem behavior.
