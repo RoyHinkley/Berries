@@ -2,187 +2,133 @@
 
 ## Problem statement
 
-Ordinary duplicate-file tools expose sets of identical files and leave the user to reason about individual copies. That works for isolated duplication, but poorly for accumulated backups, reorganized trees, partial moves, migrations, archives, generated output, repositories, and other real filesystem histories.
+Ordinary duplicate-file tools expose groups of identical files and leave the user to reason about individual copies. That works for isolated duplication, but poorly for accumulated backups, reorganized trees, partial moves, migrations, archives, generated output, repositories, and other real filesystem histories.
 
 Berries uses identical file content as evidence about both files and filesystem structure. It builds a virtual **Working Portrait** of the user's desired **Corpus** and provides an Explorer in which the user can examine **Groups**, **Directories**, **Branches**, **Directory Pairs**, and **Branch Pairs**, then Exclude, Delete, or Move selected files before any physical filesystem change occurs.
 
 ## Objective
 
-Provide a safe, efficient way to eliminate unwanted file duplication, or deliberately remove material from Berries consideration, across large filesystem trees while preserving the content and organization the user wants.
+Give the user the ability to resolve unwanted duplication with minimum practical effort while preserving the content and organization the user wants.
 
-The system should minimize required user attention without making semantic decisions on the user's behalf.
+Berries should reduce user attention and repeated decisions without pretending to infer semantic truth or making autonomous destructive decisions.
+
+## Why the Explorer is primary
+
+Early work pursued the idea that Berries could present an ordered sequence of Cases, wizard-style. Real-corpus work showed that this was too rigid. A statistically strong scope can be close to the useful question without being the easiest scope for a human to recognize. A child Branch, parent Branch, nearby Directory, or related pair may make the intended disposition much clearer.
+
+The resulting product model is deliberately free-form:
+
+- analysis offers **Suggestions**;
+- the Explorer lets the user broaden, narrow, Pivot, and follow recognizable structure;
+- the user decides when a scope is coherent enough to act on;
+- resolution changes the Working Portrait immediately and analysis adapts to the smaller remaining problem.
+
+A Suggestion therefore means "this looks worth your attention," not "this is the next required Case."
 
 ## Current vocabulary
 
-Berries deliberately uses a small user-facing vocabulary:
-
-- **Group** — all files in the current Working Portrait having one identical content identity, provided at least two such files remain.
-- **file / copy** — an ordinary filesystem file shown in the Explorer. Core uses the narrower type name `FileInstance` when it matters that this is one filesystem instance at one path.
-- **Directory** — one exact directory; Directory statistics concern directly contained files only.
+- **Group** — all current Working-Portrait files having identical content, provided at least two remain.
+- **file / copy** — one filesystem instance; Core uses `FileInstance` where that precision matters.
+- **Directory** — one exact directory.
 - **Branch** — a Directory together with all descendants.
-- **Directory Pair** — two exact Directories sharing one or more Groups directly.
-- **Branch Pair** — two Branches sharing Groups somewhere beneath them.
-- **Corpus Roots** — the selected root trees contributing material to the Corpus.
-- **Suggestion** — a view Berries has found worth the user's attention because its structure indicates that one or a few decisions may resolve a relatively large amount of duplicated material.
-- **Pivot** — change the current projection/focus without changing the Working Portrait.
-- **Suggest** — navigate to the next available Suggestion.
+- **Directory Pair** — two exact Directories sharing Groups directly.
+- **Branch Pair** — two Branches analyzed together for relationship.
+- **Case** — an objective bounded set of files containing duplication, considered together for one coherent disposition. Its boundary limits disposition authority.
+- **Projection** — an Explorer organization/presentation of Working-Portrait material. Projection state is not a Case.
+- **Suggestion** — a promising place Berries offers for attention; currently a Branch Pair view.
+- **Seed** — a Branch worth investigating as a starting point for targeted relationship search.
+- **Counterpart** — a Branch scored relative to a particular Seed.
+- **Pivot** — change projection/focus without changing the Working Portrait.
 - **Exclude / Delete / Move** — portrait-changing operations.
 - **Undo** — reverse the most recent portrait-changing user command.
 - **Execute** — attempt the accumulated physical filesystem work.
 
-`ContentId` is an internal technical identity for byte-identical content. It is useful and intentionally narrower than the user-facing word Group: a Group is the current collection of files sharing one ContentId.
-
-Two other technical words describe the current Branch Pair search rather than user workflow:
-
-- **Seed** — a Branch ranked as a good starting point for looking for a strong relationship.
-- **Counterpart** — a Branch scored relative to a Seed; the highest-scoring Counterpart forms that Seed's strongest candidate Branch Pair.
-
-Several Seeds are evaluated before the next Suggestion is chosen. The Suggested Branch Pair is selected by pair quality, not simply by Seed rank, and often does not come from the highest-ranked Seed.
-
 ## Governing principles
 
 1. **Corpus is logical.** Selected roots add material; configuration or interactive Exclude subtracts material from Berries consideration.
-2. **Portrait-first design.** A scan produces a fixed Initial Portrait. The Working Portrait is deterministically reconstructed from that Initial Portrait plus ordered portrait operations.
-3. **The Explorer is primary.** Analysis supplies evidence and Suggestions; it does not own the workflow.
-4. **Selection has one meaning.** Selection always denotes files. Higher tree nodes are shorthand for the files represented beneath them.
+2. **Portrait-first design.** A scan establishes a fixed Initial Portrait. The Working Portrait is reconstructed from it plus ordered portrait operations.
+3. **The Explorer is primary.** Suggestions reduce search effort but do not own the workflow.
+4. **Cases bound authority.** A Case groups files for one coherent disposition; duplicates outside its boundary can be evidence without being modified.
 5. **Projection is navigation.** Group, Directory, Branch, Directory Pair, Branch Pair, and Corpus Roots are organizations of the same Working Portrait.
-6. **Operations are explicit.** Exclude, Delete, and Move immediately change the Working Portrait. There is no separate Keep, Accept, or Apply state.
-7. **Move preserves source-relative structure.** The user establishes source and destination scopes explicitly. Existing destination organization is authoritative.
-8. **Unique files remain known.** They are not duplicate-resolution targets, but can constrain operations such as Move through destination collisions.
-9. **Analysis serves attention.** Exhaustive structural enumeration is not a goal. Cheap statistics and targeted search are preferred over combinatorial completeness.
+6. **Selection always means files.** Structural nodes are convenient scopes over represented files.
+7. **Operations are explicit.** Exclude, Delete, and Move immediately change the Working Portrait. There is no separate Keep, Accept, or Apply state.
+8. **Move preserves source-relative structure.** The user establishes source and destination scopes explicitly; existing destination organization is authoritative.
+9. **Analysis serves attention.** The goal is useful prioritization, not exhaustive enumeration or mathematical completeness.
 10. **Execution is explicit.** No physical filesystem modification occurs until Execute.
 11. **Core remains independent of UI and platform-specific filesystem behavior.**
 
+## Analysis strategy and empirical result
+
+The earliest ranking idea was leverage: prefer a Case in which one user decision could dispose of many duplicate instances. That captures an important goal—work per question—but it is not sufficient by itself. Very broad Branch Pairs can have high theoretical resolving power while presenting an unclear human question.
+
+Experiments found a more effective targeted strategy:
+
+1. compute inexpensive Branch statistics;
+2. rank promising **Seeds** by parent-relative Group concentration;
+3. for a small window of good Seeds, find strong non-nested **Counterparts**;
+4. score the actual Seed/Counterpart relationships by shared Groups and overlap;
+5. compare the best relationships across the Seed window;
+6. surface the strongest result as a **Suggestion**;
+7. after a resolution changes the Working Portrait, repeat on the reduced problem.
+
+Seed priority and Branch Pair quality are intentionally different quantities. The best Branch Pair often does not originate from the highest-ranked Seed.
+
+The practical result observed during R&D is central to the design: resolving a small number of well-chosen, comprehensible Cases can collapse a very large duplicate problem extremely quickly. Corpora with tens of thousands of duplicate instances could often be reduced by only a handful of structural decisions. This is why targeted discovery plus repeated re-analysis is more valuable than exhaustive generation of every possible Branch Pair or a globally optimized wizard sequence.
+
 ## Current application flow
 
-For a new session:
-
     Select Roots
-        -> Add / Remove / Explore
+        -> Explore
         -> Corpus view appears
         -> enumerate files
         -> size-group candidate files
         -> hash candidates
-        -> construct Groups
-        -> construct BerriesSession
+        -> construct Groups / BerriesSession
         -> Directory analysis
         -> Branch statistics
         -> targeted Seed/Counterpart search
         -> construct Suggestions
         -> Groups view becomes ready
 
-The current initial scan path is sequential: `ScanAsync()` does not return until the downstream derived analysis is complete. The Explorer shell and status bar are already present, and portrait operations trigger derived-analysis refresh in the background. Further decoupling of the initial scan/analysis lifecycle is a current design direction, not yet implemented behavior.
+The current initial scan path remains sequential. After portrait operations, derived analysis refreshes in the background while the Explorer remains the stable work surface.
 
 ## Explorer projections
 
-### Groups
+Current projections are:
 
-One pane:
+    Groups
+    Directory
+    Branch
+    Corpus Roots
+    Directory Pair
+    Branch Pair
 
-    Group
-        full-path file
-        full-path file
-        ...
+Pair-view breadcrumbs allow the user to broaden or narrow either side independently. This is an important part of the "follow your nose" interaction: a Suggested Branch Pair is a starting point, not a frozen Case boundary.
 
-### Directory
+## Resolution and execution
 
-One exact Directory, showing grouped files directly within it.
+Current portrait operations are Exclude, Delete, and Move. One user command is one Undo step.
 
-### Branch
+Move maps source-relative paths beneath an explicit destination scope. Existing identical content in the exact destination Directory is authoritative; same-name/different-content collisions are reported and left unchanged. Berries does not invent filenames or overwrite different content.
 
-One Branch, showing grouped files organized beneath its directory tree.
+Before Execute, Berries summarizes planned physical Actions and potential physical content loss. Execute handles filesystem failures locally and continues independent safe work.
 
-### Corpus Roots
+## Open design item: unique files
 
-The selected Corpus roots, each displayed as a Branch projection.
+The current Portrait retains unique files because they are used by structural measures and can constrain operations such as Move destination collisions. Earlier Case definitions also allowed unique files inside structural Case bounds.
 
-### Directory Pair / Branch Pair
-
-Two equivalent panes. Higher directory nodes are selection shortcuts for represented files; Directories themselves are not filesystem-operation targets.
-
-## Navigation and resolution
-
-Current controls include:
-
-    Pivot
-    Suggest
-    Invert
-    Exclude
-    Delete
-    Move ->
-    <- Move
-    Undo
-
-Back and Forward controls are present but navigation history is not yet implemented.
-
-`Suggest` cycles through the current Suggestions. The implemented Suggestion source is the targeted Branch search, so each current Suggestion opens a Branch Pair. A Suggestion is not a queue and does not force a resolution.
-
-## Move semantics
-
-For each selected source file, Berries preserves the file's relative directory path beneath the selected source scope when mapping it beneath the destination scope.
-
-Within the exact computed destination directory:
-
-1. If the same content already exists there, regardless of filename, retain the destination file and reduce the source work to Delete.
-2. Otherwise use the source filename.
-3. If that path is free, Move the source there.
-4. If that path contains the same content, retain the destination and Delete the source.
-5. If that path contains different content, report a collision immediately and leave both files unchanged while other requested moves continue.
-
-Berries does not invent filenames or overwrite different content.
-
-## Analysis strategy
-
-Group discovery is size grouping followed by SHA-256 hashing of files in non-singleton size groups.
-
-Directory analysis derives direct Directory records, Directory Pairs, and inexpensive graph diagnostics. Branch statistics aggregate physical and Group information through ancestry without constructing every possible Branch Pair.
-
-Branch Seeds are ranked by parent-relative concentration. The current useful Seed measure is based on:
-
-    D = Branch GroupCount
-    C = Group retention / ordinary file retention relative to parent
-
-    seed score = D * (1 - 1/C), for C > 1; otherwise 0
-
-For each Seed, targeted Counterpart search measures actual Branch relationships using shared Groups and Jaccard overlap. The current pair score is:
-
-    shared Group count * Jaccard overlap
-
-The search evaluates the top 10 currently eligible Seeds, finds the best Counterpart relationship for each, and chooses the strongest resulting Branch Pair as the next Suggestion. Consequently, Seed rank and Suggestion quality are deliberately not the same thing.
-
-Comprehensive ancestor-Cartesian Branch Pair enumeration was abandoned after large-corpus experiments demonstrated severe combinatorial growth without proportional user value.
-
-## Working Portrait and execution
-
-`BerriesSession` owns:
-
-- fixed Initial Portrait;
-- current Working Portrait;
-- persistent selection;
-- ordered Exclude/Delete/Move operations;
-- current Groups;
-- physical Actions implied by Delete and Move.
-
-Exclude produces no physical Action. Delete and Move do.
-
-Before Execute, the GUI reports the planned action count and the number of Groups that would have no surviving physical file after the plan. Execute attempts the Actions, continues independent safe work after failures, and reports completed, skipped-dependent, and failed work.
-
-## Persistence
-
-Save/Load commands are present but disabled. A future saved session should restore modeled session state directly rather than silently rescanning or reconciling the filesystem.
+Whether unique files should remain members of Cases is intentionally unresolved. It must be reviewed separately because removing them can affect useful counts and ranking measures even if they are not ordinary duplicate-resolution targets.
 
 ## Design documents
 
-- [MODEL.md](MODEL.md) — authoritative model vocabulary and invariants.
-- [ANALYSIS.md](ANALYSIS.md) — Group discovery and structural analysis.
+- [MODEL.md](MODEL.md) — authoritative vocabulary and invariants.
+- [ANALYSIS.md](ANALYSIS.md) — Group discovery, Seed/Counterpart search, ranking, and empirical findings.
 - [WORKFLOW.md](WORKFLOW.md) — Explorer interaction, portrait operations, Move, Undo, and Execute.
-- [SEMANTIC-RESEARCH.md](SEMANTIC-RESEARCH.md) — retained empirical scenarios and natural user actions without imposing a classification workflow.
+- [SEMANTIC-RESEARCH.md](SEMANTIC-RESEARCH.md) — retained Situation/disposition research and recognizable filesystem histories.
 - [BOUNDARY.md](BOUNDARY.md) — empirical problem-boundary findings.
 - [DEVELOPMENT.md](DEVELOPMENT.md) — current implementation map and near-term architectural work.
 
 ## Platform and architecture
-
-Implementation platform:
 
     C#
     .NET 10
@@ -191,11 +137,11 @@ Implementation platform:
 Solution decomposition:
 
     Berries.Core
-        domain/session model, Portrait, Group discovery,
-        structural analysis, queries, planning/execution contracts
+        domain/session model, Group discovery, structural analysis,
+        queries, portrait operations, planning/execution contracts
 
     Berries.Projection
-        UI-independent Explorer projection construction
+        UI-independent Explorer projection construction and ProjectionState
 
     Berries.FileSystem.Abstractions
         platform-neutral filesystem boundary
@@ -208,8 +154,3 @@ Solution decomposition:
 
     Berries.Core.Tests
         platform-independent tests using synthetic filesystem/model data
-
-Architectural test:
-
-    If Core cannot be exercised by a simple test harness against synthetic
-    data, a platform or UI concern has leaked across a boundary.
