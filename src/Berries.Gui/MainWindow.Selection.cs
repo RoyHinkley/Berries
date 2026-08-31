@@ -10,7 +10,7 @@ public partial class MainWindow
 {
     private ExplorerNode? focusedNode;
     private bool synchronizingSelection;
-    private Case? currentProjection;
+    private Case? currentCase;
 
     private void ExplorerNode_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -41,13 +41,13 @@ public partial class MainWindow
         SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
 
-    private bool IsGroupsProjection() => currentProjection?.Kind == ProjectionKind.Groups;
+    private bool IsGroupsProjection() => currentCase?.Kind == ProjectionKind.Groups;
 
-    private IReadOnlyList<FileInstance> RepresentedFiles() => currentProjection?.RepresentedFiles ?? [];
+    private IReadOnlyList<FileInstance> RepresentedFiles() => currentCase?.RepresentedFiles ?? [];
 
     private IEnumerable<TreeView> ActiveTrees()
     {
-        if (currentProjection?.IsPair == true) { yield return LeftTree; yield return RightTree; }
+        if (currentCase?.IsPair == true) { yield return LeftTree; yield return RightTree; }
         else yield return ExplorerTree;
     }
 
@@ -116,7 +116,7 @@ public partial class MainWindow
             return;
         }
 
-        currentProjection = new Case(kind, represented, primary, secondary);
+        currentCase = new Case(kind, represented, primary, secondary);
         focusedNode = null;
     }
 
@@ -129,7 +129,7 @@ public partial class MainWindow
     {
         var first = DistinctFilesFast(primaryFiles);
         var second = DistinctFilesFast(secondaryFiles);
-        currentProjection = new Case(
+        currentCase = new Case(
             kind,
             DistinctFilesFast(first.Concat(second)),
             primary,
@@ -144,13 +144,13 @@ public partial class MainWindow
         Berries.FileSystem.Abstractions.FileSystemPath path,
         IReadOnlyList<FileInstance> files)
     {
-        if (currentProjection is not { IsPair: true, Primary: { } primary, Secondary: { } secondary } projection)
+        if (currentCase is not { IsPair: true, Primary: { } primary, Secondary: { } secondary } current)
             return;
 
         var firstPath = side == PairSide.Left ? path : primary;
         var secondPath = side == PairSide.Right ? path : secondary;
-        var firstFiles = side == PairSide.Left ? DistinctFilesFast(files) : projection.PrimaryFiles ?? [];
-        var secondFiles = side == PairSide.Right ? DistinctFilesFast(files) : projection.SecondaryFiles ?? [];
-        SetPairProjectionState(projection.Kind, firstPath, firstFiles, secondPath, secondFiles);
+        var firstFiles = side == PairSide.Left ? DistinctFilesFast(files) : current.PrimaryFiles ?? [];
+        var secondFiles = side == PairSide.Right ? DistinctFilesFast(files) : current.SecondaryFiles ?? [];
+        SetPairProjectionState(current.Kind, firstPath, firstFiles, secondPath, secondFiles);
     }
 }
