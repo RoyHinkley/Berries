@@ -48,6 +48,24 @@ public sealed class SessionTests
     }
 
     [Fact]
+    public void DiscoveredGroupMayReachZeroMembers()
+    {
+        var fs = new TestFileSystem();
+        var first = File("/a.txt", A);
+        var second = File("/b.txt", A);
+        var session = new BerriesSession(fs, new Portrait([first, second]));
+
+        session.Exclude([first, second]);
+
+        var group = Assert.Single(session.Groups);
+        Assert.Equal(A, group.Content);
+        Assert.Empty(group.Files);
+
+        Assert.True(session.Undo());
+        Assert.Equal(2, Assert.Single(session.Groups).Files.Count);
+    }
+
+    [Fact]
     public void BulkDeleteIsOneUndoStepAndRebuildsActions()
     {
         var fs = new TestFileSystem();
