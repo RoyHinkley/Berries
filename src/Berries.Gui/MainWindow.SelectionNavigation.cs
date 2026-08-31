@@ -23,7 +23,7 @@ public partial class MainWindow
         // Selection is persistent Core state; focus identifies the particular Explorer
         // object from which a location-oriented pivot should be resolved.
         var hasSession = controller.Session is not null;
-        var canResolveScope = focusedNode is not null || currentProjection?.Primary is not null;
+        var canResolveScope = focusedNode is not null || currentCase?.Primary is not null;
 
         PivotCorpusRootsMenu.IsEnabled = hasSession;
         PivotContentMenu.IsEnabled = hasSession;
