@@ -104,7 +104,7 @@ public partial class MainWindow
 
             // Resume at background priority so pending input, layout, and rendering
             // are serviced before the next batch is published.
-            await Dispatcher.UIThread.Yield(DispatcherPriority.Background);
+            await Dispatcher.Yield(DispatcherPriority.Background);
         }
     }
 
