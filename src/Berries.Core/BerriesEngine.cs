@@ -54,14 +54,27 @@ public sealed class BerriesEngine
         Portrait portrait,
         IReadOnlyList<Group> groups,
         CancellationToken cancellationToken = default) =>
-        AnalyzeDirectoriesAsync(portrait, groups, null, cancellationToken);
+        AnalyzeDirectoriesAsync(portrait, groups, new Dictionary<FileSystemPath, int>(), null, cancellationToken);
 
     public Task<DirectoryAnalysisResult> AnalyzeDirectoriesAsync(
         Portrait portrait,
         IReadOnlyList<Group> groups,
         IProgress<OperationProgress>? progress,
         CancellationToken cancellationToken = default) =>
-        Task.Run(() => AnalyzeDirectories(portrait, groups, progress, cancellationToken), cancellationToken);
+        AnalyzeDirectoriesAsync(portrait, groups, new Dictionary<FileSystemPath, int>(), progress, cancellationToken);
+
+    public Task<DirectoryAnalysisResult> AnalyzeDirectoriesAsync(
+        Portrait portrait,
+        IReadOnlyList<Group> groups,
+        IReadOnlyDictionary<FileSystemPath, int> uniqueFileCountsByDirectory,
+        IProgress<OperationProgress>? progress = null,
+        CancellationToken cancellationToken = default) =>
+        Task.Run(() => AnalyzeDirectories(
+            portrait,
+            groups,
+            uniqueFileCountsByDirectory,
+            progress,
+            cancellationToken), cancellationToken);
 
     private Portrait BuildInitialPortrait(
         Corpus corpus,
@@ -175,6 +188,7 @@ public sealed class BerriesEngine
     private static DirectoryAnalysisResult AnalyzeDirectories(
         Portrait portrait,
         IReadOnlyList<Group> groups,
+        IReadOnlyDictionary<FileSystemPath, int> uniqueFileCountsByDirectory,
         IProgress<OperationProgress>? progress,
         CancellationToken cancellationToken)
     {
@@ -222,14 +236,17 @@ public sealed class BerriesEngine
             progress?.Report(new OperationProgress("Analyzing directories", examinedPairs, totalPairs));
         }
 
-        var directories = portrait.Files
+        var portraitFilesByDirectory = portrait.Files
             .GroupBy(file => file.ParentDirectory)
-            .Where(group => groupsByDirectory.ContainsKey(group.Key))
-            .Select(group => new DirectoryRecord(
-                group.Key,
-                group.Count(),
-                groupedFilesByDirectory[group.Key].Count,
-                groupsByDirectory[group.Key].Count))
+            .ToDictionary(group => group.Key, group => group.Count());
+
+        var directories = groupsByDirectory.Keys
+            .Select(path => new DirectoryRecord(
+                path,
+                uniqueFileCountsByDirectory.TryGetValue(path, out var uniqueFileCount) ? uniqueFileCount : 0,
+                portraitFilesByDirectory.TryGetValue(path, out var portraitFileCount) ? portraitFileCount : 0,
+                groupedFilesByDirectory[path].Count,
+                groupsByDirectory[path].Count))
             .OrderBy(directory => directory.Path.Value, StringComparer.Ordinal)
             .ToArray();
         phaseTimer.Stop();
@@ -248,6 +265,7 @@ public sealed class BerriesEngine
         progress?.Report(new OperationProgress("Finalizing directory analysis"));
         var graph = DirectoryGraphAnalyzer.Analyze(
             portrait,
+            uniqueFileCountsByDirectory,
             directories,
             directoryPairs,
             internalGroupDirectories);
