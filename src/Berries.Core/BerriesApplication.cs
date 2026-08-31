@@ -88,28 +88,18 @@ public sealed class BerriesApplication
             phaseTimer.Stop();
             var portraitElapsed = phaseTimer.Elapsed;
 
-            Debug.WriteLine("[Berries] Discovering Groups...");
+            Debug.WriteLine("[Berries] Discovering Groups and preparing session portrait...");
             var discovery = await engine.DiscoverGroupsAsync(acquired, groupProgress, cancellationToken);
-            var contentsByPath = discovery.Groups
-                .SelectMany(group => group.Files.Select(file => (file.Path, group.Content)))
-                .ToDictionary(item => item.Path, item => item.Content);
-
-            Debug.WriteLine("[Berries] Counting and pruning unique files...");
-            var uniqueFileCountsByDirectory = discovery.Portrait.Files
-                .Where(file => !contentsByPath.ContainsKey(file.Path))
-                .GroupBy(file => file.ParentDirectory)
-                .ToDictionary(group => group.Key, group => group.Count());
-            var groupedPortrait = new Portrait(discovery.Portrait.Files
-                .Where(file => contentsByPath.ContainsKey(file.Path))
-                .Select(file => file with { Content = contentsByPath[file.Path] })
-                .ToArray());
-            Session = new BerriesSession(fileSystem, groupedPortrait, uniqueFileCountsByDirectory);
+            Session = new BerriesSession(
+                fileSystem,
+                discovery.Portrait,
+                discovery.UniqueFileCountsByDirectory);
 
             totalTimer.Stop();
             Scan = new ScanResult(
                 Corpus.Roots.Select(root => root.Path.Value).ToArray(),
-                discovery.Portrait.Files.Count,
-                discovery.Portrait.Files.Sum(file => file.Length),
+                discovery.FileCount,
+                discovery.TotalBytes,
                 discovery.Groups.Count,
                 discovery.GroupedFileCount,
                 normalizationElapsed,
