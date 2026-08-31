@@ -22,6 +22,8 @@ public sealed class BerriesApplication
     private readonly AnalysisProduct<BranchPairSuggestionResult> suggestions = new();
     private CancellationTokenSource sessionCancellation = new();
     private Task schedulerTask = Task.CompletedTask;
+    private bool schedulerRequested;
+    private IProgress<OperationProgress>? scheduledProgress;
     private long portraitGeneration;
 
     public BerriesApplication(
@@ -241,12 +243,36 @@ public sealed class BerriesApplication
     {
         lock (schedulerGate)
         {
-            if (!schedulerTask.IsCompleted)
-                return;
-
-            var sessionToken = sessionCancellation.Token;
-            schedulerTask = Task.Run(() => RunAnalysisSchedulerAsync(progress, sessionToken), sessionToken);
+            schedulerRequested = true;
+            if (progress is not null)
+                scheduledProgress = progress;
+            if (schedulerTask.IsCompleted)
+                StartSchedulerLocked();
         }
+    }
+
+    private void StartSchedulerLocked()
+    {
+        schedulerRequested = false;
+        var progress = scheduledProgress;
+        scheduledProgress = null;
+        var sessionToken = sessionCancellation.Token;
+
+        schedulerTask = Task.Run(async () =>
+        {
+            try
+            {
+                await RunAnalysisSchedulerAsync(progress, sessionToken);
+            }
+            finally
+            {
+                lock (schedulerGate)
+                {
+                    if (schedulerRequested && !sessionCancellation.IsCancellationRequested)
+                        StartSchedulerLocked();
+                }
+            }
+        });
     }
 
     private async Task RunAnalysisSchedulerAsync(
@@ -260,7 +286,11 @@ public sealed class BerriesApplication
             {
                 var snapshot = await CaptureSnapshotAsync(generation, sessionToken);
                 if (snapshot is null)
-                    return;
+                {
+                    if (Corpus is null || Session is null)
+                        return;
+                    continue;
+                }
 
                 if (!directoryAnalysis.IsValid(generation))
                 {
