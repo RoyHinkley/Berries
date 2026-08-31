@@ -10,7 +10,7 @@ public partial class MainWindow
 {
     private ExplorerNode? focusedNode;
     private bool synchronizingSelection;
-    private Case? currentCase;
+    private ProjectionState? currentProjection;
 
     private void ExplorerNode_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -41,13 +41,13 @@ public partial class MainWindow
         SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
 
-    private bool IsGroupsProjection() => currentCase?.Kind == ProjectionKind.Groups;
+    private bool IsGroupsProjection() => currentProjection?.Kind == ProjectionKind.Groups;
 
-    private IReadOnlyList<FileInstance> RepresentedFiles() => currentCase?.RepresentedFiles ?? [];
+    private IReadOnlyList<FileInstance> RepresentedFiles() => currentProjection?.RepresentedFiles ?? [];
 
     private IEnumerable<TreeView> ActiveTrees()
     {
-        if (currentCase?.IsPair == true) { yield return LeftTree; yield return RightTree; }
+        if (currentProjection?.IsPair == true) { yield return LeftTree; yield return RightTree; }
         else yield return ExplorerTree;
     }
 
@@ -116,7 +116,7 @@ public partial class MainWindow
             return;
         }
 
-        currentCase = new Case(kind, represented, primary, secondary);
+        currentProjection = new ProjectionState(kind, represented, primary, secondary);
         focusedNode = null;
     }
 
@@ -129,7 +129,7 @@ public partial class MainWindow
     {
         var first = DistinctFilesFast(primaryFiles);
         var second = DistinctFilesFast(secondaryFiles);
-        currentCase = new Case(
+        currentProjection = new ProjectionState(
             kind,
             DistinctFilesFast(first.Concat(second)),
             primary,
@@ -144,7 +144,7 @@ public partial class MainWindow
         Berries.FileSystem.Abstractions.FileSystemPath path,
         IReadOnlyList<FileInstance> files)
     {
-        if (currentCase is not { IsPair: true, Primary: { } primary, Secondary: { } secondary } current)
+        if (currentProjection is not { IsPair: true, Primary: { } primary, Secondary: { } secondary } current)
             return;
 
         var firstPath = side == PairSide.Left ? path : primary;
