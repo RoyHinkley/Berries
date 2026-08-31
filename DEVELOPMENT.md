@@ -8,6 +8,7 @@ This document describes the current implementation state of Berries and the expe
         domain/session model
         Group discovery
         Directory and Branch analysis
+        analysis lifecycle/scheduling
         Portrait queries
         portrait-operation history
         physical FileAction execution
@@ -74,7 +75,7 @@ Owns Corpus normalization, Initial Portrait acquisition, Group discovery, and di
 
 ### `BerriesApplication`
 
-Owns application orchestration and publishes:
+Owns application orchestration, serialized portrait mutation, portrait generation, and the dependency-driven background analysis scheduler. It publishes current-generation values for:
 
     Corpus
     Session
@@ -83,7 +84,18 @@ Owns application orchestration and publishes:
     BranchStatistics
     Suggestions
 
-A portrait operation invalidates the derived analysis objects.
+Completed derived results are retained internally even after becoming stale, but the ordinary public analysis properties expose only results valid for the current portrait generation.
+
+### `AnalysisProduct<T>`
+
+Owns lifecycle state for one derived result:
+
+    latest completed Result
+    ResultGeneration
+    RunningGeneration
+    cancellation for the active run
+
+Validity is derived from generation equality rather than represented by a separately mutable valid/invalid flag. A stale computation may finish, but it can publish only if its generation is still current.
 
 ### `BerriesSession`
 
@@ -95,8 +107,11 @@ Owns:
     Operations
     Actions
     Groups
+    UniqueFileCountsByDirectory
 
-`Rebuild()` replays operations from the Initial Portrait and reconstructs Working Portrait, Groups, Actions, and selection binding.
+After initial Group discovery, unique `FileInstance`s are removed from the session Portrait. `UniqueFileCountsByDirectory` retains the fixed number of files in each physical directory that were unique at initial discovery.
+
+`Rebuild()` replays operations from the Initial Portrait and reconstructs Working Portrait, Groups, Actions, and selection binding. Because Initial Portrait now contains only Group-originating files, its traversals scale with the duplicate-resolution problem rather than the complete scanned corpus.
 
 ### `PortraitQueries`
 
@@ -110,11 +125,17 @@ This is view/navigation state only. It does not establish a Case or disposition 
 
 ### `BranchStatisticsAnalyzer`
 
-Computes Branch records including FileCount, DirectoryCount, GroupedFileCount, GroupCount, and GroupedDirectoryCount.
+Computes Branch records including `UniqueFileCount`, `PortraitFileCount`, `DirectoryCount`, `GroupedFileCount`, `GroupCount`, and `GroupedDirectoryCount`.
+
+`FileCount` is derived as:
+
+    FileCount = UniqueFileCount + PortraitFileCount
+
+`PortraitFileCount` is deliberately distinct from `GroupedFileCount`: a file that began in a Group can later become the sole surviving copy and remain in the Working Portrait even though it no longer belongs to an active Group.
 
 ### `BranchPriorityMetrics`
 
-Computes parent-relative Group concentration metrics. Current Seed ranking uses `ExcessConcentratedGroups`.
+Computes parent-relative Group concentration metrics. Current Seed ranking uses `ExcessConcentratedGroups` and continues to use total `FileCount`, reconstructed from fixed unique counts plus the current Portrait population.
 
 ### `BranchCounterpartAnalyzer`
 
@@ -167,6 +188,8 @@ Each round examines the top 10 eligible Seeds, computes the best Counterpart rel
 
 After selection, the chosen Seed and Counterpart families are blocked and the process repeats to produce a compact set of structurally distinct Suggestions.
 
+The terminal `Suggestions` product should remain conceptually broader than the current Branch-Pair-only producer. Future work may fold Groups, Directories, Directory Pairs, and Branch Pairs together and cull diminishing-return Suggestions before presentation.
+
 ## Historical leverage and present ranking intent
 
 Early design used **leverage** to mean work accomplished per user question, initially quantified as duplicate file instances within a Case. This was a useful conceptual starting point but not a sufficient presentation metric.
@@ -202,52 +225,69 @@ Treat unexplained complexity in this algorithm as experimental evidence until it
 
 ## Current initial scan path
 
-`BerriesApplication.ScanAsync()` currently performs:
+`BerriesApplication.ScanAsync()` now performs the primary scan only:
 
     normalize Corpus
-        -> acquire Portrait
+        -> acquire complete Portrait
         -> DiscoverGroupsAsync
         -> attach ContentIds
+        -> count unique files by physical Directory
+        -> prune unique FileInstances
         -> construct BerriesSession
-        -> RefreshAnalysisAsync
-             -> Directory analysis
-             -> Branch statistics
-             -> Suggestion discovery
+        -> establish a new portrait generation
+        -> schedule derived analysis
         -> return ScanResult
 
-This path is currently awaited before the Groups projection becomes ready.
+The Groups projection can therefore become usable as soon as primary discovery is complete. Directory/Branch/Suggestion work continues in the background.
+
+## Derived analysis dependency path
+
+The current dependency chain is:
+
+    Working Portrait + Groups + retained unique counts
+        -> Directory analysis / Directory Pairs
+        -> Branch statistics
+        -> Suggestions
+
+The scheduler advances only when prerequisites for the current portrait generation are valid. The current chain is linear, but lifecycle management is product-based so future independent products do not require a monolithic `RefreshAnalysisAsync()` sequence.
+
+`RefreshAnalysisAsync()` remains as an awaitable synchronization point. It no longer owns the analysis lifecycle; ordinary analysis scheduling is automatic.
 
 ## Portrait-operation path
 
-After Exclude/Delete/Move/Undo:
+Exclude/Delete/Move/Undo are serialized by `BerriesApplication`. A successful portrait mutation:
 
-    derived analysis objects are invalidated
-    visible projection refreshes immediately from BerriesSession
-    GUI starts RefreshAnalysisAsync in background
-    old refresh work is cancelled when another portrait command starts
-    completion restores analysis-dependent capabilities
+    rebuilds the Working Portrait
+    increments PortraitGeneration
+    makes existing derived products stale by generation mismatch
+    requests cancellation of obsolete work
+    schedules current-generation analysis
 
-## Unique files: deliberately unresolved
+Analyzers run against captured Portrait/Group references for one generation. A later portrait mutation does not modify those captured objects. Cancellation avoids wasted work; correctness does not depend on prompt cancellation because a result can publish only when its generation is still current.
 
-The Portrait retains unique files. They constrain Move destinations and participate in statistics such as `FileCount`, which in turn affects Seed concentration. Earlier structural Case definitions also allowed unique files within Case bounds.
+The GUI may continue displaying immediately refreshed Explorer content while analysis-dependent capabilities remain unavailable until current-generation products publish.
 
-Whether unique files should remain Case members is a separate design question. Do not remove them, their counts, or their influence on ranking as a side effect of terminology cleanup.
+## Unique-file representation
 
-## Tests retained after cleanup
+Unique files participate concretely only through initial discovery. Once Groups have been established:
 
-Active tests cover Corpus/Portrait acquisition, Group discovery, Exclude, Directory analysis, Branch statistics, Branch priority, Session operations/Undo/Move, filesystem execution, and the critical distinction between Seed rank and winning Branch Pair score.
+- unique files are counted per physical Directory;
+- their `FileInstance`s are removed from the session Portrait;
+- fixed `UniqueFileCount` statistics preserve their influence on Directory/Branch population measures;
+- current Group-originating files remain concrete and continue to respond to Exclude/Delete/Move/Undo.
 
-## Immediate architectural work after terminology cleanup
+This preserves the empirically developed Seed denominator while reducing long-lived memory use and repeated Portrait traversal cost.
 
-The next design problem remains analysis lifecycle/dependency management.
+## Tests
 
-The Corpus-dependent discovery front end can remain stable for a session. Derived results have different prerequisites and invalidators:
+Active tests cover Corpus/Portrait acquisition, Group discovery, Exclude, Directory analysis, Branch statistics, Branch priority, Session operations/Undo/Move, filesystem execution, the critical distinction between Seed rank and winning Branch Pair score, and generation-aware `AnalysisProduct<T>` publication/cancellation behavior.
 
-    Working Portrait + Groups
-        -> Directory analysis
-        -> Branch statistics
+## Pending analysis work
 
-    Directory analysis + Branch statistics + Groups
-        -> Suggestion discovery
+The lifecycle/scheduler foundation is now present. Important follow-on work includes:
 
-The current implementation recomputes these through one sequential `RefreshAnalysisAsync()`. The next step is an explicit, simple validity/prerequisite model and demand-driven background scheduling, without constructing an over-general analysis framework.
+- empirical validation of memory and traversal improvements from unique pruning;
+- deciding whether any derived analyses can run independently/concurrently rather than through the current dependency chain;
+- deciding the final scheduler wake-up strategy if the current event-triggered drain model proves insufficient;
+- folding Groups, Directories, Directory Pairs, and Branch Pairs into a common Suggest sequence;
+- culling Suggestions when diminishing returns make the ordinary Explorer/Groups view a better fishing ground.
