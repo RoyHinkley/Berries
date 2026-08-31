@@ -1,12 +1,12 @@
 # Berries Domain Model
 
-This document defines the architectural vocabulary and semantic invariants used throughout Berries. `PROJECT.md` is the governing overview; `ANALYSIS.md` and `WORKFLOW.md` contain the corresponding detailed designs.
+This document defines the architectural vocabulary and semantic invariants used throughout Berries. `PROJECT.md` is the governing overview; `ARCHITECTURE.md`, `ANALYSIS.md`, and `WORKFLOW.md` contain the corresponding detailed designs.
 
 ## Vocabulary layers
 
 Berries keeps user-facing language simple while retaining narrower technical names where they carry real information.
 
-- **Group** — all files in the current Working Portrait having one `ContentId`, when at least two remain.
+- **Group** — a content-identity set established during primary discovery. Its identity persists for the session while current membership may fall to one or zero files.
 - **file / copy** — ordinary UI language for one `FileInstance`.
 - **Directory** — one exact directory.
 - **Branch** — a Directory together with all descendants.
@@ -50,9 +50,11 @@ Internal identity for byte-identical file content. Current discovery establishes
 
 ### Group
 
-All files in the current Working Portrait having one ContentId, when at least two such files remain. A Group therefore changes with the Working Portrait and disappears when fewer than two instances remain.
+A Group is established once during primary discovery from files having one `ContentId`. Its identity is stable for the lifetime of the session.
 
-A file that began in a Group may remain in the Working Portrait after its Group collapses to one instance. It remains a concrete Portrait file even though it no longer belongs to an active Group.
+Portrait operations change only current membership. A discovered Group may therefore contain two or more current files, one current file, or zero current files. Berries does not rediscover or redefine Groups after the initial discovery pass.
+
+This deliberately keeps Group identity historical and session-stable while Working-Portrait membership remains dynamic. Empty Groups remain valid session objects even though projections normally omit them because they contain nothing to display.
 
 ### Initial Portrait
 
@@ -78,7 +80,7 @@ A Case is objective and program-discovered. A Situation is not required to disco
 
 The Case boundary limits disposition authority. Duplicate instances outside the Case may provide context or evidence, but remain unchanged unless independently brought under disposition authority.
 
-Initially unique filesystem files are not Case members because they are no longer concrete members of the session Portrait. A Group-originating file that later becomes the sole surviving instance remains a Portrait file and may still lie within a structural Case boundary.
+Initially unique filesystem files are not Case members because they are no longer concrete members of the session Portrait. A Group-originating file remains associated with its discovered Group even if it later becomes that Group's sole surviving member.
 
 A Case is **not** projection state. The Explorer may display material that is not a Case, and the user may navigate away from or adjust the scope of a suggested Case.
 
@@ -101,19 +103,21 @@ Directory population distinguishes:
     UniqueFileCount
         fixed count of files initially found unique in the Directory
 
-    PortraitFileCount
-        current concrete files retained in the Working Portrait
+    GroupedFileCount
+        current count of files belonging to session-stable Groups in the Directory
 
     FileCount
-        UniqueFileCount + PortraitFileCount
+        UniqueFileCount + GroupedFileCount
+
+`GroupedFileCount` includes current members of Groups even when a particular Group has fallen to one member. A zero-member Group contributes zero files.
 
 ### Directory Pair
 
-An unordered pair of exact Directories sharing one or more Groups directly. `SharedGroupCount` is the number of distinct Groups represented directly in both Directories.
+An unordered pair of exact Directories sharing one or more Groups directly. `SharedGroupCount` is the number of distinct Groups currently represented directly in both Directories.
 
 ### Branch
 
-A Directory together with all descendants. Branch statistics aggregate file and Group information through ancestry. Branch `FileCount` likewise combines the fixed initial unique population with the current concrete Portrait population.
+A Directory together with all descendants. Branch statistics aggregate file and Group information through ancestry. Branch `FileCount` likewise combines the fixed initial unique population with the current Group-member population.
 
 ### Seed
 
@@ -151,6 +155,8 @@ A UI-independent organization of Working-Portrait files for Explorer presentatio
     Branch Pair
 
 `ProjectionState` records the current presentation/navigation state. It is not a Case and carries no disposition authority.
+
+Computation belongs in Core whenever possible. Projection owns computation only when the result is inherently presentation-shaped. GUI code must not take ownership of Corpus-, Portrait-, Group-, Directory-, or Branch-scale computation merely because a view initiated it. See `ARCHITECTURE.md`.
 
 ### Pivot
 
@@ -193,7 +199,7 @@ A primitive physical filesystem operation used to realize the Working Portrait a
 
 ### Undo
 
-Remove the most recent top-level portrait operation and deterministically rebuild Working Portrait, Groups, Actions, and selection binding.
+Remove the most recent top-level portrait operation and deterministically rebuild Working Portrait, Group membership, Actions, and selection binding.
 
 ### Execute
 
@@ -215,7 +221,7 @@ Analysis reduces search effort by surfacing promising structure. The user remain
 2. The Initial Portrait is fixed for the lifetime of a session and contains Group-originating files only.
 3. Initial unique-file counts are fixed session statistics retained by physical Directory after unique `FileInstance`s are pruned.
 4. The Working Portrait is reconstructible from the Initial Portrait plus ordered portrait operations.
-5. A Group is the current set of at least two files sharing one ContentId.
+5. Group identity is established during primary discovery and persists for the session; current membership may be any nonnegative count.
 6. A Case is objective, bounded, contains duplication, and limits disposition authority.
 7. A Projection is presentation/navigation state, not a Case.
 8. Selection always denotes files.
@@ -226,4 +232,5 @@ Analysis reduces search effort by surfacing promising structure. The user remain
 13. Suggestions guide attention but do not prescribe workflow or exact final scope.
 14. Derived analysis is valid only for the portrait generation from which it was computed.
 15. No physical filesystem change occurs before Execute.
-16. Core remains independent of UI and platform-specific filesystem behavior.
+16. Computation belongs in Core whenever possible; Projection is used only for inherently presentation-shaped computation; the GUI owns interaction and bounded presentation updates.
+17. Potentially appreciable Core/Projection work is asynchronous, cooperatively cancellable, and reports meaningful progress, with determinate completed/total progress whenever practical.
