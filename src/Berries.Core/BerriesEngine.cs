@@ -246,8 +246,7 @@ public sealed class BerriesEngine
             groups[i] = new Group(
                 group.Content,
                 group.Files.Select(file => groupedFilesByPath[file.Path]).ToArray());
-            var currentPath = group.Files.Count == 0 ? default : group.Files[0].Path;
-            ReportDiscoveryProgress(progress, "Finalizing Groups", i + 1, discovered.Count, currentPath);
+            ReportDiscoveryProgress(progress, "Finalizing Groups", i + 1, discovered.Count, group.Files[0].Path);
         }
         phaseTimer.Stop();
         var groupConstructionElapsed = phaseTimer.Elapsed;
