@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Threading;
 using Berries.Core;
 using Berries.Core.Domain;
 using Berries.Projection;
@@ -101,8 +102,9 @@ public partial class MainWindow
             builtThrough?.Invoke(completed);
             ShowNavigationProgress(operation, new OperationProgress("Building Groups tree", completed, total));
 
-            // Give Avalonia an opportunity to realize and paint the newly published batch.
-            await Task.Yield();
+            // Resume at background priority so pending input, layout, and rendering
+            // are serviced before the next batch is published.
+            await Dispatcher.UIThread.Yield(DispatcherPriority.Background);
         }
     }
 
