@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using Avalonia.Threading;
 using Berries.Core;
 using Berries.Core.Domain;
@@ -22,8 +23,9 @@ public partial class MainWindow
 
         var source = new CancellationTokenSource();
         navigationCancellation = source;
-        var operation = new NavigationOperation(++navigationGeneration, source);
+        var operation = new NavigationOperation(++navigationGeneration, source, text);
         BeginProgress(text, indeterminate);
+        operation.Mark("begin");
         return operation;
     }
 
@@ -40,6 +42,7 @@ public partial class MainWindow
 
     private void CompleteNavigation(NavigationOperation operation, string text)
     {
+        operation.Mark("complete");
         if (IsCurrentNavigation(operation))
         {
             EndProgress(text);
@@ -50,6 +53,7 @@ public partial class MainWindow
 
     private void RetireNavigation(NavigationOperation operation)
     {
+        operation.Mark("retired");
         if (ReferenceEquals(navigationCancellation, operation.Source))
             navigationCancellation = null;
         operation.Source.Dispose();
@@ -74,6 +78,7 @@ public partial class MainWindow
         var token = operation.Token;
         var total = groups.Count;
         var completed = Math.Clamp(startIndex, 0, total);
+        operation.Mark($"Groups tree start ({completed:N0}/{total:N0})");
         ShowNavigationProgress(operation, new OperationProgress("Building Groups tree", completed, total));
 
         while (completed < total)
@@ -106,6 +111,8 @@ public partial class MainWindow
             // are serviced before the next batch is published.
             await Dispatcher.Yield(DispatcherPriority.Background);
         }
+
+        operation.Mark($"Groups tree complete ({completed:N0}/{total:N0})");
     }
 
     private sealed class GroupsExplorerCache(Portrait portrait)
@@ -115,10 +122,25 @@ public partial class MainWindow
         public int BuiltCount { get; set; }
     }
 
-    private sealed class NavigationOperation(long generation, CancellationTokenSource source)
+    private sealed class NavigationOperation(
+        long generation,
+        CancellationTokenSource source,
+        string description)
     {
+        private readonly Stopwatch stopwatch = Stopwatch.StartNew();
+        private TimeSpan previous;
+
         public long Generation { get; } = generation;
         public CancellationTokenSource Source { get; } = source;
         public CancellationToken Token => Source.Token;
+
+        public void Mark(string phase)
+        {
+            var elapsed = stopwatch.Elapsed;
+            var delta = elapsed - previous;
+            previous = elapsed;
+            Debug.WriteLine(
+                $"[Navigation {Generation}] {description}: {phase} | +{delta.TotalMilliseconds:N1} ms | {elapsed.TotalMilliseconds:N1} ms total");
+        }
     }
 }
