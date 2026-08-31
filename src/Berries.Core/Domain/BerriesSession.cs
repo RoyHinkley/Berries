@@ -34,8 +34,9 @@ public sealed class BerriesSession
         Selection = new BerriesSelection(fileSystem, initialPortrait);
         groupContents = initialPortrait.Files
             .Where(file => file.Content is not null)
-            .Select(file => file.Content!.Value)
-            .Distinct()
+            .GroupBy(file => file.Content!.Value)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
             .ToArray();
         groups = BuildGroups(initialPortrait);
     }
