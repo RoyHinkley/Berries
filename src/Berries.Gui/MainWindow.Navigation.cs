@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Avalonia.Controls;
 using Avalonia.Controls.Selection;
 using Avalonia.Input;
@@ -61,11 +62,22 @@ public partial class MainWindow
         var corpus = controller.Corpus;
         var session = controller.Session;
         if (session is null || corpus is null) return;
-        BeginProgress("Building Corpus Roots view...", true);
+
+        var operation = BeginNavigation("Building Corpus Roots view...", true);
         try
         {
-            var projections = await Projections.CorpusRootsAsync(session, corpus);
-            var nodes = projections.Select(projection => BuildBranchExplorerNode(projection.Root)).ToArray();
+            var projections = await Projections.CorpusRootsAsync(
+                session,
+                corpus,
+                new Progress<OperationProgress>(progress => ShowNavigationProgress(operation, progress)),
+                operation.Token);
+            operation.Token.ThrowIfCancellationRequested();
+            var nodes = await Task.Run(
+                () => projections.Select(projection => BuildBranchExplorerNode(projection.Root)).ToArray(),
+                operation.Token);
+            if (!IsCurrentNavigation(operation))
+                throw new OperationCanceledException(operation.Token);
+
             PairExplorer.IsVisible = false;
             SingleExplorer.IsVisible = true;
             SetProjectionState(ProjectionKind.CorpusRoots, nodes.SelectMany(node => node.Files));
@@ -73,14 +85,19 @@ public partial class MainWindow
             BreadcrumbPanel.Children.Clear();
             ProjectionTitle.Text = "Corpus Roots";
             ExplorerTree.ItemsSource = nodes;
-            EndProgress("Corpus Roots");
             SynchronizeVisibleSelection();
             UpdateSelectionSummary();
             UpdateCapabilities();
+            UpdatePivotCapabilities();
+            CompleteNavigation(operation, "Corpus Roots");
+        }
+        catch (OperationCanceledException) when (operation.Token.IsCancellationRequested || !IsCurrentNavigation(operation))
+        {
+            RetireNavigation(operation);
         }
         catch (Exception ex)
         {
-            EndProgress("Could not build Corpus Roots view: " + ex.Message);
+            CompleteNavigation(operation, "Could not build Corpus Roots view: " + ex.Message);
         }
     }
 
@@ -88,14 +105,21 @@ public partial class MainWindow
     {
         var session = controller.Session;
         if (session is null) return;
-        BeginProgress("Building selected Groups view...", true);
+
+        var operation = BeginNavigation("Building selected Groups view...", true);
         try
         {
             var groups = await Projections.GroupsForSelectionAsync(
                 session,
-                new Progress<OperationProgress>(ShowAnalysisProgress));
+                new Progress<OperationProgress>(progress => ShowNavigationProgress(operation, progress)),
+                operation.Token);
+            operation.Token.ThrowIfCancellationRequested();
+            if (!IsCurrentNavigation(operation))
+                throw new OperationCanceledException(operation.Token);
+
             if (groups.Count == 0)
             {
+                RetireNavigation(operation);
                 await ShowContentProjectionAsync();
                 return;
             }
@@ -106,15 +130,28 @@ public partial class MainWindow
             BreadcrumbPanel.IsVisible = false;
             BreadcrumbPanel.Children.Clear();
             ProjectionTitle.Text = groups.Count == 1 ? "Group" : $"Groups — {groups.Count:N0} selected";
-            ExplorerTree.ItemsSource = groups.Select(BuildGroupNode).ToArray();
-            EndProgress(ProjectionTitle.Text ?? "Groups");
+
+            var nodes = new ObservableCollection<ExplorerNode>();
+            ExplorerTree.ItemsSource = nodes;
+            await Task.Yield();
+            await BuildGroupsExplorerTreeAsync(groups, nodes, 0, operation);
+
+            if (!IsCurrentNavigation(operation))
+                throw new OperationCanceledException(operation.Token);
+
             SynchronizeVisibleSelection();
             UpdateSelectionSummary();
             UpdateCapabilities();
+            UpdatePivotCapabilities();
+            CompleteNavigation(operation, ProjectionTitle.Text ?? "Groups");
+        }
+        catch (OperationCanceledException) when (operation.Token.IsCancellationRequested || !IsCurrentNavigation(operation))
+        {
+            RetireNavigation(operation);
         }
         catch (Exception ex)
         {
-            EndProgress("Could not build Groups view: " + ex.Message);
+            CompleteNavigation(operation, "Could not build Groups view: " + ex.Message);
         }
     }
 
@@ -174,7 +211,6 @@ public partial class MainWindow
                 return;
             }
             await ShowAdHocBranchPairAsync(pair.First, pair.Second, pair.SharedGroupCount);
-            EndProgress($"Best Branch Pair — {pair.SharedGroupCount:N0} shared Groups.");
         }
         catch (Exception ex)
         {
@@ -189,14 +225,17 @@ public partial class MainWindow
         FileSystemPath second,
         int sharedGroupCount)
     {
-        BeginProgress("Opening Branch Pair...", true);
+        var operation = BeginNavigation("Opening Branch Pair...", true);
         try
         {
-            var leftTask = BuildBranchExplorerNodeAsync(first);
-            var rightTask = BuildBranchExplorerNodeAsync(second);
+            var leftTask = BuildBranchExplorerNodeAsync(first, operation.Token);
+            var rightTask = BuildBranchExplorerNodeAsync(second, operation.Token);
             await Task.WhenAll(leftTask, rightTask);
             var left = await leftTask;
             var right = await rightTask;
+            if (!IsCurrentNavigation(operation))
+                throw new OperationCanceledException(operation.Token);
+
             PairExplorer.IsVisible = true;
             SingleExplorer.IsVisible = false;
             SetPairProjectionState(ProjectionKind.BranchPair, first, left.Files, second, right.Files);
@@ -210,10 +249,16 @@ public partial class MainWindow
             SynchronizeVisibleSelection();
             UpdateSelectionSummary();
             UpdateCapabilities();
+            UpdatePivotCapabilities();
+            CompleteNavigation(operation, $"Branch Pair — {sharedGroupCount:N0} shared Groups.");
         }
-        finally
+        catch (OperationCanceledException) when (operation.Token.IsCancellationRequested || !IsCurrentNavigation(operation))
         {
-            StatusProgress.IsVisible = false;
+            RetireNavigation(operation);
+        }
+        catch (Exception ex)
+        {
+            CompleteNavigation(operation, "Could not open Branch Pair: " + ex.Message);
         }
     }
 
@@ -318,17 +363,20 @@ public partial class MainWindow
         var side = target.Side.Value;
         var first = side == PairSide.Left ? target.Path : primary;
         var second = side == PairSide.Right ? target.Path : secondary;
-        BeginProgress($"Opening {target.Title}...", true);
+        var operation = BeginNavigation($"Opening {target.Title}...", true);
         try
         {
-            var nodeTask = BuildBranchExplorerNodeAsync(target.Path);
+            var nodeTask = BuildBranchExplorerNodeAsync(target.Path, operation.Token);
             var sharedTask = Projections.SharedGroupCountAsync(
                 session,
                 first,
                 second,
-                includeDescendants: true);
+                includeDescendants: true,
+                cancellationToken: operation.Token);
             await Task.WhenAll(nodeTask, sharedTask);
             var node = await nodeTask;
+            if (!IsCurrentNavigation(operation))
+                throw new OperationCanceledException(operation.Token);
 
             if (side == PairSide.Left)
             {
@@ -344,15 +392,19 @@ public partial class MainWindow
             UpdatePairProjectionSide(side, target.Path, node.Files);
             var shared = await sharedTask;
             ProjectionTitle.Text = $"Branch Pair — {shared:N0} shared Groups";
-            EndProgress($"Branch Pair — {shared:N0} shared Groups.");
             SynchronizeVisibleSelection();
             UpdateSelectionSummary();
             UpdateCapabilities();
             UpdatePivotCapabilities();
+            CompleteNavigation(operation, $"Branch Pair — {shared:N0} shared Groups.");
+        }
+        catch (OperationCanceledException) when (operation.Token.IsCancellationRequested || !IsCurrentNavigation(operation))
+        {
+            RetireNavigation(operation);
         }
         catch (Exception ex)
         {
-            EndProgress("Could not open Branch: " + ex.Message);
+            CompleteNavigation(operation, "Could not open Branch: " + ex.Message);
         }
     }
 
