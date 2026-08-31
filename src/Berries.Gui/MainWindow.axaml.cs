@@ -102,7 +102,7 @@ public partial class MainWindow : Window
             UpdatePivotCapabilities();
 
             var scan = await scanTask;
-            ShowContentProjection();
+            await ShowContentProjectionAsync();
             EndProgress(
                 $"Ready — {scan.FileCount:N0} files, with {scan.GroupedFileCount:N0} files in {scan.GroupCount:N0} Groups."
                 + (scan.EvictionCount == 0
@@ -136,11 +136,14 @@ public partial class MainWindow : Window
             .ToArray();
     }
 
-    private void ShowContentProjection()
+    private async Task ShowContentProjectionAsync()
     {
         var session = controller.Session;
         if (session is null) return;
-        var groups = Projections.Groups(session);
+        BeginProgress("Building Groups view...", true);
+        var groups = await Projections.GroupsAsync(
+            session,
+            new Progress<OperationProgress>(ShowAnalysisProgress));
         PairExplorer.IsVisible = false;
         SingleExplorer.IsVisible = true;
         SetProjectionState(ProjectionKind.Groups, groups.SelectMany(group => group.Files));
