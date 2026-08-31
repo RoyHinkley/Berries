@@ -130,7 +130,7 @@ Therefore navigation ownership provides correctness while cancellation provides 
 
 `BerriesApplication` owns application-level sequencing that crosses Core computations: session replacement, serialized portrait mutation, portrait generation, and dependency-driven analysis scheduling.
 
-The GUI does not maintain a second analysis scheduler, cancellation lifecycle, or refresh queue. It observes Core progress and product publication and updates capabilities accordingly.
+The GUI does not maintain a second analysis scheduler, analysis cancellation lifecycle, or analysis refresh queue. It observes Core progress and product publication and updates capabilities accordingly.
 
 GUI navigation lifetime is distinct from analysis scheduling and is correctly owned by Gui because it governs which user-requested presentation may publish to Explorer controls.
 
