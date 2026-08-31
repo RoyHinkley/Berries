@@ -112,19 +112,31 @@ public sealed class ProjectionService
         }
     }
 
-    public Task<IReadOnlyList<GroupProjection>> GroupsForSelectionAsync(
+    public async Task<IReadOnlyList<GroupProjection>> GroupsForSelectionAsync(
         BerriesSession session,
         IProgress<OperationProgress>? progress = null,
-        CancellationToken cancellationToken = default) =>
-        BuildGroupsAsync(
-            session,
-            session.Selection.Files
-                .Where(file => file.Content is not null)
-                .Select(file => file.Content!.Value)
-                .ToHashSet(),
-            "Building selected Groups view",
-            progress,
-            cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        var selectedContents = session.Selection.Files
+            .Where(file => file.Content is not null)
+            .Select(file => file.Content!.Value)
+            .ToHashSet();
+
+        await groupsBuildGate.WaitAsync(cancellationToken);
+        try
+        {
+            return await BuildGroupsAsync(
+                session,
+                selectedContents,
+                "Building selected Groups view",
+                progress,
+                cancellationToken);
+        }
+        finally
+        {
+            groupsBuildGate.Release();
+        }
+    }
 
     public GroupProjection Group(IReadOnlyList<FileInstance> files)
     {
