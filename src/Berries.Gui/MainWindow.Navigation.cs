@@ -71,24 +71,30 @@ public partial class MainWindow
                 corpus,
                 new Progress<OperationProgress>(progress => ShowNavigationProgress(operation, progress)),
                 operation.Token);
+            operation.Mark("Corpus Roots projection acquired");
             operation.Token.ThrowIfCancellationRequested();
             var nodes = await Task.Run(
                 () => projections.Select(projection => BuildBranchExplorerNode(projection.Root)).ToArray(),
                 operation.Token);
+            operation.Mark($"Corpus Roots GUI nodes built ({nodes.Length:N0} roots)");
             if (!IsCurrentNavigation(operation))
                 throw new OperationCanceledException(operation.Token);
 
             PairExplorer.IsVisible = false;
             SingleExplorer.IsVisible = true;
             SetProjectionState(ProjectionKind.CorpusRoots, nodes.SelectMany(node => node.Files));
+            operation.Mark("Corpus Roots projection state set");
             BreadcrumbPanel.IsVisible = false;
             BreadcrumbPanel.Children.Clear();
             ProjectionTitle.Text = "Corpus Roots";
             ExplorerTree.ItemsSource = nodes;
+            operation.Mark("Corpus Roots ItemsSource assigned");
             SynchronizeVisibleSelection();
+            operation.Mark("Corpus Roots selection synchronized");
             UpdateSelectionSummary();
             UpdateCapabilities();
             UpdatePivotCapabilities();
+            operation.Mark("Corpus Roots capabilities updated");
             CompleteNavigation(operation, "Corpus Roots");
         }
         catch (OperationCanceledException) when (operation.Token.IsCancellationRequested || !IsCurrentNavigation(operation))
