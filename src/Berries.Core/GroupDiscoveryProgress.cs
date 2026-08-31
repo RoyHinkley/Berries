@@ -9,4 +9,6 @@ public sealed record GroupDiscoveryProgress(
     long BytesHashed,
     long CandidateBytes,
     FileSystemPath CurrentPath,
-    string Phase = "Hashing Group candidates");
+    string Phase = "Hashing Group candidates",
+    long? Completed = null,
+    long? Total = null);
