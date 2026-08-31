@@ -1,5 +1,6 @@
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Berries.Core.Analysis;
 using Berries.Core.Domain;
 using Berries.Projection;
 
@@ -7,8 +8,6 @@ namespace Berries.Gui;
 
 public partial class MainWindow
 {
-    private CancellationTokenSource? portraitAnalysisRefresh;
-    private Task? portraitAnalysisTask;
     private bool portraitCommandBusy;
 
     private async void ExcludeImmediateButton_Click(object? sender, RoutedEventArgs e)
@@ -85,15 +84,13 @@ public partial class MainWindow
         BeginPortraitBusy(busyMessage);
         try
         {
-            await StopBackgroundAnalysisAsync();
             await command();
             await RefreshCurrentProjectionModelsAsync();
             SynchronizeVisibleSelection();
             UpdateSelectionSummary();
             UpdateCapabilities();
             var message = completedMessageFactory?.Invoke() ?? completedMessage ?? "Operation completed.";
-            EndPortraitBusy(message + " Updating analysis in background...");
-            StartBackgroundAnalysisRefresh(message);
+            EndPortraitBusy(message);
         }
         catch (Exception ex) { EndPortraitBusy("Operation failed: " + ex.Message); }
         finally { portraitCommandBusy = false; }
@@ -148,7 +145,9 @@ public partial class MainWindow
 
         if (currentProjection.Kind == ProjectionKind.Groups)
         {
-            var groups = Projections.Groups(session);
+            var groups = await Projections.GroupsAsync(
+                session,
+                new Progress<OperationProgress>(ShowAnalysisProgress));
             ExplorerTree.ItemsSource = groups.Select(BuildGroupNode).ToArray();
             SetProjectionState(ProjectionKind.Groups, groups.SelectMany(group => group.Files));
         }
@@ -172,64 +171,5 @@ public partial class MainWindow
         Cursor = null;
         ExplorerPanel.IsEnabled = true;
         MainMenu.IsEnabled = true;
-    }
-
-    private async Task StopBackgroundAnalysisAsync()
-    {
-        var refresh = portraitAnalysisRefresh;
-        var task = portraitAnalysisTask;
-        if (refresh is null || task is null) return;
-
-        refresh.Cancel();
-        try { await task; }
-        catch (OperationCanceledException) { }
-        finally
-        {
-            if (refresh == portraitAnalysisRefresh)
-            {
-                refresh.Dispose();
-                portraitAnalysisRefresh = null;
-                portraitAnalysisTask = null;
-            }
-        }
-    }
-
-    private void StartBackgroundAnalysisRefresh(string completedMessage)
-    {
-        portraitAnalysisRefresh?.Cancel();
-        portraitAnalysisRefresh?.Dispose();
-        portraitAnalysisRefresh = new CancellationTokenSource();
-        var refresh = portraitAnalysisRefresh;
-        portraitAnalysisTask = RefreshAnalysisGenerationAsync(refresh, completedMessage);
-    }
-
-    private async Task RefreshAnalysisGenerationAsync(CancellationTokenSource refresh, string completedMessage)
-    {
-        try
-        {
-            await controller.RefreshAnalysisAsync(refresh.Token);
-            if (refresh != portraitAnalysisRefresh) return;
-            StatusText.Text = completedMessage;
-            StatusProgress.IsVisible = false;
-            StatusProgress.IsIndeterminate = false;
-            UpdateCapabilities();
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception ex)
-        {
-            if (refresh != portraitAnalysisRefresh) return;
-            StatusText.Text = completedMessage + " Background analysis update failed: " + ex.Message;
-            StatusProgress.IsVisible = false;
-            StatusProgress.IsIndeterminate = false;
-        }
-        finally
-        {
-            if (refresh == portraitAnalysisRefresh)
-            {
-                refresh.Dispose();
-                portraitAnalysisRefresh = null;
-                portraitAnalysisTask = null;
-            }
-        }
     }
 }
