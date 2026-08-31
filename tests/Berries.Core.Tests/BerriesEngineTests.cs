@@ -124,7 +124,11 @@ public sealed class BerriesEngineTests
         Assert.DoesNotContain(paths[3], fileSystem.OpenedPaths);
         Assert.Equal(2, result.GroupedFileCount);
         Assert.Empty(result.Evictions);
-        Assert.Same(portrait, result.Portrait);
+        Assert.Equal(2, result.Portrait.Files.Count);
+        Assert.All(result.Portrait.Files, file => Assert.NotNull(file.Content));
+        Assert.Equal(2, result.UniqueFileCountsByDirectory[root]);
+        Assert.Equal(4, result.FileCount);
+        Assert.Equal(files.Sum(file => file.Length), result.TotalBytes);
     }
 
     [Fact]
@@ -164,6 +168,7 @@ public sealed class BerriesEngineTests
 
         Assert.DoesNotContain(result.Portrait.Files, file => file.Path == busy);
         Assert.Equal(2, result.Portrait.Files.Count);
+        Assert.Equal(2, result.FileCount);
         var eviction = Assert.Single(result.Evictions);
         Assert.Equal(busy, eviction.File.Path);
         Assert.Contains("busy", eviction.Reason, StringComparison.OrdinalIgnoreCase);
@@ -224,40 +229,44 @@ public sealed class BerriesEngineTests
 
         public FileSystemPath? GetParentDirectory(FileSystemPath path)
         {
-            var value = NormalizePath(path).Value;
-            var separator = value.LastIndexOf('\\');
-            if (separator <= 2) return null;
-            return new FileSystemPath(value[..separator]);
+            var normalized = NormalizePath(path).Value;
+            var separator = normalized.LastIndexOf('\\');
+            return separator <= 2 ? null : new FileSystemPath(normalized[..separator]);
         }
 
-        public IEnumerable<FileSystemFile> EnumerateFiles(FileSystemPath root) =>
-            filesByRoot.TryGetValue(root, out var files)
-                ? files
-                : throw new InvalidOperationException($"Unexpected enumeration root: {root}");
-
-        public Stream OpenRead(FileSystemPath path)
+        public FileSystemPath GetRelativePath(FileSystemPath relativeTo, FileSystemPath path)
         {
-            OpenedPaths.Add(path);
-            if (openFailures.TryGetValue(path, out var failure)) throw failure;
-            if (!contentByPath.TryGetValue(path, out var content))
-                throw new InvalidOperationException($"Unexpected content read: {path}");
-            return new MemoryStream(content, writable: false);
+            var root = NormalizePath(relativeTo).Value;
+            var value = NormalizePath(path).Value;
+            if (StringComparer.OrdinalIgnoreCase.Equals(root, value)) return new FileSystemPath(".");
+            return new FileSystemPath(value[(root.Length + 1)..]);
         }
+
+        public FileSystemPath Combine(FileSystemPath directory, FileSystemPath relativePath) =>
+            new(NormalizePath(directory).Value + "\\" + relativePath.Value.TrimStart('\\'));
 
         public bool PathsEqual(FileSystemPath left, FileSystemPath right) =>
-            StringComparer.OrdinalIgnoreCase.Equals(
-                NormalizePath(left).Value,
-                NormalizePath(right).Value);
+            StringComparer.OrdinalIgnoreCase.Equals(NormalizePath(left).Value, NormalizePath(right).Value);
 
         public bool IsDescendant(FileSystemPath candidate, FileSystemPath ancestor)
         {
             var child = NormalizePath(candidate).Value;
             var parent = NormalizePath(ancestor).Value;
-            if (StringComparer.OrdinalIgnoreCase.Equals(child, parent)) return false;
-            return child.StartsWith(parent + "\\", StringComparison.OrdinalIgnoreCase);
+            return !StringComparer.OrdinalIgnoreCase.Equals(child, parent)
+                && child.StartsWith(parent + "\\", StringComparison.OrdinalIgnoreCase);
         }
 
-        public bool Exists(FileSystemPath path) => throw UnexpectedCall();
+        public IEnumerable<FileSystemFile> EnumerateFiles(FileSystemPath root) =>
+            filesByRoot.TryGetValue(root, out var files) ? files : [];
+
+        public Stream OpenRead(FileSystemPath path)
+        {
+            OpenedPaths.Add(path);
+            if (openFailures.TryGetValue(path, out var exception)) throw exception;
+            return new MemoryStream(contentByPath[path], writable: false);
+        }
+
+        public bool Exists(FileSystemPath path) => false;
         public void CreateDirectory(FileSystemPath path) => throw UnexpectedCall();
         public void CopyFile(FileSystemPath source, FileSystemPath destination) => throw UnexpectedCall();
         public void MoveFile(FileSystemPath source, FileSystemPath destination) => throw UnexpectedCall();
@@ -265,6 +274,6 @@ public sealed class BerriesEngineTests
         public void RemoveDirectory(FileSystemPath path) => throw UnexpectedCall();
 
         private static InvalidOperationException UnexpectedCall() =>
-            new("The test used an unrelated filesystem operation.");
+            new("Unexpected filesystem mutation in synthetic engine test.");
     }
 }
