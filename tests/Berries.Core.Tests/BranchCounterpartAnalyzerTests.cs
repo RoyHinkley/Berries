@@ -18,11 +18,11 @@ public sealed class BranchCounterpartAnalyzerTests
 
         var branches = new[]
         {
-            new BranchRecord(root, null, 884, 116, 5, 116, 58, 5),
-            new BranchRecord(highSeed, root, 12, 38, 1, 38, 20, 1),
-            new BranchRecord(lowerSeed, root, 30, 20, 1, 20, 15, 1),
-            new BranchRecord(weakCounterpart, root, 462, 38, 1, 38, 20, 1),
-            new BranchRecord(strongCounterpart, root, 480, 20, 1, 20, 15, 1)
+            new BranchRecord(root, null, 884, 5, 116, 58, 5),
+            new BranchRecord(highSeed, root, 12, 1, 38, 20, 1),
+            new BranchRecord(lowerSeed, root, 30, 1, 20, 15, 1),
+            new BranchRecord(weakCounterpart, root, 462, 1, 38, 20, 1),
+            new BranchRecord(strongCounterpart, root, 480, 1, 20, 15, 1)
         };
 
         var groups = new List<Group>();
