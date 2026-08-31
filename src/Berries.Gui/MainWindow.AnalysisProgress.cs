@@ -10,16 +10,30 @@ public partial class MainWindow
     {
         base.OnOpened(e);
         controller.AnalysisProgressChanged += AnalysisProgressChanged;
+        controller.AnalysisChanged += AnalysisChanged;
     }
 
     protected override void OnClosed(EventArgs e)
     {
         controller.AnalysisProgressChanged -= AnalysisProgressChanged;
+        controller.AnalysisChanged -= AnalysisChanged;
         base.OnClosed(e);
     }
 
     private void AnalysisProgressChanged(OperationProgress progress) =>
         Dispatcher.UIThread.Post(() => ShowAnalysisProgress(progress));
+
+    private void AnalysisChanged() =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            UpdateCapabilities();
+            UpdatePivotCapabilities();
+            if (controller.Suggestions is not null && !portraitCommandBusy)
+            {
+                StatusProgress.IsVisible = false;
+                StatusProgress.IsIndeterminate = false;
+            }
+        });
 
     private void ShowAnalysisProgress(OperationProgress progress)
     {
