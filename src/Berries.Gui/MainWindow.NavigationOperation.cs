@@ -13,6 +13,8 @@ public partial class MainWindow
     private long navigationGeneration;
     private GroupsExplorerCache? groupsExplorerCache;
 
+    private bool NavigationIsActive => navigationCancellation is not null;
+
     private NavigationOperation BeginNavigation(string text, bool indeterminate = true)
     {
         navigationCancellation?.Cancel();
