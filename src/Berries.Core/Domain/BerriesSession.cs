@@ -17,10 +17,19 @@ public sealed class BerriesSession
     private IReadOnlyList<Group> groups = [];
 
     public BerriesSession(IFileSystem fileSystem, Portrait initialPortrait)
+        : this(fileSystem, initialPortrait, new Dictionary<FileSystemPath, int>())
+    {
+    }
+
+    public BerriesSession(
+        IFileSystem fileSystem,
+        Portrait initialPortrait,
+        IReadOnlyDictionary<FileSystemPath, int> uniqueFileCountsByDirectory)
     {
         this.fileSystem = fileSystem;
         InitialPortrait = initialPortrait;
         WorkingPortrait = initialPortrait;
+        UniqueFileCountsByDirectory = uniqueFileCountsByDirectory;
         Selection = new BerriesSelection(fileSystem, initialPortrait);
         groups = BuildGroups(initialPortrait);
     }
@@ -31,6 +40,13 @@ public sealed class BerriesSession
     public IReadOnlyList<PortraitOperation> Operations => operations;
     public IReadOnlyList<FileAction> Actions => actions;
     public IReadOnlyList<Group> Groups => groups;
+
+    /// <summary>
+    /// Counts, by physical directory, of files that did not belong to a Group when
+    /// initial Group discovery completed. These counts are fixed for the session.
+    /// Files that later become the sole remaining member of a Group are not included.
+    /// </summary>
+    public IReadOnlyDictionary<FileSystemPath, int> UniqueFileCountsByDirectory { get; }
 
     public int SelectedGroupCount => Selection.CountGroups(Groups);
 
