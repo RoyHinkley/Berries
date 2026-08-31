@@ -19,10 +19,10 @@ public sealed class BranchCounterpartAnalyzerTests
         var branches = new[]
         {
             new BranchRecord(root, null, 1000, 5, 116, 58, 5),
-            new BranchRecord(highSeed, root, 50, 1, 40, 20, 1),
-            new BranchRecord(lowerSeed, root, 50, 1, 30, 15, 1),
-            new BranchRecord(weakCounterpart, root, 500, 1, 40, 20, 1),
-            new BranchRecord(strongCounterpart, root, 500, 1, 30, 15, 1)
+            new BranchRecord(highSeed, root, 50, 1, 38, 20, 1),
+            new BranchRecord(lowerSeed, root, 50, 1, 20, 15, 1),
+            new BranchRecord(weakCounterpart, root, 500, 1, 38, 20, 1),
+            new BranchRecord(strongCounterpart, root, 500, 1, 20, 15, 1)
         };
 
         var groups = new List<Group>();
@@ -49,61 +49,37 @@ public sealed class BranchCounterpartAnalyzerTests
         Assert.Equal(strongCounterpart, Assert.Single(suggestion.Counterparts).Branch.Path);
     }
 
-    private static void AddSharedGroups(
-        ICollection<Group> groups,
-        FileSystemPath first,
-        FileSystemPath second,
-        int count,
-        string prefix)
+    private static void AddSharedGroups(ICollection<Group> groups, FileSystemPath first, FileSystemPath second, int count, string prefix)
     {
         for (var i = 0; i < count; i++)
-            groups.Add(new Group(
-                new ContentId($"{prefix}-{i}"),
-                [File(first, $"{prefix}-{i}-a"), File(second, $"{prefix}-{i}-b")]));
+            groups.Add(new Group(new ContentId($"{prefix}-{i}"), [File(first, $"{prefix}-{i}-a"), File(second, $"{prefix}-{i}-b")]));
     }
 
-    private static void AddInternalGroups(
-        ICollection<Group> groups,
-        FileSystemPath branch,
-        int count,
-        string prefix)
+    private static void AddInternalGroups(ICollection<Group> groups, FileSystemPath branch, int count, string prefix)
     {
         for (var i = 0; i < count; i++)
-            groups.Add(new Group(
-                new ContentId($"{prefix}-{i}"),
-                [File(branch, $"{prefix}-{i}-a"), File(branch, $"{prefix}-{i}-b")]));
+            groups.Add(new Group(new ContentId($"{prefix}-{i}"), [File(branch, $"{prefix}-{i}-a"), File(branch, $"{prefix}-{i}-b")]));
     }
 
-    private static FileInstance File(FileSystemPath directory, string name) =>
-        new(Path(directory.Value + "\\" + name), 10, directory);
-
+    private static FileInstance File(FileSystemPath directory, string name) => new(Path(directory.Value + "\\" + name), 10, directory);
     private static FileSystemPath Path(string value) => new(value);
 
     private sealed class TestFileSystem : IFileSystem
     {
-        public FileSystemPath NormalizePath(FileSystemPath path) =>
-            new(path.Value.Replace('/', '\\').TrimEnd('\\'));
-
+        public FileSystemPath NormalizePath(FileSystemPath path) => new(path.Value.Replace('/', '\\').TrimEnd('\\'));
         public FileSystemPath? GetParentDirectory(FileSystemPath path)
         {
             var value = NormalizePath(path).Value;
             var separator = value.LastIndexOf('\\');
             return separator <= 2 ? null : new FileSystemPath(value[..separator]);
         }
-
-        public bool PathsEqual(FileSystemPath left, FileSystemPath right) =>
-            StringComparer.OrdinalIgnoreCase.Equals(
-                NormalizePath(left).Value,
-                NormalizePath(right).Value);
-
+        public bool PathsEqual(FileSystemPath left, FileSystemPath right) => StringComparer.OrdinalIgnoreCase.Equals(NormalizePath(left).Value, NormalizePath(right).Value);
         public bool IsDescendant(FileSystemPath candidate, FileSystemPath ancestor)
         {
             var child = NormalizePath(candidate).Value;
             var parent = NormalizePath(ancestor).Value;
-            return !StringComparer.OrdinalIgnoreCase.Equals(child, parent)
-                && child.StartsWith(parent + "\\", StringComparison.OrdinalIgnoreCase);
+            return !StringComparer.OrdinalIgnoreCase.Equals(child, parent) && child.StartsWith(parent + "\\", StringComparison.OrdinalIgnoreCase);
         }
-
         public IEnumerable<FileSystemFile> EnumerateFiles(FileSystemPath root) => throw UnexpectedCall();
         public Stream OpenRead(FileSystemPath path) => throw UnexpectedCall();
         public bool Exists(FileSystemPath path) => throw UnexpectedCall();
@@ -112,8 +88,6 @@ public sealed class BranchCounterpartAnalyzerTests
         public void MoveFile(FileSystemPath source, FileSystemPath destination) => throw UnexpectedCall();
         public void DeleteFile(FileSystemPath path) => throw UnexpectedCall();
         public void RemoveDirectory(FileSystemPath path) => throw UnexpectedCall();
-
-        private static InvalidOperationException UnexpectedCall() =>
-            new("Branch counterpart analysis unexpectedly performed file I/O.");
+        private static InvalidOperationException UnexpectedCall() => new("Branch counterpart analysis unexpectedly performed file I/O.");
     }
 }
