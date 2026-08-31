@@ -13,24 +13,41 @@ public sealed class BranchStatisticsAnalyzer(IFileSystem fileSystem)
         IReadOnlyList<Group> groups,
         IReadOnlyList<DirectoryRecord> groupedDirectories,
         CancellationToken cancellationToken = default,
+        IProgress<OperationProgress>? progress = null) =>
+        Analyze(corpus, portrait, groups, groupedDirectories, new Dictionary<FileSystemPath, int>(), cancellationToken, progress);
+
+    public BranchStatisticsResult Analyze(
+        Corpus corpus,
+        Portrait portrait,
+        IReadOnlyList<Group> groups,
+        IReadOnlyList<DirectoryRecord> groupedDirectories,
+        IReadOnlyDictionary<FileSystemPath, int> uniqueFileCountsByDirectory,
+        CancellationToken cancellationToken = default,
         IProgress<OperationProgress>? progress = null)
     {
         var timer = Stopwatch.StartNew();
         var ancestorsByDirectory = new Dictionary<FileSystemPath, IReadOnlyList<FileSystemPath>>();
         var accumulators = new Dictionary<FileSystemPath, Accumulator>();
-        var physicalDirectories = portrait.Files.GroupBy(file => file.ParentDirectory).ToArray();
+        var portraitDirectories = portrait.Files.GroupBy(file => file.ParentDirectory).ToDictionary(group => group.Key, group => group.Count());
+        var physicalDirectories = portraitDirectories.Keys
+            .Concat(uniqueFileCountsByDirectory.Where(item => item.Value > 0).Select(item => item.Key))
+            .Distinct()
+            .ToArray();
         var totalWork = (long)physicalDirectories.Length + groupedDirectories.Count + groups.Count;
         long completed = 0;
         progress?.Report(new OperationProgress("Analyzing branches", completed, totalWork));
 
-        foreach (var directoryFiles in physicalDirectories)
+        foreach (var directory in physicalDirectories)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var fileCount = directoryFiles.Count();
-            foreach (var branch in GetAncestorsWithinCorpus(directoryFiles.Key, corpus, ancestorsByDirectory))
+            var uniqueFileCount = uniqueFileCountsByDirectory.TryGetValue(directory, out var uniqueCount) ? uniqueCount : 0;
+            var portraitFileCount = portraitDirectories.TryGetValue(directory, out var portraitCount) ? portraitCount : 0;
+
+            foreach (var branch in GetAncestorsWithinCorpus(directory, corpus, ancestorsByDirectory))
             {
                 var accumulator = GetAccumulator(accumulators, branch);
-                accumulator.FileCount += fileCount;
+                accumulator.UniqueFileCount += uniqueFileCount;
+                accumulator.PortraitFileCount += portraitFileCount;
                 accumulator.DirectoryCount++;
             }
             progress?.Report(new OperationProgress("Analyzing branches", ++completed, totalWork));
@@ -71,7 +88,8 @@ public sealed class BranchStatisticsAnalyzer(IFileSystem fileSystem)
                 return new BranchRecord(
                     item.Key,
                     parent,
-                    item.Value.FileCount,
+                    item.Value.UniqueFileCount,
+                    item.Value.PortraitFileCount,
                     item.Value.DirectoryCount,
                     item.Value.GroupedFileCount,
                     item.Value.GroupCount,
@@ -127,7 +145,8 @@ public sealed class BranchStatisticsAnalyzer(IFileSystem fileSystem)
 
     private sealed class Accumulator
     {
-        public int FileCount { get; set; }
+        public int UniqueFileCount { get; set; }
+        public int PortraitFileCount { get; set; }
         public int DirectoryCount { get; set; }
         public int GroupedFileCount { get; set; }
         public int GroupCount { get; set; }
