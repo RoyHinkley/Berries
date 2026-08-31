@@ -6,7 +6,7 @@ This document defines the architectural vocabulary and semantic invariants used 
 
 Berries intentionally keeps user-facing language simple while retaining narrower technical names where they carry real information.
 
-User-facing nouns are **Group**, **file/copy**, **Directory**, **Branch**, **Directory Pair**, **Branch Pair**, **Corpus Roots**, and **Suggestion**.
+User-facing nouns are **Group**, **file/copy**, **Directory**, **Branch**, **Directory Pair**, **Branch Pair**, **Corpus Roots**, **Case**, and **Suggestion**.
 
 Core uses narrower technical types and search-role names where they remain useful:
 
@@ -17,7 +17,7 @@ Core uses narrower technical types and search-role names where they remain usefu
 
 A **Group** is not synonymous with a `ContentId`: it is the current collection of at least two files in the Working Portrait having the same `ContentId`.
 
-Seed and Counterpart are internal search roles, not alternate names for Branches or Branch Pairs. A **Suggestion** is the application-level result surfaced because a view appears worth the user's attention.
+Seed and Counterpart are internal search roles, not alternate names for Branches or Branch Pairs. A **Case** is the bounded data set behind a presented Explorer view. A **Suggestion** identifies a Case/view that analysis has found worth presenting to the user.
 
 ## Core terminology
 
@@ -148,13 +148,21 @@ A Branch Pair is simply the pair itself. It need not have been discovered throug
 
 Berries does not construct every possible Branch Pair. The targeted search evaluates several strong Seeds and their Counterparts, then compares the resulting pairs.
 
+### Case
+
+The bounded data set underlying one presented Explorer projection.
+
+A Case records the files being considered together and the structural scope needed to interpret them. A pair Case therefore carries both scopes and the files represented on each side. The Projection is the presentation of that Case; it is not the Case itself.
+
+Pivoting can replace the current Case with a related Case and present it through another Projection without changing the Working Portrait.
+
 ### Suggestion
 
-A view Berries has identified as worth the user's attention because its structure indicates that one or a few user decisions may resolve a relatively large amount of duplicated material.
+A Case/view Berries has identified as worth the user's attention because its structure indicates that one or a few user decisions may resolve a relatively large amount of duplicated material.
 
-The currently implemented Suggestions are Branch Pair views. During targeted search Berries evaluates several candidate Seeds, finds each Seed's best Counterpart, and chooses the strongest Branch Pair among those candidates as the next Suggestion. The winning Suggestion therefore often does not originate from the highest-ranked Seed.
+The currently implemented Suggestions are Branch Pair Cases. During targeted search Berries evaluates several candidate Seeds, finds each Seed's best Counterpart, and chooses the strongest Branch Pair among those candidates as the next Suggestion. The winning Suggestion therefore often does not originate from the highest-ranked Seed.
 
-A Suggestion is presentation/navigation state, not a required work item and not a semantic diagnosis.
+A Suggestion is an attention aid. It is not a required work item and does not imply a semantic diagnosis.
 
 ### Corpus Roots projection
 
@@ -162,7 +170,7 @@ A Branch-style Explorer view rooted at each selected Corpus root.
 
 ### Projection
 
-A way of organizing files from the Working Portrait for exploration and resolution.
+A way of presenting a Case from the Working Portrait for exploration and resolution.
 
 Current projections are:
 
@@ -173,11 +181,11 @@ Current projections are:
     Directory Pair
     Branch Pair
 
-Changing projection does not change the Working Portrait.
+Changing projection/focus does not change the Working Portrait.
 
 ### Pivot
 
-Navigate from the current focus to another meaningful projection or structural interpretation without changing the Working Portrait.
+Navigate from the current focus to another meaningful Case/projection or structural interpretation without changing the Working Portrait.
 
 ### Suggest
 
@@ -257,13 +265,14 @@ If implemented, saved state should restore a modeled session directly rather tha
 2. The Initial Portrait is fixed for the lifetime of a session.
 3. The Working Portrait is reconstructible from the Initial Portrait plus ordered portrait operations.
 4. A Group is the current set of at least two files sharing one ContentId.
-5. Selection always denotes files, regardless of projection.
-6. Exclude changes the Working Portrait but never the filesystem Action list.
-7. Delete and Move change the Working Portrait immediately and contribute physical Actions.
-8. There is no Keep, Accept, or Apply state in the current model.
-9. Seed and Counterpart are search roles; Suggestion is the surfaced attention unit.
-10. Pivot and Suggest change focus/presentation only.
-11. Unique files can remain modeled even though Group-oriented resolution does not target them.
-12. No physical filesystem change occurs before Execute.
-13. Execute handles encountered failures rather than depending on a global pre-execution reconciliation pass.
-14. Core remains independent of UI and platform-specific filesystem behavior.
+5. A Case is the bounded data set behind a presented Projection.
+6. Selection always denotes files, regardless of projection.
+7. Exclude changes the Working Portrait but never the filesystem Action list.
+8. Delete and Move change the Working Portrait immediately and contribute physical Actions.
+9. There is no Keep, Accept, or Apply state in the current model.
+10. Seed and Counterpart are search roles; Suggestion is the surfaced attention aid.
+11. Pivot and Suggest change Case/focus/presentation only.
+12. Unique files can remain modeled even though Group-oriented resolution does not target them.
+13. No physical filesystem change occurs before Execute.
+14. Execute handles encountered failures rather than depending on a global pre-execution reconciliation pass.
+15. Core remains independent of UI and platform-specific filesystem behavior.
