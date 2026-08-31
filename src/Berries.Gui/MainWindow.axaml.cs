@@ -88,11 +88,14 @@ public partial class MainWindow : Window
                 StatusText.Text = $"Scanning corpus — {p.FilesExamined:N0} files");
             var groupProgress = new Progress<GroupDiscoveryProgress>(p =>
             {
-                StatusText.Text = $"Hashing Group candidates — {p.FilesHashed:N0} / {p.CandidateFiles:N0}";
-                StatusProgress.IsIndeterminate = false;
-                StatusProgress.Value = p.CandidateFiles == 0
-                    ? 0
-                    : 100.0 * p.FilesHashed / p.CandidateFiles;
+                var completed = p.Completed ?? p.FilesHashed;
+                var total = p.Total ?? p.CandidateFiles;
+                StatusText.Text = total > 0
+                    ? $"{p.Phase} — {completed:N0} / {total:N0}"
+                    : p.Phase + "...";
+                StatusProgress.IsIndeterminate = total <= 0;
+                if (total > 0)
+                    StatusProgress.Value = 100.0 * completed / total;
             });
 
             var scanTask = controller.ScanAsync(roots, config.IsExcluded, scanProgress, groupProgress);
