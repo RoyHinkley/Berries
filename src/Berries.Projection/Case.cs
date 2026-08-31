@@ -3,6 +3,17 @@ using Berries.FileSystem.Abstractions;
 
 namespace Berries.Projection;
 
+public enum ProjectionKind
+{
+    Corpus,
+    CorpusRoots,
+    Groups,
+    Directory,
+    Branch,
+    DirectoryPair,
+    BranchPair
+}
+
 /// <summary>
 /// The bounded data set underlying one presented Explorer projection.
 /// A Projection is a presentation of a Case; changing projection can change
