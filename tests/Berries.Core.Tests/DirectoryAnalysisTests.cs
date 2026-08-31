@@ -22,15 +22,16 @@ public sealed class DirectoryAnalysisTests
         var a2 = File("A", "a2");
         var a3 = File("A", "a3");
         var a3Copy = File("A", "a3-copy");
-        var aUnique = File("A", "unique");
         var b1 = File("B", "b1");
         var b2 = File("B", "b2");
         var b2Copy = File("B", "b2-copy");
         var c1 = File("C", "c1");
 
+        // Directory analysis runs after initially unique FileInstances have been pruned.
+        // Their contribution to structural file counts is retained separately.
         var portrait = new Portrait(new[]
         {
-            a1, a2, a3, a3Copy, aUnique,
+            a1, a2, a3, a3Copy,
             b1, b2, b2Copy,
             c1
         });
@@ -42,23 +43,31 @@ public sealed class DirectoryAnalysisTests
             new Group(new ContentId("03"), new[] { a3, a3Copy })
         };
 
+        var uniqueFileCounts = new Dictionary<FileSystemPath, int>
+        {
+            [directoryA] = 1
+        };
+
         var engine = new BerriesEngine(new UnusedFileSystem());
-        var result = await engine.AnalyzeDirectoriesAsync(portrait, groups);
+        var result = await engine.AnalyzeDirectoriesAsync(portrait, groups, uniqueFileCounts);
 
         Assert.Equal(3, result.Directories.Count);
 
         var recordA = Assert.Single(result.Directories, record => record.Path == directoryA);
         Assert.Equal(5, recordA.FileCount);
+        Assert.Equal(1, recordA.UniqueFileCount);
         Assert.Equal(4, recordA.GroupedFileCount);
         Assert.Equal(3, recordA.GroupCount);
 
         var recordB = Assert.Single(result.Directories, record => record.Path == directoryB);
         Assert.Equal(3, recordB.FileCount);
+        Assert.Equal(0, recordB.UniqueFileCount);
         Assert.Equal(3, recordB.GroupedFileCount);
         Assert.Equal(2, recordB.GroupCount);
 
         var recordC = Assert.Single(result.Directories, record => record.Path == directoryC);
         Assert.Equal(1, recordC.FileCount);
+        Assert.Equal(0, recordC.UniqueFileCount);
         Assert.Equal(1, recordC.GroupedFileCount);
         Assert.Equal(1, recordC.GroupCount);
 
