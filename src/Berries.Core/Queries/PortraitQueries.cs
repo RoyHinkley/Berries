@@ -94,6 +94,7 @@ public sealed class PortraitQueries(IFileSystem fileSystem)
 
     public IReadOnlyList<Group> Groups(BerriesSession session) =>
         session.Groups
+            .Where(group => group.Files.Count > 0)
             .OrderByDescending(group => group.Files.Count)
             .ThenBy(group => group.Files[0].Path.Value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
