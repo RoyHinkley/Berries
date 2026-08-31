@@ -1,5 +1,6 @@
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Berries.Core;
 using Berries.Core.Analysis;
 using Berries.Core.Domain;
 using Berries.Projection;
