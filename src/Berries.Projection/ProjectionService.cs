@@ -44,45 +44,21 @@ public sealed class ProjectionService(PortraitQueries queries)
         BerriesSession session,
         IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default) =>
-        Task.Run<IReadOnlyList<GroupProjection>>(() =>
-        {
-            var groups = queries.Groups(session);
-            var result = new GroupProjection[groups.Count];
-            progress?.Report(new OperationProgress("Building Groups view", 0, groups.Count));
-            for (var i = 0; i < groups.Count; i++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                result[i] = Group(groups[i].Files);
-                if ((i & 0xff) == 0 || i + 1 == groups.Count)
-                    progress?.Report(new OperationProgress("Building Groups view", i + 1, groups.Count));
-            }
-            return result;
-        }, cancellationToken);
+        BuildGroupsAsync(session, null, "Building Groups view", progress, cancellationToken);
 
     public Task<IReadOnlyList<GroupProjection>> GroupsForSelectionAsync(
         BerriesSession session,
         IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default) =>
-        Task.Run<IReadOnlyList<GroupProjection>>(() =>
-        {
-            var groups = queries.GroupsForSelection(session);
-            var result = new GroupProjection[groups.Count];
-            progress?.Report(new OperationProgress("Building selected Groups view", 0, groups.Count));
-            for (var i = 0; i < groups.Count; i++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                result[i] = Group(groups[i].Files);
-                if ((i & 0xff) == 0 || i + 1 == groups.Count)
-                    progress?.Report(new OperationProgress("Building selected Groups view", i + 1, groups.Count));
-            }
-            return result;
-        }, cancellationToken);
-
-    public IReadOnlyList<GroupProjection> Groups(BerriesSession session) =>
-        queries.Groups(session).Select(group => Group(group.Files)).ToArray();
-
-    public IReadOnlyList<GroupProjection> GroupsForSelection(BerriesSession session) =>
-        queries.GroupsForSelection(session).Select(group => Group(group.Files)).ToArray();
+        BuildGroupsAsync(
+            session,
+            session.Selection.Files
+                .Where(file => file.Content is not null)
+                .Select(file => file.Content!.Value)
+                .ToHashSet(),
+            "Building selected Groups view",
+            progress,
+            cancellationToken);
 
     public GroupProjection Group(IReadOnlyList<FileInstance> files)
     {
@@ -143,6 +119,52 @@ public sealed class ProjectionService(PortraitQueries queries)
         IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default) =>
         queries.SharedGroupCountAsync(session, first, second, includeDescendants, progress, cancellationToken);
+
+    private Task<IReadOnlyList<GroupProjection>> BuildGroupsAsync(
+        BerriesSession session,
+        IReadOnlySet<ContentId>? selectedContents,
+        string phase,
+        IProgress<OperationProgress>? progress,
+        CancellationToken cancellationToken) =>
+        Task.Run<IReadOnlyList<GroupProjection>>(() =>
+        {
+            var source = session.Groups;
+            var groups = new List<Group>(source.Count);
+            progress?.Report(new OperationProgress(phase, 0, source.Count));
+
+            for (var i = 0; i < source.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var group = source[i];
+                if (group.Files.Count > 0
+                    && (selectedContents is null || selectedContents.Contains(group.Content)))
+                    groups.Add(group);
+                if ((i & 0xff) == 0 || i + 1 == source.Count)
+                    progress?.Report(new OperationProgress(phase, i + 1, source.Count));
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            groups.Sort((left, right) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var byCount = right.Files.Count.CompareTo(left.Files.Count);
+                if (byCount != 0) return byCount;
+                return StringComparer.OrdinalIgnoreCase.Compare(
+                    left.Files[0].Path.Value,
+                    right.Files[0].Path.Value);
+            });
+
+            var result = new GroupProjection[groups.Count];
+            progress?.Report(new OperationProgress(phase, 0, groups.Count));
+            for (var i = 0; i < groups.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                result[i] = Group(groups[i].Files);
+                if ((i & 0xff) == 0 || i + 1 == groups.Count)
+                    progress?.Report(new OperationProgress(phase, i + 1, groups.Count));
+            }
+            return result;
+        }, cancellationToken);
 
     private static BranchProjection BuildBranch(
         FileSystemPath branch,
