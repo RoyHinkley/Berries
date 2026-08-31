@@ -195,31 +195,39 @@ public partial class MainWindow : Window
         if (controller.Session is null || suggestion.Counterparts.Count == 0) return;
         var first = suggestion.Seed.Branch.Path;
         var second = suggestion.Counterparts[0].Branch.Path;
-        BeginProgress("Opening Branch Pair...", true);
+        var sharedGroupCount = suggestion.Counterparts[0].SharedGroupCount;
+        var operation = BeginNavigation("Opening Branch Pair...", true);
         try
         {
-            var leftTask = BuildBranchExplorerNodeAsync(first);
-            var rightTask = BuildBranchExplorerNodeAsync(second);
+            var leftTask = BuildBranchExplorerNodeAsync(first, operation.Token);
+            var rightTask = BuildBranchExplorerNodeAsync(second, operation.Token);
             await Task.WhenAll(leftTask, rightTask);
             var left = await leftTask;
             var right = await rightTask;
+            if (!IsCurrentNavigation(operation))
+                throw new OperationCanceledException(operation.Token);
+
             PairExplorer.IsVisible = true;
             SingleExplorer.IsVisible = false;
             SetPairProjectionState(ProjectionKind.BranchPair, first, left.Files, second, right.Files);
-            ProjectionTitle.Text = $"Branch Pair — {suggestion.Counterparts[0].SharedGroupCount:N0} shared Groups";
+            ProjectionTitle.Text = $"Branch Pair — {sharedGroupCount:N0} shared Groups";
             BuildPairBreadcrumbs(first, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
             BuildPairBreadcrumbs(second, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
             LeftTree.ItemsSource = new[] { left };
             RightTree.ItemsSource = new[] { right };
-            EndProgress($"Branch Pair — {suggestion.Counterparts[0].SharedGroupCount:N0} shared Groups.");
             SynchronizeVisibleSelection();
             UpdateSelectionSummary();
             UpdateCapabilities();
             UpdatePivotCapabilities();
+            CompleteNavigation(operation, $"Branch Pair — {sharedGroupCount:N0} shared Groups.");
+        }
+        catch (OperationCanceledException) when (operation.Token.IsCancellationRequested || !IsCurrentNavigation(operation))
+        {
+            RetireNavigation(operation);
         }
         catch (Exception ex)
         {
-            EndProgress("Could not open Branch Pair: " + ex.Message);
+            CompleteNavigation(operation, "Could not open Branch Pair: " + ex.Message);
         }
     }
 
