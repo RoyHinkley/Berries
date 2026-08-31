@@ -35,12 +35,14 @@ internal static class DirectoryGraphAnalyzer
 {
     public static DirectoryGraphAnalysis Analyze(
         Portrait portrait,
+        IReadOnlyDictionary<FileSystemPath, int> uniqueFileCountsByDirectory,
         IReadOnlyList<DirectoryRecord> directories,
         IReadOnlyList<DirectoryPair> directoryPairs,
         IReadOnlySet<FileSystemPath> internalGroupDirectories)
     {
         var totalDirectoryCount = portrait.Files
             .Select(file => file.ParentDirectory)
+            .Concat(uniqueFileCountsByDirectory.Where(item => item.Value > 0).Select(item => item.Key))
             .Distinct()
             .Count();
 
