@@ -10,6 +10,7 @@ public sealed class ProjectionService
 {
     private readonly PortraitQueries queries;
     private readonly object cacheGate = new();
+    private readonly SemaphoreSlim groupsBuildGate = new(1, 1);
     private Portrait? cachedPortrait;
     private Corpus? cachedCorpus;
     private IReadOnlyList<GroupProjection>? cachedGroups;
@@ -82,16 +83,33 @@ public sealed class ProjectionService
                 return cachedGroups;
         }
 
-        var result = await BuildGroupsAsync(session, null, "Building Groups view", progress, cancellationToken);
-        lock (cacheGate)
+        await groupsBuildGate.WaitAsync(cancellationToken);
+        try
         {
-            if (ReferenceEquals(session.WorkingPortrait, portrait))
+            cancellationToken.ThrowIfCancellationRequested();
+            portrait = session.WorkingPortrait;
+            lock (cacheGate)
             {
                 EnsureCachePortraitLocked(portrait);
-                cachedGroups = result;
+                if (cachedGroups is not null)
+                    return cachedGroups;
             }
+
+            var result = await BuildGroupsAsync(session, null, "Building Groups view", progress, cancellationToken);
+            lock (cacheGate)
+            {
+                if (ReferenceEquals(session.WorkingPortrait, portrait))
+                {
+                    EnsureCachePortraitLocked(portrait);
+                    cachedGroups = result;
+                }
+            }
+            return result;
         }
-        return result;
+        finally
+        {
+            groupsBuildGate.Release();
+        }
     }
 
     public Task<IReadOnlyList<GroupProjection>> GroupsForSelectionAsync(
