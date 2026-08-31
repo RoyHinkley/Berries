@@ -205,7 +205,7 @@ public partial class MainWindow : Window
     {
         var session = controller.Session;
         var hasSession = session is not null;
-        var hasPair = currentCase is { IsPair: true, Primary: not null, Secondary: not null };
+        var hasPair = currentProjection is { IsPair: true, Primary: not null, Secondary: not null };
         MoveRightButton.IsEnabled = hasPair;
         MoveLeftButton.IsEnabled = hasPair;
         UndoButton.IsEnabled = hasSession && session!.Operations.Count > 0;
