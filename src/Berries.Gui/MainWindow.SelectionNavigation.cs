@@ -47,7 +47,7 @@ public partial class MainWindow
         e.Handled = true;
     }
 
-    private void PivotContentOrAll_Click(object? sender, RoutedEventArgs e)
+    private async void PivotContentOrAll_Click(object? sender, RoutedEventArgs e)
     {
         if (controller.Session is null)
             return;
@@ -60,6 +60,6 @@ public partial class MainWindow
 
         BreadcrumbPanel.IsVisible = false;
         BreadcrumbPanel.Children.Clear();
-        ShowContentProjection();
+        await ShowContentProjectionAsync();
     }
 }
