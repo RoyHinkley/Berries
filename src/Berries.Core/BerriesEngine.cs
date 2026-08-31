@@ -108,11 +108,26 @@ public sealed class BerriesEngine
         var totalTimer = Stopwatch.StartNew();
         var phaseTimer = Stopwatch.StartNew();
 
-        var candidateGroups = portrait.Files
-            .GroupBy(file => file.Length)
-            .Where(group => group.Count() > 1)
-            .Select(group => group.ToArray())
-            .ToArray();
+        var bySize = new Dictionary<long, List<FileInstance>>();
+        for (var i = 0; i < portrait.Files.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var file = portrait.Files[i];
+            if (!bySize.TryGetValue(file.Length, out var bucket))
+            {
+                bucket = [];
+                bySize[file.Length] = bucket;
+            }
+            bucket.Add(file);
+            ReportDiscoveryProgress(progress, "Grouping files by size", i + 1, portrait.Files.Count, file.Path);
+        }
+
+        var candidateGroups = new List<FileInstance[]>();
+        foreach (var bucket in bySize.Values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (bucket.Count > 1) candidateGroups.Add(bucket.ToArray());
+        }
         phaseTimer.Stop();
         var sizeGroupingElapsed = phaseTimer.Elapsed;
 
@@ -145,48 +160,95 @@ public sealed class BerriesEngine
                 hashedFiles.Add((content, file));
                 filesHashed++;
                 bytesHashed += file.Length;
-                progress?.Report(new GroupDiscoveryProgress(
-                    filesHashed,
-                    candidateFiles,
-                    bytesHashed,
-                    candidateBytes,
-                    file.Path));
             }
             else
             {
                 evictedFiles.Add(file);
             }
+
+            progress?.Report(new GroupDiscoveryProgress(
+                filesHashed,
+                candidateFiles,
+                bytesHashed,
+                candidateBytes,
+                file.Path,
+                "Hashing Group candidates",
+                filesHashed,
+                candidateFiles));
         }
         phaseTimer.Stop();
         var contentHashingElapsed = phaseTimer.Elapsed;
 
         phaseTimer.Restart();
-        var discovered = hashedFiles
-            .GroupBy(item => item.Content)
-            .Where(group => group.Count() > 1)
-            .Select(group => (group.Key, Files: group.Select(item => item.File).ToArray()))
-            .ToArray();
+        var hashedByContent = new Dictionary<ContentId, List<FileInstance>>();
+        for (var i = 0; i < hashedFiles.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var item = hashedFiles[i];
+            if (!hashedByContent.TryGetValue(item.Content, out var files))
+            {
+                files = [];
+                hashedByContent[item.Content] = files;
+            }
+            files.Add(item.File);
+            ReportDiscoveryProgress(progress, "Constructing Groups", i + 1, hashedFiles.Count, item.File.Path);
+        }
 
-        var contentByPath = discovered
-            .SelectMany(group => group.Files.Select(file => (file.Path, Content: group.Key)))
-            .ToDictionary(item => item.Path, item => item.Content);
-        var retainedFiles = portrait.Files
-            .Where(file => !evictedFiles.Contains(file))
-            .ToArray();
-        var uniqueFileCountsByDirectory = retainedFiles
-            .Where(file => !contentByPath.ContainsKey(file.Path))
-            .GroupBy(file => file.ParentDirectory)
-            .ToDictionary(group => group.Key, group => group.Count());
-        var groupedPortrait = new Portrait(retainedFiles
-            .Where(file => contentByPath.ContainsKey(file.Path))
-            .Select(file => file with { Content = contentByPath[file.Path] })
-            .ToArray());
+        var discovered = new List<(ContentId Content, FileInstance[] Files)>();
+        foreach (var item in hashedByContent)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (item.Value.Count > 1)
+                discovered.Add((item.Key, item.Value.ToArray()));
+        }
+
+        var contentByPath = new Dictionary<FileSystemPath, ContentId>();
+        foreach (var group in discovered)
+        foreach (var file in group.Files)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            contentByPath[file.Path] = group.Content;
+        }
+
+        var retainedFileCount = portrait.Files.Count - evictedFiles.Count;
+        var uniqueFileCountsByDirectory = new Dictionary<FileSystemPath, int>();
+        var groupedFiles = new List<FileInstance>(contentByPath.Count);
+        long totalBytes = 0;
+        long prepared = 0;
+
+        foreach (var file in portrait.Files)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (evictedFiles.Contains(file)) continue;
+
+            totalBytes += file.Length;
+            if (contentByPath.TryGetValue(file.Path, out var content))
+            {
+                groupedFiles.Add(file with { Content = content });
+            }
+            else
+            {
+                uniqueFileCountsByDirectory[file.ParentDirectory] =
+                    uniqueFileCountsByDirectory.GetValueOrDefault(file.ParentDirectory) + 1;
+            }
+
+            prepared++;
+            ReportDiscoveryProgress(progress, "Preparing session files", prepared, retainedFileCount, file.Path);
+        }
+
+        var groupedPortrait = new Portrait(groupedFiles.ToArray());
         var groupedFilesByPath = groupedPortrait.Files.ToDictionary(file => file.Path);
-        var groups = discovered
-            .Select(group => new Group(
-                group.Key,
-                group.Files.Select(file => groupedFilesByPath[file.Path]).ToArray()))
-            .ToArray();
+        var groups = new Group[discovered.Count];
+        for (var i = 0; i < discovered.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var group = discovered[i];
+            groups[i] = new Group(
+                group.Content,
+                group.Files.Select(file => groupedFilesByPath[file.Path]).ToArray());
+            var currentPath = group.Files.Count == 0 ? default : group.Files[0].Path;
+            ReportDiscoveryProgress(progress, "Finalizing Groups", i + 1, discovered.Count, currentPath);
+        }
         phaseTimer.Stop();
         var groupConstructionElapsed = phaseTimer.Elapsed;
 
@@ -195,8 +257,8 @@ public sealed class BerriesEngine
             groupedPortrait,
             groups,
             uniqueFileCountsByDirectory,
-            retainedFiles.Length,
-            retainedFiles.Sum(file => file.Length),
+            retainedFileCount,
+            totalBytes,
             evictions,
             new GroupDiscoveryTiming(
                 sizeGroupingElapsed,
@@ -204,6 +266,22 @@ public sealed class BerriesEngine
                 groupConstructionElapsed,
                 totalTimer.Elapsed));
     }
+
+    private static void ReportDiscoveryProgress(
+        IProgress<GroupDiscoveryProgress>? progress,
+        string phase,
+        long completed,
+        long total,
+        FileSystemPath currentPath) =>
+        progress?.Report(new GroupDiscoveryProgress(
+            0,
+            0,
+            0,
+            0,
+            currentPath,
+            phase,
+            completed,
+            total));
 
     private static DirectoryAnalysisResult AnalyzeDirectories(
         Portrait portrait,
@@ -228,18 +306,24 @@ public sealed class BerriesEngine
             var files = group.Files;
 
             foreach (var file in files)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
                 AddGroupedFile(file, group.Content, groupedFilesByDirectory, groupsByDirectory);
+            }
 
             for (var firstIndex = 0; firstIndex < files.Count - 1; firstIndex++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var first = files[firstIndex];
                 for (var secondIndex = firstIndex + 1; secondIndex < files.Count; secondIndex++)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var second = files[secondIndex];
 
                     if (first.ParentDirectory == second.ParentDirectory)
                     {
                         internalGroupDirectories.Add(first.ParentDirectory);
+                        examinedPairs++;
                         continue;
                     }
 
@@ -250,10 +334,10 @@ public sealed class BerriesEngine
                         pairGroups[key] = sharedGroups;
                     }
                     sharedGroups.Add(group.Content);
+                    examinedPairs++;
                 }
             }
 
-            examinedPairs += (long)files.Count * (files.Count - 1) / 2;
             progress?.Report(new OperationProgress("Analyzing directories", examinedPairs, totalPairs));
         }
 
