@@ -27,9 +27,9 @@ public sealed class BranchStatisticsTests
 
         var directories = new[]
         {
-            new DirectoryRecord(a1, 2, 2, 2),
-            new DirectoryRecord(a2, 1, 1, 1),
-            new DirectoryRecord(b, 2, 2, 2)
+            new DirectoryRecord(a1, 0, 2, 2, 2),
+            new DirectoryRecord(a2, 0, 1, 1, 1),
+            new DirectoryRecord(b, 0, 2, 2, 2)
         };
 
         var analyzer = new BranchStatisticsAnalyzer(new TestFileSystem());
@@ -41,6 +41,8 @@ public sealed class BranchStatisticsTests
 
         var branch = Assert.Single(result.Branches, item => item.Path == a);
         Assert.Equal(3, branch.FileCount);
+        Assert.Equal(0, branch.UniqueFileCount);
+        Assert.Equal(3, branch.PortraitFileCount);
         Assert.Equal(2, branch.DirectoryCount);
         Assert.Equal(3, branch.GroupedFileCount);
         Assert.Equal(2, branch.GroupCount);
