@@ -27,7 +27,7 @@ A Suggestion therefore means "this looks worth your attention," not "this is the
 
 ## Current vocabulary
 
-- **Group** — all current Working-Portrait files having identical content, provided at least two remain.
+- **Group** — a content-identity set established during primary discovery. Its identity persists for the session while current membership may fall to one or zero files.
 - **file / copy** — one filesystem instance; Core uses `FileInstance` where that precision matters.
 - **Directory** — one exact directory.
 - **Branch** — a Directory together with all descendants.
@@ -55,7 +55,8 @@ A Suggestion therefore means "this looks worth your attention," not "this is the
 8. **Move preserves source-relative structure.** The user establishes source and destination scopes explicitly; existing destination organization is authoritative.
 9. **Analysis serves attention.** The goal is useful prioritization, not exhaustive enumeration or mathematical completeness.
 10. **Execution is explicit.** No physical filesystem modification occurs until Execute.
-11. **Core remains independent of UI and platform-specific filesystem behavior.**
+11. **Computation belongs in Core whenever possible.** Projection owns only computation that is inherently presentation-shaped; the GUI owns interaction and bounded control updates, not Corpus-/Portrait-scale work.
+12. **Scaling work must preserve responsiveness.** Potentially appreciable Core/Projection operations are asynchronous, cancellable within their scaling loops, and report meaningful progress; determinate completed/total progress is preferred whenever the total is practical to know.
 
 ## Analysis strategy and empirical result
 
@@ -120,11 +121,12 @@ Before Execute, Berries summarizes planned physical Actions and potential physic
 
 Unique files are needed during primary discovery and for the structural population statistics that influence Seed concentration. After Groups are established, however, their individual `FileInstance`s no longer participate in duplicate resolution.
 
-Berries therefore retains fixed unique-file counts by physical Directory and removes the unique `FileInstance`s from the session Portrait. Directory and Branch totals reconstruct their current file population from those retained unique counts plus current Group-originating Portrait files. This preserves ranking behavior while reducing long-lived memory use and repeated Portrait traversal cost.
+Berries therefore retains fixed unique-file counts by physical Directory and removes the unique `FileInstance`s from the session Portrait. Directory and Branch totals reconstruct their current file population from those retained unique counts plus current files belonging to session-stable Groups. This preserves ranking behavior while reducing long-lived memory use and repeated Portrait traversal cost.
 
 ## Design documents
 
 - [MODEL.md](MODEL.md) — authoritative vocabulary and invariants.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — Core/Projection/GUI boundaries, responsiveness, cancellation, and progress rules.
 - [ANALYSIS.md](ANALYSIS.md) — Group discovery, Seed/Counterpart search, ranking, and empirical findings.
 - [WORKFLOW.md](WORKFLOW.md) — Explorer interaction, portrait operations, Move, Undo, and Execute.
 - [SEMANTIC-RESEARCH.md](SEMANTIC-RESEARCH.md) — retained Situation/disposition research and recognizable filesystem histories.
@@ -153,7 +155,9 @@ Solution decomposition:
         Windows filesystem adapter
 
     Berries.Gui
-        Avalonia desktop UI and orchestration
+        Avalonia desktop UI and interaction orchestration
+
+The placement rule is **Core if possible, Projection if warranted, GUI only for presentation and interaction**. See `ARCHITECTURE.md` for the operational contract, including cancellation and progress requirements.
 
     Berries.Core.Tests
         platform-independent tests using synthetic filesystem/model data
