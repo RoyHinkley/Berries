@@ -170,7 +170,7 @@ public partial class MainWindow
         }
     }
 
-    private FileSystemPath? SelectedScope() => focusedNode?.SemanticPath ?? currentProjection?.Primary;
+    private FileSystemPath? SelectedScope() => focusedNode?.SemanticPath ?? currentCase?.Primary;
 
     private async Task ShowAdHocBranchPairAsync(
         FileSystemPath first,
@@ -228,7 +228,7 @@ public partial class MainWindow
 
     private void RebuildCurrentPairBreadcrumbs()
     {
-        if (currentProjection is not { Kind: ProjectionKind.BranchPair, Primary: { } first, Secondary: { } second })
+        if (currentCase is not { Kind: ProjectionKind.BranchPair, Primary: { } first, Secondary: { } second })
             return;
         BuildPairBreadcrumbs(first, LeftScopeBreadcrumbs, true, "Branch", PairSide.Left);
         BuildPairBreadcrumbs(second, RightScopeBreadcrumbs, true, "Branch", PairSide.Right);
@@ -236,7 +236,7 @@ public partial class MainWindow
 
     private void BuildBreadcrumbs(FileSystemPath path)
     {
-        var isBranch = currentProjection?.Kind == ProjectionKind.Branch;
+        var isBranch = currentCase?.Kind == ProjectionKind.Branch;
         BuildBreadcrumbs(path, BreadcrumbPanel, isBranch, isBranch ? "Branch" : "Directory", null);
         BreadcrumbPanel.IsVisible = BreadcrumbPanel.Children.Count > 0;
     }
@@ -299,7 +299,7 @@ public partial class MainWindow
     {
         var session = controller.Session;
         if (session is null
-            || currentProjection is not { Primary: { } primary, Secondary: { } secondary }
+            || currentCase is not { Primary: { } primary, Secondary: { } secondary }
             || target.Side is null)
             return;
 
