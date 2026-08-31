@@ -13,7 +13,6 @@ public sealed class BranchPriorityMetricsTests
             Path(@"X:\Corpus"),
             null,
             UniqueFileCount: 500,
-            PortraitFileCount: 500,
             DirectoryCount: 100,
             GroupedFileCount: 500,
             GroupCount: 100,
@@ -23,7 +22,6 @@ public sealed class BranchPriorityMetricsTests
             Path(@"X:\Corpus\Focused"),
             parent.Path,
             UniqueFileCount: 20,
-            PortraitFileCount: 80,
             DirectoryCount: 10,
             GroupedFileCount: 80,
             GroupCount: 80,
@@ -43,9 +41,9 @@ public sealed class BranchPriorityMetricsTests
     public void Calculate_DoesNotRewardBranchesLessConcentratedThanTheirParent()
     {
         var parent = new BranchRecord(
-            Path(@"X:\Corpus"), null, 500, 500, 100, 500, 100, 50);
+            Path(@"X:\Corpus"), null, 500, 100, 500, 100, 50);
         var child = new BranchRecord(
-            Path(@"X:\Corpus\Diffuse"), parent.Path, 480, 20, 50, 20, 20, 10);
+            Path(@"X:\Corpus\Diffuse"), parent.Path, 480, 50, 20, 20, 10);
 
         var metric = Assert.Single(BranchPriorityMetrics.Calculate(new[] { parent, child }));
 
