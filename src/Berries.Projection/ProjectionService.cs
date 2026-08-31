@@ -6,8 +6,17 @@ using Berries.FileSystem.Abstractions;
 
 namespace Berries.Projection;
 
-public sealed class ProjectionService(PortraitQueries queries)
+public sealed class ProjectionService
 {
+    private readonly PortraitQueries queries;
+    private readonly object cacheGate = new();
+    private Portrait? cachedPortrait;
+    private Corpus? cachedCorpus;
+    private IReadOnlyList<GroupProjection>? cachedGroups;
+    private IReadOnlyList<BranchProjection>? cachedCorpusRoots;
+
+    public ProjectionService(PortraitQueries queries) => this.queries = queries;
+
     public async Task<DirectoryProjection> DirectoryAsync(
         BerriesSession session,
         FileSystemPath directory,
@@ -36,15 +45,54 @@ public sealed class ProjectionService(PortraitQueries queries)
         IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        var portrait = session.WorkingPortrait;
+        lock (cacheGate)
+        {
+            EnsureCachePortraitLocked(portrait);
+            if (ReferenceEquals(cachedCorpus, corpus) && cachedCorpusRoots is not null)
+                return cachedCorpusRoots;
+        }
+
         var roots = await queries.GroupedFilesInCorpusRootsWithPlacementAsync(session, corpus, progress, cancellationToken);
-        return roots.Select(root => BuildBranch(root.Root, root.Files, cancellationToken)).ToArray();
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = roots.Select(root => BuildBranch(root.Root, root.Files, cancellationToken)).ToArray();
+
+        lock (cacheGate)
+        {
+            if (ReferenceEquals(session.WorkingPortrait, portrait))
+            {
+                EnsureCachePortraitLocked(portrait);
+                cachedCorpus = corpus;
+                cachedCorpusRoots = result;
+            }
+        }
+        return result;
     }
 
-    public Task<IReadOnlyList<GroupProjection>> GroupsAsync(
+    public async Task<IReadOnlyList<GroupProjection>> GroupsAsync(
         BerriesSession session,
         IProgress<OperationProgress>? progress = null,
-        CancellationToken cancellationToken = default) =>
-        BuildGroupsAsync(session, null, "Building Groups view", progress, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        var portrait = session.WorkingPortrait;
+        lock (cacheGate)
+        {
+            EnsureCachePortraitLocked(portrait);
+            if (cachedGroups is not null)
+                return cachedGroups;
+        }
+
+        var result = await BuildGroupsAsync(session, null, "Building Groups view", progress, cancellationToken);
+        lock (cacheGate)
+        {
+            if (ReferenceEquals(session.WorkingPortrait, portrait))
+            {
+                EnsureCachePortraitLocked(portrait);
+                cachedGroups = result;
+            }
+        }
+        return result;
+    }
 
     public Task<IReadOnlyList<GroupProjection>> GroupsForSelectionAsync(
         BerriesSession session,
@@ -165,6 +213,15 @@ public sealed class ProjectionService(PortraitQueries queries)
             }
             return result;
         }, cancellationToken);
+
+    private void EnsureCachePortraitLocked(Portrait portrait)
+    {
+        if (ReferenceEquals(cachedPortrait, portrait)) return;
+        cachedPortrait = portrait;
+        cachedCorpus = null;
+        cachedGroups = null;
+        cachedCorpusRoots = null;
+    }
 
     private static BranchProjection BuildBranch(
         FileSystemPath branch,
