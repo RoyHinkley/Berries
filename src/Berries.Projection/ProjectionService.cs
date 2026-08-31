@@ -40,6 +40,44 @@ public sealed class ProjectionService(PortraitQueries queries)
         return roots.Select(root => BuildBranch(root.Root, root.Files, cancellationToken)).ToArray();
     }
 
+    public Task<IReadOnlyList<GroupProjection>> GroupsAsync(
+        BerriesSession session,
+        IProgress<OperationProgress>? progress = null,
+        CancellationToken cancellationToken = default) =>
+        Task.Run<IReadOnlyList<GroupProjection>>(() =>
+        {
+            var groups = queries.Groups(session);
+            var result = new GroupProjection[groups.Count];
+            progress?.Report(new OperationProgress("Building Groups view", 0, groups.Count));
+            for (var i = 0; i < groups.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                result[i] = Group(groups[i].Files);
+                if ((i & 0xff) == 0 || i + 1 == groups.Count)
+                    progress?.Report(new OperationProgress("Building Groups view", i + 1, groups.Count));
+            }
+            return result;
+        }, cancellationToken);
+
+    public Task<IReadOnlyList<GroupProjection>> GroupsForSelectionAsync(
+        BerriesSession session,
+        IProgress<OperationProgress>? progress = null,
+        CancellationToken cancellationToken = default) =>
+        Task.Run<IReadOnlyList<GroupProjection>>(() =>
+        {
+            var groups = queries.GroupsForSelection(session);
+            var result = new GroupProjection[groups.Count];
+            progress?.Report(new OperationProgress("Building selected Groups view", 0, groups.Count));
+            for (var i = 0; i < groups.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                result[i] = Group(groups[i].Files);
+                if ((i & 0xff) == 0 || i + 1 == groups.Count)
+                    progress?.Report(new OperationProgress("Building selected Groups view", i + 1, groups.Count));
+            }
+            return result;
+        }, cancellationToken);
+
     public IReadOnlyList<GroupProjection> Groups(BerriesSession session) =>
         queries.Groups(session).Select(group => Group(group.Files)).ToArray();
 
