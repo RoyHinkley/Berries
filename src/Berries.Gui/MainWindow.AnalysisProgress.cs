@@ -21,14 +21,18 @@ public partial class MainWindow
     }
 
     private void AnalysisProgressChanged(OperationProgress progress) =>
-        Dispatcher.UIThread.Post(() => ShowAnalysisProgress(progress));
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!NavigationIsActive)
+                ShowAnalysisProgress(progress);
+        });
 
     private void AnalysisChanged() =>
         Dispatcher.UIThread.Post(() =>
         {
             UpdateCapabilities();
             UpdatePivotCapabilities();
-            if (controller.Suggestions is not null && !portraitCommandBusy)
+            if (controller.Suggestions is not null && !portraitCommandBusy && !NavigationIsActive)
             {
                 StatusProgress.IsVisible = false;
                 StatusProgress.IsIndeterminate = false;
