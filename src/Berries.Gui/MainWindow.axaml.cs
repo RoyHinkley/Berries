@@ -150,6 +150,7 @@ public partial class MainWindow : Window
                 session,
                 new Progress<OperationProgress>(progress => ShowNavigationProgress(operation, progress)),
                 operation.Token);
+            operation.Mark("Groups projection acquired");
             operation.Token.ThrowIfCancellationRequested();
             if (!IsCurrentNavigation(operation))
                 throw new OperationCanceledException(operation.Token);
@@ -157,27 +158,33 @@ public partial class MainWindow : Window
             PairExplorer.IsVisible = false;
             SingleExplorer.IsVisible = true;
             SetProjectionState(ProjectionKind.Groups, groups.SelectMany(group => group.Files));
+            operation.Mark("Groups projection state set");
             BreadcrumbPanel.IsVisible = false;
             BreadcrumbPanel.Children.Clear();
             ProjectionTitle.Text = "Groups";
 
             var cache = GetGroupsExplorerCache(session.WorkingPortrait);
             ExplorerTree.ItemsSource = cache.Nodes;
+            operation.Mark($"Groups ItemsSource assigned ({cache.Nodes.Count:N0} cached nodes)");
             await Task.Yield();
+            operation.Mark("Groups first UI yield returned");
             await BuildGroupsExplorerTreeAsync(
                 groups,
                 cache.Nodes,
                 cache.BuiltCount,
                 operation,
                 completed => cache.BuiltCount = completed);
+            operation.Mark("Groups tree available");
 
             if (!IsCurrentNavigation(operation))
                 throw new OperationCanceledException(operation.Token);
 
             SynchronizeVisibleSelection();
+            operation.Mark("Groups selection synchronized");
             UpdateSelectionSummary();
             UpdateCapabilities();
             UpdatePivotCapabilities();
+            operation.Mark("Groups capabilities updated");
             CompleteNavigation(operation, "Groups");
         }
         catch (OperationCanceledException) when (operation.Token.IsCancellationRequested || !IsCurrentNavigation(operation))
