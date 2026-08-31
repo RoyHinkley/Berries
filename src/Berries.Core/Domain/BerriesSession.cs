@@ -14,6 +14,7 @@ public sealed class BerriesSession
     private readonly IFileSystem fileSystem;
     private readonly List<PortraitOperation> operations = [];
     private readonly List<FileAction> actions = [];
+    private readonly IReadOnlyList<ContentId> groupContents;
     private IReadOnlyList<Group> groups = [];
 
     public BerriesSession(IFileSystem fileSystem, Portrait initialPortrait)
@@ -31,6 +32,11 @@ public sealed class BerriesSession
         WorkingPortrait = initialPortrait;
         UniqueFileCountsByDirectory = uniqueFileCountsByDirectory;
         Selection = new BerriesSelection(fileSystem, initialPortrait);
+        groupContents = initialPortrait.Files
+            .Where(file => file.Content is not null)
+            .Select(file => file.Content!.Value)
+            .Distinct()
+            .ToArray();
         groups = BuildGroups(initialPortrait);
     }
 
@@ -44,7 +50,6 @@ public sealed class BerriesSession
     /// <summary>
     /// Counts, by physical directory, of files that did not belong to a Group when
     /// initial Group discovery completed. These counts are fixed for the session.
-    /// Files that later become the sole remaining member of a Group are not included.
     /// </summary>
     public IReadOnlyDictionary<FileSystemPath, int> UniqueFileCountsByDirectory { get; }
 
@@ -180,13 +185,19 @@ public sealed class BerriesSession
         Selection.Refresh(WorkingPortrait);
     }
 
-    private static IReadOnlyList<Group> BuildGroups(Portrait portrait) =>
-        portrait.Files
+    private IReadOnlyList<Group> BuildGroups(Portrait portrait)
+    {
+        var filesByContent = portrait.Files
             .Where(file => file.Content is not null)
             .GroupBy(file => file.Content!.Value)
-            .Where(group => group.Count() > 1)
-            .Select(group => new Group(group.Key, group.ToArray()))
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<FileInstance>)group.ToArray());
+
+        return groupContents
+            .Select(content => new Group(
+                content,
+                filesByContent.TryGetValue(content, out var files) ? files : []))
             .ToArray();
+    }
 
     private void Apply(PortraitOperation operation, Dictionary<string, FileInstance> files)
     {
