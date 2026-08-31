@@ -83,14 +83,17 @@ The practical result observed during R&D is central to the design: resolving a s
         -> enumerate files
         -> size-group candidate files
         -> hash candidates
-        -> construct Groups / BerriesSession
-        -> Directory analysis
-        -> Branch statistics
-        -> targeted Seed/Counterpart search
-        -> construct Suggestions
+        -> construct Groups
+        -> count uniques by Directory
+        -> prune unique FileInstances
+        -> construct BerriesSession
         -> Groups view becomes ready
+        -> background Directory analysis / Directory Pairs
+        -> background Branch statistics
+        -> background targeted Seed/Counterpart search
+        -> Suggestions become available
 
-The current initial scan path remains sequential. After portrait operations, derived analysis refreshes in the background while the Explorer remains the stable work surface.
+Derived analysis is generation-aware and dependency-driven. Portrait changes make older products stale immediately, request cancellation of obsolete work, and schedule analysis for the new Working Portrait while the Explorer remains usable.
 
 ## Explorer projections
 
@@ -113,11 +116,11 @@ Move maps source-relative paths beneath an explicit destination scope. Existing 
 
 Before Execute, Berries summarizes planned physical Actions and potential physical content loss. Execute handles filesystem failures locally and continues independent safe work.
 
-## Open design item: unique files
+## Unique files after discovery
 
-The current Portrait retains unique files because they are used by structural measures and can constrain operations such as Move destination collisions. Earlier Case definitions also allowed unique files inside structural Case bounds.
+Unique files are needed during primary discovery and for the structural population statistics that influence Seed concentration. After Groups are established, however, their individual `FileInstance`s no longer participate in duplicate resolution.
 
-Whether unique files should remain members of Cases is intentionally unresolved. It must be reviewed separately because removing them can affect useful counts and ranking measures even if they are not ordinary duplicate-resolution targets.
+Berries therefore retains fixed unique-file counts by physical Directory and removes the unique `FileInstance`s from the session Portrait. Directory and Branch totals reconstruct their current file population from those retained unique counts plus current Group-originating Portrait files. This preserves ranking behavior while reducing long-lived memory use and repeated Portrait traversal cost.
 
 ## Design documents
 
@@ -138,7 +141,7 @@ Solution decomposition:
 
     Berries.Core
         domain/session model, Group discovery, structural analysis,
-        queries, portrait operations, planning/execution contracts
+        analysis lifecycle, queries, portrait operations, planning/execution contracts
 
     Berries.Projection
         UI-independent Explorer projection construction and ProjectionState
