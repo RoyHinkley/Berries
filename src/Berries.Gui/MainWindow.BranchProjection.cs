@@ -22,15 +22,32 @@ public partial class MainWindow
     private async Task ShowBranchProjectionAsync(FileSystemPath branch)
     {
         if (controller.Session is null) return;
-        BeginProgress("Opening Branch...", true);
+        var operation = BeginNavigation("Opening Branch...", true);
         try
         {
-            var node = await BuildBranchExplorerNodeAsync(branch);
-            PairExplorer.IsVisible = false; SingleExplorer.IsVisible = true;
+            var node = await BuildBranchExplorerNodeAsync(branch, operation.Token);
+            if (!IsCurrentNavigation(operation))
+                throw new OperationCanceledException(operation.Token);
+
+            PairExplorer.IsVisible = false;
+            SingleExplorer.IsVisible = true;
             SetProjectionState(ProjectionKind.Branch, node.Files, branch);
-            ProjectionTitle.Text = "Branch"; BuildBreadcrumbs(branch); ExplorerTree.ItemsSource = new[] { node };
-            EndProgress("Branch"); SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities(); UpdatePivotCapabilities();
+            ProjectionTitle.Text = "Branch";
+            BuildBreadcrumbs(branch);
+            ExplorerTree.ItemsSource = new[] { node };
+            SynchronizeVisibleSelection();
+            UpdateSelectionSummary();
+            UpdateCapabilities();
+            UpdatePivotCapabilities();
+            CompleteNavigation(operation, "Branch");
         }
-        catch (Exception ex) { EndProgress("Could not open Branch: " + ex.Message); }
+        catch (OperationCanceledException) when (operation.Token.IsCancellationRequested || !IsCurrentNavigation(operation))
+        {
+            RetireNavigation(operation);
+        }
+        catch (Exception ex)
+        {
+            CompleteNavigation(operation, "Could not open Branch: " + ex.Message);
+        }
     }
 }
