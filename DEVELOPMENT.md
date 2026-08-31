@@ -1,8 +1,6 @@
 # Berries Development Guide
 
-This document describes the current implementation state of Berries. It is intended to orient development work from the code that exists today, not preserve superseded plans.
-
-Governing semantics are in `PROJECT.md`, `MODEL.md`, `ANALYSIS.md`, and `WORKFLOW.md`. `SEMANTIC-RESEARCH.md` and `BOUNDARY.md` retain empirical research without defining runtime workflow.
+This document describes the current implementation state of Berries and the experimentally developed reasoning that must be preserved during refinement. Governing semantics are in `PROJECT.md`, `MODEL.md`, `ANALYSIS.md`, and `WORKFLOW.md`.
 
 ## Solution structure
 
@@ -16,24 +14,25 @@ Governing semantics are in `PROJECT.md`, `MODEL.md`, `ANALYSIS.md`, and `WORKFLO
 
     Berries.Projection
         UI-independent Explorer projection construction
+        ProjectionState presentation/navigation state
 
     Berries.FileSystem.Abstractions
         platform-neutral filesystem boundary
 
     Berries.FileSystem.Windows
-        Windows implementation of that boundary
+        Windows implementation
 
     Berries.Gui
-        Avalonia application shell and interaction orchestration
+        Avalonia shell and interaction orchestration
 
     Berries.Core.Tests
         synthetic platform-independent tests
 
-Target framework is .NET 10. The GUI is Avalonia and builds as `WinExe`. There is deliberately no console front end.
+Target framework is .NET 10.
 
 ## Vocabulary in code
 
-The code follows current application language wherever the concepts coincide:
+Current application/code language includes:
 
     Group
     GroupCount
@@ -44,47 +43,38 @@ The code follows current application language wherever the concepts coincide:
     Exclude
     Directory / Branch / DirectoryPair / BranchPair
 
-Several lower-level names intentionally remain because they denote narrower technical concepts:
+Narrower technical concepts remain:
 
     FileInstance
-        one filesystem file instance at one exact path
+        one filesystem instance at one exact path
 
     ContentId
         established byte-content identity
 
     Seed
-        a Branch selected as a promising starting point for Branch Pair search
+        a Branch selected as a promising starting point for targeted search
 
     Counterpart
-        a Branch scored relative to a particular Seed; the highest-scoring Counterpart forms that Seed's best Branch Pair
+        a Branch scored relative to a particular Seed
 
-They are not alternative product vocabulary. `Group` is the current collection of at least two FileInstances having one ContentId. Seed and Counterpart are internal search roles; the application-level result surfaced to the user is a Suggestion.
+    ProjectionState
+        current Explorer presentation/navigation state; not a Case
 
-A Suggestion is a view Berries has found worth the user's attention because its structure indicates that one or a few decisions may resolve a relatively large amount of duplicated material. The currently implemented Suggestions are Branch Pair views.
+**Case remains a valid domain concept.** It is an objective bounded set of current-Portrait files containing duplication and considered together for one coherent disposition. The boundary limits disposition authority. The current implementation does not require a persistent runtime `Case` object for every Explorer view.
 
-The obsolete classification/acceptance framework has been removed from compiled code. There are no runtime model types for semantic classification, no separate acceptance state, and no exhaustive structural-pair analysis path.
+Do not equate Case with ProjectionState. That was a terminology-cleanup regression and has been reversed.
+
+Situation/Resolution/Disposition classification is not a required runtime workflow, but the underlying semantic research is not meaningless. Situation can describe human context, and disposition remains useful when reasoning about the coherent outcome authorized by a Case.
 
 ## Principal runtime objects
 
 ### `BerriesEngine`
 
-Owns:
-
-    Corpus normalization
-    Initial Portrait acquisition
-    Group discovery
-    direct Directory analysis
-
-Important public operations:
-
-    CreateCorpus
-    BuildInitialPortraitAsync
-    DiscoverGroupsAsync
-    AnalyzeDirectoriesAsync
+Owns Corpus normalization, Initial Portrait acquisition, Group discovery, and direct Directory analysis.
 
 ### `BerriesApplication`
 
-Owns application-level orchestration and publishes:
+Owns application orchestration and publishes:
 
     Corpus
     Session
@@ -93,7 +83,7 @@ Owns application-level orchestration and publishes:
     BranchStatistics
     Suggestions
 
-A portrait operation invalidates all three derived analysis objects.
+A portrait operation invalidates the derived analysis objects.
 
 ### `BerriesSession`
 
@@ -106,131 +96,47 @@ Owns:
     Actions
     Groups
 
-Exclude/Delete/Move add one top-level operation per user command. `Rebuild()` replays operations from the Initial Portrait and reconstructs Working Portrait, Groups, Actions, and selection binding.
+`Rebuild()` replays operations from the Initial Portrait and reconstructs Working Portrait, Groups, Actions, and selection binding.
 
 ### `PortraitQueries`
 
-Answers model questions without UI dependencies:
+Answers model questions without UI dependencies: Groups, files in structural scopes, breadcrumbs, best Directory Pair, Branch counterpart eligibility, and shared Group counts.
 
-    Groups / GroupsForSelection
-    grouped files in Directory / Branch / Corpus Roots
-    files in scope
-    breadcrumbs
-    best Directory Pair
-    Branch counterpart eligibility
-    shared Group count
+### `ProjectionService` / `ProjectionState`
 
-### `ProjectionService`
+`ProjectionService` builds UI-independent Explorer representations. `ProjectionState` records the current projection kind, represented files, and applicable one- or two-sided scopes.
 
-Builds UI-independent Explorer representations from `PortraitQueries`.
+This is view/navigation state only. It does not establish a Case or disposition authority.
 
 ### `BranchStatisticsAnalyzer`
 
-Computes Branch records:
-
-    FileCount
-    DirectoryCount
-    GroupedFileCount
-    GroupCount
-    GroupedDirectoryCount
+Computes Branch records including FileCount, DirectoryCount, GroupedFileCount, GroupCount, and GroupedDirectoryCount.
 
 ### `BranchPriorityMetrics`
 
-Computes parent-relative Group concentration metrics. The current Seed ranking uses `ExcessConcentratedGroups`.
+Computes parent-relative Group concentration metrics. Current Seed ranking uses `ExcessConcentratedGroups`.
 
 ### `BranchCounterpartAnalyzer`
 
-Uses ranked Seeds to search efficiently for strong Branch Pairs. For each Seed it finds and ranks Counterparts. It then compares the best pair from several candidate Seeds and emits the strongest one as a `BranchPairSuggestion`.
+Uses ranked Seeds to search efficiently for strong Branch relationships. For each Seed it finds and ranks Counterparts, compares the best pair from several candidate Seeds, and emits `BranchPairSuggestion` results.
 
-The winning Suggestion is chosen primarily by Branch Pair score, not Seed rank. The highest-ranked Seed therefore often does not produce the best Branch Pair. Seed rank is only a later tie-breaker.
+The winning Suggestion is chosen primarily by Branch Pair score, not Seed rank. The highest-ranked Seed often does not produce the best Branch Pair. This distinction is critical and is covered by `Analyze_SelectsBestPair_NotHighestRankedSeed`.
 
-The analyzer also supports on-demand best-pair search for an explicitly selected Branch. It does not enumerate every Branch Pair.
+The analyzer also supports on-demand best-pair search for an explicitly selected Branch. That selected Branch is not conceptually a Seed merely because it is one side of the resulting Branch Pair.
 
 ### `FileActionExecutor`
 
-Executes the concrete filesystem `FileAction` objects produced by the Working Portrait. It attempts independent work after failures and performs Move -> Copy/Delete fallback when required.
+Executes concrete filesystem Actions, continues independent safe work after failures, and performs Move -> Copy/Delete fallback when required.
 
-### `MainWindow`
-
-Owns Avalonia presentation and command orchestration. Functionality is split across partial-class files for navigation, projection construction, selection, portrait commands, context menus, and progress handling.
-
-## Current UI
-
-File menu:
-
-    Select Roots...
-    Load Saved Session...      disabled
-    Save Session...            disabled
-    Execute...
-    Exit
-
-Explorer toolbar:
-
-    Back                       present, history not implemented
-    Pivot
-    Forward                    present, history not implemented
-    Suggest
-    Invert
-    Exclude
-    Delete
-    Move -> / <- Move
-    Undo
-
-Current projections:
-
-    Groups
-    Directory
-    Branch
-    Corpus Roots
-    Directory Pair
-    Branch Pair
-
-## Current initial scan path
-
-`BerriesApplication.ScanAsync()` currently performs:
-
-    normalize Corpus
-        -> acquire Portrait
-        -> DiscoverGroupsAsync
-        -> attach ContentIds to grouped files
-        -> construct BerriesSession
-        -> RefreshAnalysisAsync
-             -> Directory analysis
-             -> Branch statistics
-             -> Suggestion discovery via Seed/Counterpart search
-        -> return ScanResult
-
-This entire path is awaited before the Groups projection becomes ready.
-
-The discovery front end is fundamentally one Corpus-dependent chunk: once the Corpus is unchanged, its observed Portrait and established ContentIds are treated as fixed session truth. Berries does not rehash because virtual portrait operations occur or because the external filesystem may have drifted.
-
-## Current portrait-operation path
-
-Exclude/Delete/Move/Undo are run through `BerriesApplication`.
-
-After a command changes the operation history:
-
-    derived analysis objects are set to null
-    visible projection is refreshed immediately from BerriesSession
-    GUI starts RefreshAnalysisAsync in background
-    old refresh work is cancelled when another portrait command starts
-    completion restores analysis-dependent capabilities
-
-This is the first implemented form of analysis invalidation/background refresh.
-
-## Current analysis mathematics
+## Analysis mathematics
 
 ### Directory Pair
 
-Strength is simply:
-
     SharedGroupCount
 
-No separate generic leverage abstraction is retained.
+This is a factual distinct-Group count. Do not call it leverage.
 
 ### Branch Seed
-
-For a child Branch relative to its parent:
 
     group retention = child GroupCount / parent GroupCount
     file retention  = child FileCount / parent FileCount
@@ -240,11 +146,11 @@ For a child Branch relative to its parent:
         child GroupCount * (1 - 1 / concentration), concentration > 1
         0,                                         otherwise
 
-Branches are ranked by this Seed metric to provide an efficient starting set. A high Seed rank means "worth testing for a strong relationship"; it does not itself mean "best Branch Pair."
+Seed priority means "worth investigating," not "best Case" or "best Branch Pair."
 
-### Counterpart and Branch Pair score
+### Counterpart / Branch Pair score
 
-For each candidate Seed, eligible non-nested Branches are considered as Counterparts. Pair scoring uses:
+For a Seed and candidate Counterpart:
 
     shared Group count
     Seed coverage
@@ -253,78 +159,89 @@ For each candidate Seed, eligible non-nested Branches are considered as Counterp
 
     score = shared Group count * Jaccard
 
-Each Seed's Counterparts are ranked by this pair score.
+Each Seed's Counterparts are ranked by this relationship score.
 
 ### Suggestion selection
 
-Suggestion discovery examines the top 10 currently eligible Seeds. It computes the best Counterpart relationship for each, then selects the strongest Branch Pair among that Seed window. Therefore the next Suggestion often comes from a Seed other than the highest-ranked one.
+Each round examines the top 10 eligible Seeds, computes the best Counterpart relationship for each, then selects the strongest Branch Pair across that Seed window. Seed rank is only a later tie-breaker.
 
-After a Suggestion is selected, the chosen Seed and its highest-scoring Counterpart families are blocked and the process repeats. This culls closely related structural variants and produces a compact sequence of useful Suggestions.
+After selection, the chosen Seed and Counterpart families are blocked and the process repeats to produce a compact set of structurally distinct Suggestions.
 
-This empirically developed search replaced exhaustive ancestor-Cartesian Branch Pair construction, which produced combinatorial growth on challenging real corpora.
+## Historical leverage and present ranking intent
 
-## Move implementation
+Early design used **leverage** to mean work accomplished per user question, initially quantified as duplicate file instances within a Case. This was a useful conceptual starting point but not a sufficient presentation metric.
 
-`BerriesSession.Move()` operates entirely on the Working Portrait.
+Two lessons superseded a single generic Leverage field:
 
-For each requested source file:
+1. exact leverage could be expensive, and cheaper measures often preserved the ranking that mattered;
+2. maximum duplicate coverage could favor broad, difficult-to-recognize scopes over nearby narrower scopes that produced much clearer human decisions.
 
-1. verify it is still present and lies within the source scope;
-2. preserve its source-relative parent path beneath destination scope;
-3. detect the same ContentId directly in the computed destination Directory;
-4. reduce to Delete when content is already correctly present there;
-5. otherwise use the source filename;
-6. report same-name/different-content collisions without modifying either file;
-7. update persistent selection for successful modeled moves.
+Therefore current code should use names that describe the actual quantity (`SharedGroupCount`, `ExcessConcentratedGroups`, relationship `Score`) rather than labeling unlike numbers `Leverage`.
 
-Move does not rename arbitrarily and does not overwrite different content.
+The higher-level goal remains to prioritize useful, comprehensible Cases that accomplish substantial work per user decision.
 
-## Execute implementation
+## Explorer-first behavior
 
-The GUI calculates pre-execution content loss, asks for approval, then calls `FileActionExecutor`.
+The application deliberately does not implement a wizard queue of Cases. Suggestions are starting points. Pair breadcrumbs and Pivot allow the user to broaden/narrow scopes and follow recognizable structure.
 
-Executor behavior:
+This is not a fallback for weak analysis; it is part of the intended division of labor. Statistics find promising structure. The user supplies semantic recognition.
 
-    DeleteFileAction -> delete
-    CopyFileAction   -> ensure parent, copy
-    MoveFileAction   -> ensure parent, try Move;
-                        on IOException, Copy then Delete
+## Empirical result to preserve
 
-I/O/authorization failures are recorded. Independent later work continues.
+Real-corpus R&D showed that resolving a small number of useful structural Cases can reduce very large duplicate problem sets extremely quickly. Datasets with tens of thousands of duplicate instances could often be potentially resolved with roughly a handful of Case-level decisions.
 
-## Configuration
+This is the reason to:
 
-`Berries.config` uses `[exclude]` only.
+- find promising local structure rather than enumerate all Branch Pairs;
+- compare several Seeds before choosing a Suggestion;
+- re-analyze after portrait changes;
+- prefer comprehensibility over a slightly larger raw coverage count;
+- avoid designing a complete global resolution plan up front.
 
-Matching:
+Treat unexplained complexity in this algorithm as experimental evidence until its purpose is understood; the current code is the surviving result of substantial empirical refinement.
 
-    no separator     -> any path component / filename
-    separator        -> contiguous full-path segment
-    * / ?            -> wildcards
-    # / ;            -> comments
+## Current initial scan path
 
-The parser and tests use Exclude terminology consistently.
+`BerriesApplication.ScanAsync()` currently performs:
+
+    normalize Corpus
+        -> acquire Portrait
+        -> DiscoverGroupsAsync
+        -> attach ContentIds
+        -> construct BerriesSession
+        -> RefreshAnalysisAsync
+             -> Directory analysis
+             -> Branch statistics
+             -> Suggestion discovery
+        -> return ScanResult
+
+This path is currently awaited before the Groups projection becomes ready.
+
+## Portrait-operation path
+
+After Exclude/Delete/Move/Undo:
+
+    derived analysis objects are invalidated
+    visible projection refreshes immediately from BerriesSession
+    GUI starts RefreshAnalysisAsync in background
+    old refresh work is cancelled when another portrait command starts
+    completion restores analysis-dependent capabilities
+
+## Unique files: deliberately unresolved
+
+The Portrait retains unique files. They constrain Move destinations and participate in statistics such as `FileCount`, which in turn affects Seed concentration. Earlier structural Case definitions also allowed unique files within Case bounds.
+
+Whether unique files should remain Case members is a separate design question. Do not remove them, their counts, or their influence on ranking as a side effect of terminology cleanup.
 
 ## Tests retained after cleanup
 
-Active tests cover:
+Active tests cover Corpus/Portrait acquisition, Group discovery, Exclude, Directory analysis, Branch statistics, Branch priority, Session operations/Undo/Move, filesystem execution, and the critical distinction between Seed rank and winning Branch Pair score.
 
-    Corpus/Portrait acquisition
-    Group discovery and file-access failures
-    configuration Exclude
-    Directory statistics and Directory Pairs
-    Branch statistics
-    Branch priority metrics
-    BerriesSession portrait operations / Undo / Move
-    filesystem abstraction and execution behaviors
+## Immediate architectural work after terminology cleanup
 
-Tests for removed experimental models were deleted rather than translated into current terminology.
+The next design problem remains analysis lifecycle/dependency management.
 
-## Immediate architectural work
-
-The next design problem remains the analysis lifecycle discussed immediately before this terminology cleanup.
-
-The initial discovery chunk is required whenever the Corpus changes and can thereafter remain stable for the session. Derived results have different prerequisites and invalidators:
+The Corpus-dependent discovery front end can remain stable for a session. Derived results have different prerequisites and invalidators:
 
     Working Portrait + Groups
         -> Directory analysis
@@ -333,4 +250,4 @@ The initial discovery chunk is required whenever the Corpus changes and can ther
     Directory analysis + Branch statistics + Groups
         -> Suggestion discovery
 
-The current implementation still recomputes these as one sequential `RefreshAnalysisAsync()` operation. The intended next step is to define explicit validity/prerequisite state and demand-driven background scheduling without constructing an over-general analysis framework.
+The current implementation recomputes these through one sequential `RefreshAnalysisAsync()`. The next step is an explicit, simple validity/prerequisite model and demand-driven background scheduling, without constructing an over-general analysis framework.
