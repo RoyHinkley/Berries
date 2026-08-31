@@ -81,7 +81,6 @@ public partial class MainWindow : Window
         BeginProgress("Scanning corpus...", true);
         try
         {
-            await StopBackgroundAnalysisAsync();
             suggestionIndex = -1;
 
             var config = BerriesConfig.Load(Path.Combine(AppContext.BaseDirectory, "Berries.config"));
@@ -233,7 +232,6 @@ public partial class MainWindow : Window
         BeginPortraitBusy("Executing filesystem actions...");
         try
         {
-            await StopBackgroundAnalysisAsync();
             var result = await fileActionExecutor.ExecuteAsync(session.Actions);
             EndPortraitBusy(
                 $"Execution finished — {result.CompletedCount:N0} completed, {result.SkippedCount:N0} dependent action(s) skipped, {result.Failures.Count:N0} failure(s)."
