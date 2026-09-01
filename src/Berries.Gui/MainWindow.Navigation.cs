@@ -95,6 +95,7 @@ public partial class MainWindow
             UpdateCapabilities();
             UpdatePivotCapabilities();
             operation.Mark("Corpus Roots capabilities updated");
+            operation.MarkWhenUiSettled("Corpus Roots UI reached Background priority");
             CompleteNavigation(operation, "Corpus Roots");
         }
         catch (OperationCanceledException) when (operation.Token.IsCancellationRequested || !IsCurrentNavigation(operation))
