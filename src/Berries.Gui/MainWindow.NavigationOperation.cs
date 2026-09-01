@@ -9,7 +9,7 @@ namespace Berries.Gui;
 
 public partial class MainWindow
 {
-    private const int GroupExplorerBatchSize = 64;
+    private const int GroupExplorerBatchSize = 32;
 
     private CancellationTokenSource? navigationCancellation;
     private long navigationGeneration;
@@ -155,6 +155,18 @@ public partial class MainWindow
             previous = elapsed;
             Debug.WriteLine(
                 $"[Navigation {Generation}] {description}: {phase} | +{delta.TotalMilliseconds:N1} ms | {elapsed.TotalMilliseconds:N1} ms total");
+        }
+
+        public void MarkWhenUiSettled(string phase)
+        {
+            Dispatcher.UIThread.Post(
+                () =>
+                {
+                    var elapsed = stopwatch.Elapsed;
+                    Debug.WriteLine(
+                        $"[Navigation {Generation}] {description}: {phase} | {elapsed.TotalMilliseconds:N1} ms total (deferred UI marker)");
+                },
+                DispatcherPriority.Background);
         }
     }
 }
