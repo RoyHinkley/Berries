@@ -11,6 +11,13 @@ public partial class MainWindow
         base.OnOpened(e);
         controller.AnalysisProgressChanged += AnalysisProgressChanged;
         controller.AnalysisChanged += AnalysisChanged;
+
+        // Berries owns Suggestion traversal semantics. Replace the original positional handlers
+        // with identity-based traversal so a growing, re-ranked result set cannot repeat or skip items.
+        SuggestButton.Click -= Suggest_Click;
+        SuggestButton.Click += SuggestNextUnseen_Click;
+        PivotBranchPairMenu.Click -= PivotSuggestedBranchPair_Click;
+        PivotBranchPairMenu.Click += PivotCurrentSuggestion_Click;
     }
 
     protected override void OnClosed(EventArgs e)
@@ -32,6 +39,7 @@ public partial class MainWindow
         {
             UpdateCapabilities();
             UpdatePivotCapabilities();
+            SuggestButton.IsEnabled = HighestRankedUnseenSuggestion() is not null;
             if (controller.Suggestions is not null && !portraitCommandBusy && !NavigationIsActive)
             {
                 StatusProgress.IsVisible = false;
