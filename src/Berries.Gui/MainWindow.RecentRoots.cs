@@ -5,8 +5,7 @@ namespace Berries.Gui;
 internal static class RecentRootsStore
 {
     private static readonly string RootsPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Berries",
+        AppContext.BaseDirectory,
         "roots.txt");
 
     public static IReadOnlyList<string> Load()
@@ -30,8 +29,6 @@ internal static class RecentRootsStore
     {
         try
         {
-            var directory = Path.GetDirectoryName(RootsPath)!;
-            Directory.CreateDirectory(directory);
             File.WriteAllLines(RootsPath, roots);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
