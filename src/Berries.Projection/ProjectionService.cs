@@ -11,6 +11,7 @@ public sealed class ProjectionService
     private readonly PortraitQueries queries;
     private readonly object cacheGate = new();
     private readonly SemaphoreSlim groupsBuildGate = new(1, 1);
+    private readonly SemaphoreSlim corpusRootsBuildGate = new(1, 1);
     private Portrait? cachedPortrait;
     private Corpus? cachedCorpus;
     private IReadOnlyList<GroupProjection>? cachedGroups;
@@ -54,20 +55,37 @@ public sealed class ProjectionService
                 return cachedCorpusRoots;
         }
 
-        var roots = await queries.GroupedFilesInCorpusRootsWithPlacementAsync(session, corpus, progress, cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        var result = roots.Select(root => BuildBranch(root.Root, root.Files, cancellationToken)).ToArray();
-
-        lock (cacheGate)
+        await corpusRootsBuildGate.WaitAsync(cancellationToken);
+        try
         {
-            if (ReferenceEquals(session.WorkingPortrait, portrait))
+            cancellationToken.ThrowIfCancellationRequested();
+            portrait = session.WorkingPortrait;
+            lock (cacheGate)
             {
                 EnsureCachePortraitLocked(portrait);
-                cachedCorpus = corpus;
-                cachedCorpusRoots = result;
+                if (ReferenceEquals(cachedCorpus, corpus) && cachedCorpusRoots is not null)
+                    return cachedCorpusRoots;
             }
+
+            var roots = await queries.GroupedFilesInCorpusRootsWithPlacementAsync(session, corpus, progress, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            var result = roots.Select(root => BuildBranch(root.Root, root.Files, cancellationToken)).ToArray();
+
+            lock (cacheGate)
+            {
+                if (ReferenceEquals(session.WorkingPortrait, portrait))
+                {
+                    EnsureCachePortraitLocked(portrait);
+                    cachedCorpus = corpus;
+                    cachedCorpusRoots = result;
+                }
+            }
+            return result;
         }
-        return result;
+        finally
+        {
+            corpusRootsBuildGate.Release();
+        }
     }
 
     public async Task<IReadOnlyList<GroupProjection>> GroupsAsync(
