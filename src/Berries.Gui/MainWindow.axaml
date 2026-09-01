@@ -88,6 +88,11 @@
 
           <Grid x:Name="SingleExplorer" Grid.Row="1">
             <TreeView x:Name="ExplorerTree" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged">
+              <TreeView.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <VirtualizingStackPanel />
+                </ItemsPanelTemplate>
+              </TreeView.ItemsPanel>
               <TreeView.ItemTemplate>
                 <TreeDataTemplate x:DataType="local:ExplorerNode" ItemsSource="{Binding Children}">
                   <TextBlock Text="{Binding Label}" PointerPressed="ExplorerNode_PointerPressed" ContextRequested="ExplorerNode_ContextRequested" />
@@ -100,6 +105,11 @@
             <Grid RowDefinitions="Auto,*">
               <StackPanel x:Name="LeftScopeBreadcrumbs" Orientation="Horizontal" Spacing="4" Margin="2,0,0,8" />
               <TreeView x:Name="LeftTree" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged">
+                <TreeView.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <VirtualizingStackPanel />
+                  </ItemsPanelTemplate>
+                </TreeView.ItemsPanel>
                 <TreeView.ItemTemplate>
                   <TreeDataTemplate x:DataType="local:ExplorerNode" ItemsSource="{Binding Children}">
                     <TextBlock Text="{Binding Label}" PointerPressed="ExplorerNode_PointerPressed" ContextRequested="ExplorerNode_ContextRequested" />
@@ -110,6 +120,11 @@
             <Grid Grid.Column="1" RowDefinitions="Auto,*">
               <StackPanel x:Name="RightScopeBreadcrumbs" Orientation="Horizontal" Spacing="4" Margin="2,0,0,8" />
               <TreeView x:Name="RightTree" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="ExplorerSelectionChanged">
+                <TreeView.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <VirtualizingStackPanel />
+                  </ItemsPanelTemplate>
+                </TreeView.ItemsPanel>
                 <TreeView.ItemTemplate>
                   <TreeDataTemplate x:DataType="local:ExplorerNode" ItemsSource="{Binding Children}">
                     <TextBlock Text="{Binding Label}" PointerPressed="ExplorerNode_PointerPressed" ContextRequested="ExplorerNode_ContextRequested" />
