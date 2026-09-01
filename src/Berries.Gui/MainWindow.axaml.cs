@@ -185,6 +185,7 @@ public partial class MainWindow : Window
             UpdateCapabilities();
             UpdatePivotCapabilities();
             operation.Mark("Groups capabilities updated");
+            operation.MarkWhenUiSettled("Groups UI reached Background priority");
             CompleteNavigation(operation, "Groups");
         }
         catch (OperationCanceledException) when (operation.Token.IsCancellationRequested || !IsCurrentNavigation(operation))
