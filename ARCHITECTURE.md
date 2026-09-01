@@ -1,24 +1,17 @@
 # Berries Architecture
 
-This document defines the architectural boundaries and runtime responsiveness rules that govern implementation placement. These are design constraints, not optional optimization guidelines.
+This document defines implementation boundaries and runtime invariants. They are design constraints, not optional optimization guidance.
 
 ## Dependency direction
 
-Berries separates domain computation, presentation construction, platform filesystem access, and the Avalonia shell.
-
     Berries.Core
-        domain/session model
-        Corpus and Portrait acquisition
-        Group discovery
-        duplicate/structural analysis
-        analysis lifecycle and scheduling
-        portrait operations
-        filesystem-action planning/execution contracts
-        model queries
+        domain/session model, scanning and Group discovery
+        factual queries and structural analysis
+        portrait operations, analysis lifecycle, planning contracts
 
     Berries.Projection
-        UI-independent construction of Explorer presentation models
-        ProjectionState navigation/presentation state
+        UI-independent presentation-shaped transformations
+        ProjectionState
 
     Berries.FileSystem.Abstractions
         platform-neutral filesystem boundary
@@ -27,137 +20,95 @@ Berries separates domain computation, presentation construction, platform filesy
         Windows filesystem implementation
 
     Berries.Gui
-        Avalonia controls and interaction handling
-        GUI-specific presentation state and models
-        ExplorerNode construction and control binding
-        status/progress display
+        Avalonia interaction and GUI-specific presentation state
+        ExplorerNode construction, binding, selection, status/progress
 
-Core must not depend on Projection or Gui. Projection may depend on Core because it transforms Core state into presentation-shaped models. Gui may depend on Core and Projection but must not acquire domain-computation responsibilities merely because it initiated an operation.
+Core must not depend on Projection or Gui. Projection may depend on Core. Gui may depend on both, but initiating work does not make the GUI its architectural owner.
 
-## Computation placement
-
-Placement is determined by **ownership and meaning**, not by computational cost or by whether the implementation is asynchronous.
+## Placement rule
 
 > Put work at the lowest reusable layer that naturally owns it.
 
-In practice:
+Placement is determined by meaning, not cost or async implementation:
 
 - **Core** owns domain facts, analysis, model queries, and reusable domain computation.
-- **Projection** owns UI-independent transformations whose result exists specifically to support a projection or presentation.
-- **Gui** owns genuinely GUI-specific state and construction, including `ExplorerNode` creation and Avalonia binding.
+- **Projection** owns UI-independent transformations whose result exists specifically for presentation.
+- **Gui** owns genuinely GUI-specific construction and control state.
 
-Examples of Core work include scanning, hashing, Group construction, unique-file accounting, Portrait reconstruction, structural analysis, relationship scoring, and factual model queries.
+Examples: hashing and Branch relationship scoring are Core; presentation ordering and a UI-independent Branch hierarchy are Projection; `ExplorerNode` creation and `TreeView` binding are Gui.
 
-Examples of warranted Projection work include building UI-independent Explorer hierarchy models, presentation labels, presentation ordering, and other transformations whose result exists specifically to support a projection.
-
-Examples of warranted Gui work include constructing `ExplorerNode` objects, maintaining partially constructed visible trees, synchronizing visual selection, and assigning or incrementally updating Avalonia controls.
-
-Moving a large loop to `Task.Run` does not change which layer owns the work. Conversely, work does not belong in Core or Projection merely because it is expensive. If substantial work is inherently GUI work, it remains in Gui and must satisfy the responsiveness contract there.
+Expensive GUI-specific work remains GUI work. It must be made responsive there rather than moved downward merely because it is expensive.
 
 ## Responsiveness contract
 
-Architectural ownership and responsiveness are orthogonal concerns.
+Any work whose runtime can grow materially with user data must be reviewed for responsiveness at its natural owner. Potentially appreciable work must:
 
-The Avalonia UI thread must remain responsive while Berries performs work whose runtime can grow materially with Corpus, Portrait, projection, or visible-tree size.
+1. avoid monopolizing the UI thread;
+2. participate in a `CancellationToken` lifetime;
+3. check cancellation inside the scaling loop at useful granularity;
+4. report a meaningful phase;
+5. report completed/total progress when the total is cheaply knowable.
 
-Any operation that may take appreciable time must therefore, wherever it naturally belongs:
+Indeterminate progress is appropriate when determining the total would duplicate substantial work, notably open-ended filesystem enumeration.
 
-1. execute asynchronously without monopolizing the GUI thread;
-2. accept or otherwise participate in a `CancellationToken`-based cancellation lifetime;
-3. check cancellation within the loop whose work scales with the data size, with sufficiently fine granularity that cancellation remains responsive;
-4. report a meaningful user-facing phase description;
-5. report `Completed` and `Total` whenever the total work can be determined cheaply enough that counting it does not itself become disproportionate work.
+The layer doing the work reports progress as data. The GUI owns status-bar presentation.
 
-A merely asynchronous wrapper is insufficient if an expensive inner traversal or sort remains effectively uncancellable.
+## Explorer realization
 
-Where useful, GUI presentation work may publish completed portions incrementally rather than withholding the entire result until construction is complete. Incremental publication should use bounded batches so that control realization and layout do not themselves monopolize the UI thread.
+Logical presentation size and realized Avalonia control count are different concerns.
 
-### Determinate progress is preferred
+Large Explorer trees must use virtualized item panels so off-screen roots do not acquire visual containers merely because they exist in the projection. This is a functional scaling requirement: a nonvirtualized `TreeView` can turn inexpensive collection publication into repeated realization/layout work proportional to the entire tree.
 
-When the work population is already known or cheaply countable, progress should be determinate. Typical examples include:
+GUI construction may publish known presentation nodes incrementally in bounded batches when useful for cancellation and early display. Batching does not replace virtualization; both control different costs.
 
-    files in an acquired Portrait
-    candidate files to hash
-    Groups to inspect
-    files within known Groups
-    known Directory/Branch records
-    known candidate relationships
-    Explorer nodes in a known projection
+## Projection caching and prewarming
 
-The status bar should show both the phase and count, for example:
+Projection results that depend only on a particular `WorkingPortrait` may be cached for that portrait. A portrait change invalidates such caches.
 
-    Constructing Groups — 12,400 / 18,250
+Completed ordinary Groups and Corpus Roots projections are cached. Construction that can be requested concurrently must be serialized or otherwise shared so two callers do not duplicate the same expensive work.
 
-### Indeterminate progress is acceptable when necessary
+The initial Groups view has priority after primary discovery. Once it is published, Corpus Roots may be prewarmed in the background so a later Pivot normally uses the cache without delaying first useful display.
 
-Some operations do not know their total cheaply in advance. Filesystem enumeration is the principal example: determining the total may require essentially performing the enumeration twice.
+Selection-dependent projections are different: selection is durable and can change without a new `WorkingPortrait`, so they must not be cached solely by portrait identity.
 
-In those cases Berries should still report a meaningful phase and useful observed counts where available, while the progress bar remains indeterminate.
+## Navigation correctness
 
-Indeterminate progress should be a consequence of genuinely unknowable or disproportionately expensive totals, not convenience in the implementation.
+Only the most recently requested navigation may publish a view.
 
-## Progress ownership
+- each navigation receives an operation generation and cancellation token;
+- a newer request cancels the previous one for efficiency;
+- only the current generation has publication authority;
+- a stale completion cannot overwrite a newer requested view.
 
-The layer performing an operation reports progress as data. Core and Projection never manipulate GUI controls; GUI-specific work may report its own progress directly through the same status/progress presentation mechanism.
+Navigation ownership provides correctness; cancellation provides responsiveness.
 
-The GUI owns presentation of progress in the status bar. A progress report should contain enough information for the GUI to choose determinate or indeterminate display without understanding or reimplementing lower-layer computation.
+Navigation lifetime is GUI-owned because it governs presentation. It is distinct from the Core analysis lifecycle.
 
-The layer performing the work owns the wording of the computational phase because it knows what work is actually occurring. The GUI may add surrounding interaction context, but it should not hard-code a misleading description of a multi-phase lower-layer operation.
+## Analysis correctness
 
-## Cancellation and correctness
-
-Cancellation is required for responsiveness and efficiency, but cancellation is not generally the correctness mechanism for stale asynchronous work.
-
-Derived analysis is computed against a stable Portrait generation. When the Working Portrait changes:
+Derived analysis is valid only for the `WorkingPortrait` generation from which it was computed. When the portrait changes:
 
 - the previous generation becomes stale immediately;
 - obsolete work is asked to cancel;
-- stale results are prevented from publishing by generation validation;
+- stale results cannot publish;
 - current-generation analysis is scheduled.
 
-Thus prompt cancellation avoids wasted computation, while generation validation prevents stale results from becoming authoritative.
+Prompt cancellation avoids wasted work; generation validation is the correctness mechanism.
 
-Explorer navigation follows the same principle at the GUI level:
-
-- each navigation request receives an operation generation and cancellation token;
-- beginning a newer navigation cancels the previous navigation for efficiency;
-- only the current navigation generation has authority to publish or replace visible Explorer state;
-- an obsolete navigation that finishes late cannot overwrite the newer requested view.
-
-Therefore navigation ownership provides correctness while cancellation provides responsiveness.
-
-## Application orchestration
-
-`BerriesApplication` owns application-level sequencing that crosses Core computations: session replacement, serialized portrait mutation, portrait generation, and dependency-driven analysis scheduling.
-
-The GUI does not maintain a second analysis scheduler, analysis cancellation lifecycle, or analysis refresh queue. It observes Core progress and product publication and updates capabilities accordingly.
-
-GUI navigation lifetime is distinct from analysis scheduling and is correctly owned by Gui because it governs which user-requested presentation may publish to Explorer controls.
-
-## Projection boundary
-
-Projection is not a general-purpose place to move expensive work out of the GUI. Computation belongs in Projection only when its result is itself UI-independent and presentation-shaped.
-
-For example:
-
-- determining which Groups exist is Core;
-- determining which Branches share content is Core;
-- building a `GroupProjection` label and presentation ordering is Projection;
-- constructing a UI-independent Branch Explorer hierarchy from already-established factual placements is Projection;
-- creating `ExplorerNode` objects and assigning or incrementally updating Avalonia `TreeView` content is Gui.
-
-This distinction keeps semantic computation reusable and testable independently of any current Explorer presentation without forcing legitimate GUI work into a lower layer merely to obtain asynchronous execution.
+`BerriesApplication` owns session replacement, serialized portrait mutation, portrait generation, and dependency-driven analysis scheduling. The GUI must not maintain a competing analysis scheduler or cancellation lifecycle.
 
 ## Review rule
 
-When adding or changing work whose runtime scales with user data, review it explicitly for:
+For work that scales with user data, explicitly review:
 
     correct architectural owner
     asynchronous/non-blocking execution where appreciable
     cancellation granularity
-    meaningful phase reporting
+    meaningful progress
     determinate progress where practical
-    bounded GUI-thread publication/realization
-    stale-result publication protection where operations can overlap
+    bounded GUI publication
+    virtualized realization for large item populations
+    reusable projection caching where appropriate
+    stale-result publication protection
 
-A responsiveness regression is an architectural regression even if the result is functionally correct.
+A responsiveness regression is an architectural regression even when the result is functionally correct.
