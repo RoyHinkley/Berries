@@ -40,7 +40,7 @@ public partial class MainWindow
             UpdateCapabilities();
             UpdatePivotCapabilities();
             SuggestButton.IsEnabled = HighestRankedUnseenSuggestion() is not null;
-            if (controller.Suggestions is not null && !portraitCommandBusy && !NavigationIsActive)
+            if (controller.Suggestions is { IsComplete: true } && !portraitCommandBusy && !NavigationIsActive)
             {
                 StatusProgress.IsVisible = false;
                 StatusProgress.IsIndeterminate = false;
