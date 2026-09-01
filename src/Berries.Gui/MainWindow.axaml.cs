@@ -31,7 +31,9 @@ public partial class MainWindow : Window
             new BranchStatisticsAnalyzer(fileSystem),
             new BranchCounterpartAnalyzer(fileSystem));
         fileActionExecutor = new FileActionExecutor(fileSystem);
-        roots.AddRange(controller.NormalizeRoots(RecentRootsStore.Load()));
+        var savedRoots = RecentRootsStore.Load();
+        if (savedRoots.Count > 0)
+            roots.AddRange(controller.NormalizeRoots(savedRoots));
         RefreshRoots();
     }
 
