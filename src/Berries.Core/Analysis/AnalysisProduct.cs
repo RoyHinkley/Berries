@@ -1,7 +1,7 @@
 namespace Berries.Core.Analysis;
 
 /// <summary>
-/// Lifecycle state for one derived analysis product. The latest completed result is retained
+/// Lifecycle state for one derived analysis product. The latest published result is retained
 /// even after it becomes stale. Correctness is determined by portrait generation, not by
 /// clearing old results.
 /// </summary>
@@ -47,6 +47,19 @@ public sealed class AnalysisProduct<T> where T : class
             runningCancellation = CancellationTokenSource.CreateLinkedTokenSource(outerCancellation);
             RunningGeneration = generation;
             cancellationToken = runningCancellation.Token;
+            return true;
+        }
+    }
+
+    public bool TryPublishIntermediate(long generation, long currentGeneration, T result)
+    {
+        lock (gate)
+        {
+            if (RunningGeneration != generation || generation != currentGeneration)
+                return false;
+
+            Result = result;
+            ResultGeneration = generation;
             return true;
         }
     }
