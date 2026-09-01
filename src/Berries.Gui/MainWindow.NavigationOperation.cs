@@ -78,6 +78,9 @@ public partial class MainWindow
         var token = operation.Token;
         var total = groups.Count;
         var completed = Math.Clamp(startIndex, 0, total);
+        var buildTime = TimeSpan.Zero;
+        var publishTime = TimeSpan.Zero;
+        var yieldTime = TimeSpan.Zero;
         operation.Mark($"Groups tree start ({completed:N0}/{total:N0})");
         ShowNavigationProgress(operation, new OperationProgress("Building Groups tree", completed, total));
 
@@ -86,6 +89,8 @@ public partial class MainWindow
             token.ThrowIfCancellationRequested();
             var first = completed;
             var count = Math.Min(GroupExplorerBatchSize, total - first);
+
+            var phase = Stopwatch.StartNew();
             var batch = await Task.Run(() =>
             {
                 var result = new ExplorerNode[count];
@@ -96,23 +101,32 @@ public partial class MainWindow
                 }
                 return result;
             }, token);
+            buildTime += phase.Elapsed;
 
             if (!IsCurrentNavigation(operation))
                 throw new OperationCanceledException(token);
 
+            phase.Restart();
             foreach (var node in batch)
                 nodes.Add(node);
 
             completed += batch.Length;
             builtThrough?.Invoke(completed);
             ShowNavigationProgress(operation, new OperationProgress("Building Groups tree", completed, total));
+            publishTime += phase.Elapsed;
 
-            // Resume at background priority so pending input, layout, and rendering
-            // are serviced before the next batch is published.
-            await Dispatcher.Yield(DispatcherPriority.Background);
+            // Yield at input priority: pending input can run, but continued tree construction
+            // does not sit behind every background/layout/render consequence of the prior batch.
+            phase.Restart();
+            await Dispatcher.Yield(DispatcherPriority.Input);
+            yieldTime += phase.Elapsed;
         }
 
-        operation.Mark($"Groups tree complete ({completed:N0}/{total:N0})");
+        operation.Mark(
+            $"Groups tree complete ({completed:N0}/{total:N0}); "
+            + $"build {buildTime.TotalMilliseconds:N1} ms, "
+            + $"publish {publishTime.TotalMilliseconds:N1} ms, "
+            + $"dispatcher wait {yieldTime.TotalMilliseconds:N1} ms");
     }
 
     private sealed class GroupsExplorerCache(Portrait portrait)
