@@ -31,6 +31,7 @@ public partial class MainWindow : Window
             new BranchStatisticsAnalyzer(fileSystem),
             new BranchCounterpartAnalyzer(fileSystem));
         fileActionExecutor = new FileActionExecutor(fileSystem);
+        roots.AddRange(controller.NormalizeRoots(RecentRootsStore.Load()));
         RefreshRoots();
     }
 
@@ -38,7 +39,7 @@ public partial class MainWindow : Window
     {
         var directories = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "Select corpus root",
+            Title = "Select root",
             AllowMultiple = false
         });
         if (directories.Count == 0) return;
@@ -52,7 +53,7 @@ public partial class MainWindow : Window
         roots.Clear();
         roots.AddRange(normalized);
         RefreshRoots();
-        StatusText.Text = "Corpus changed; scan required.";
+        StatusText.Text = "Roots changed; scan required.";
     }
 
     private void RemoveRootButton_Click(object? sender, RoutedEventArgs e)
@@ -61,8 +62,8 @@ public partial class MainWindow : Window
         roots.Remove(selectedRoot);
         RefreshRoots();
         StatusText.Text = roots.Count == 0
-            ? "Select corpus roots to begin."
-            : "Corpus changed; scan required.";
+            ? "Select roots to begin."
+            : "Roots changed; scan required.";
     }
 
     private void SelectRootsMenu_Click(object? sender, RoutedEventArgs e)
@@ -70,8 +71,8 @@ public partial class MainWindow : Window
         RootsPanel.IsVisible = true;
         ExplorerPanel.IsVisible = false;
         StatusText.Text = roots.Count == 0
-            ? "Select corpus roots to begin."
-            : "Edit corpus roots, then Explore to start a new session.";
+            ? "Select roots to begin."
+            : "Edit roots, then Explore to start a new session.";
     }
 
     private async void ScanButton_Click(object? sender, RoutedEventArgs e)
@@ -79,14 +80,14 @@ public partial class MainWindow : Window
         if (roots.Count == 0) return;
         SetRootControlsEnabled(false);
         ShowExplorerWithRoots();
-        BeginProgress("Scanning corpus...", true);
+        BeginProgress("Scanning roots...", true);
         try
         {
             suggestionIndex = -1;
 
             var config = BerriesConfig.Load(Path.Combine(AppContext.BaseDirectory, "Berries.config"));
             var scanProgress = new Progress<ScanProgress>(p =>
-                StatusText.Text = $"Scanning corpus — {p.FilesExamined:N0} files");
+                StatusText.Text = $"Scanning roots — {p.FilesExamined:N0} files");
             var groupProgress = new Progress<GroupDiscoveryProgress>(p =>
             {
                 var completed = p.Completed ?? p.FilesHashed;
@@ -158,7 +159,7 @@ public partial class MainWindow : Window
         PairExplorer.IsVisible = false;
         SingleExplorer.IsVisible = true;
         SetProjectionState(ProjectionKind.Corpus, []);
-        ProjectionTitle.Text = "Corpus";
+        ProjectionTitle.Text = "Roots";
         ExplorerTree.ItemsSource = roots
             .Select(root => new ExplorerNode(root, semanticPath: new FileSystemPath(root)))
             .ToArray();
@@ -447,6 +448,7 @@ public partial class MainWindow : Window
     {
         RootsList.ItemsSource = null;
         RootsList.ItemsSource = roots.ToArray();
+        RecentRootsStore.Save(roots);
     }
 
     private void ExitMenu_Click(object? sender, RoutedEventArgs e) => Close();
