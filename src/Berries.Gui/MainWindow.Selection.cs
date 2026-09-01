@@ -1,6 +1,9 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using Berries.Core.Domain;
 using Berries.Projection;
 
@@ -14,7 +17,21 @@ public partial class MainWindow
 
     private void ExplorerNode_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (sender is not Control { DataContext: ExplorerNode node } || controller.Session is not { } session) return;
+        if (controller.Session is not { } session
+            || e.GetCurrentPoint(sender as Visual).Properties.PointerUpdateKind != PointerUpdateKind.LeftButtonPressed
+            || e.Source is not Visual source)
+            return;
+
+        Visual? current = source;
+        while (current is not null && current is not TreeViewItem)
+        {
+            // The disclosure button owns expansion/collapse and must not also toggle selection.
+            if (current is ToggleButton) return;
+            current = current.GetVisualParent();
+        }
+
+        if (current is not TreeViewItem { DataContext: ExplorerNode node }) return;
+
         focusedNode = node;
         session.Selection.Toggle(node.Files);
         SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
