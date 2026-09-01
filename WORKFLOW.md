@@ -41,6 +41,19 @@ A Projection is presentation/navigation state, not a Case.
 
 Structural nodes are selection shortcuts over represented files; selection itself always denotes files.
 
+### Selection portrayal
+
+Semantic selection is a persistent set of files in the Working Portrait. Avalonia `TreeView` selection is only its visible portrayal and is reconstructed whenever the view or semantic selection changes.
+
+A visible Explorer node is highlighted exactly when it represents at least one file and every file represented by that node is selected. Therefore:
+
+- a selected file leaf is highlighted;
+- an internal node is highlighted when all files beneath that scope are selected;
+- an internal node is not highlighted when only some of its represented files are selected;
+- selected descendant leaves remain highlighted when their ancestors are only partially selected.
+
+Highlighting an internal node does not create a separate structural selection state. It reports that the node's complete represented file set is already present in semantic selection.
+
 ## Suggestions and navigation
 
 A **Suggestion** is a promising place for attention, currently a Branch Pair found by targeted Seed/Counterpart analysis. It is not a command or necessarily the final useful Case boundary.
