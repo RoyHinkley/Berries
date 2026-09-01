@@ -58,7 +58,9 @@ Highlighting an internal node does not create a separate structural selection st
 
 A **Suggestion** is a promising place for attention, currently a Branch Pair found by targeted Seed/Counterpart analysis. It is not a command or necessarily the final useful Case boundary.
 
-**Pivot** changes projection or scope without changing the Working Portrait. Pair breadcrumbs let either side be broadened or narrowed independently. `Suggest` cycles through available Suggestions and likewise changes only navigation.
+Suggestion analysis publishes ranked partial results as it proceeds. `Suggest` becomes available as soon as at least one current-generation Suggestion has been found. Each click presents the highest-ranking Suggestion not yet shown in that portrait generation, so later discoveries may move ahead of lower-ranked unseen Suggestions without repeating one already seen.
+
+**Pivot** changes projection or scope without changing the Working Portrait. Pair breadcrumbs let either side be broadened or narrowed independently. Pivoting back to the current Suggested Branch Pair likewise changes only navigation.
 
 Selection persists across projections. Back/Forward controls exist, but navigation history is not yet implemented.
 
