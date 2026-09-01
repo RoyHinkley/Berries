@@ -24,7 +24,8 @@ public sealed record BranchPairSuggestion(
 
 public sealed record BranchPairSuggestionResult(
     IReadOnlyList<BranchPairSuggestion> Suggestions,
-    TimeSpan Elapsed);
+    TimeSpan Elapsed,
+    bool IsComplete = true);
 
 public sealed record BestBranchPairResult(
     FileSystemPath First,
@@ -34,8 +35,6 @@ public sealed record BestBranchPairResult(
 
 public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
 {
-    // Evaluate several strong seeds before selecting a Suggestion. The winning Branch Pair
-    // is chosen by pair score and therefore need not originate from the highest-ranked seed.
     private const int CandidateSeedLimit = 10;
 
     public BranchPairSuggestionResult Analyze(
@@ -109,8 +108,6 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
 
             if (pairCandidates.Count == 0) break;
 
-            // Select the strongest pair among the candidate seeds. Seed rank breaks ties only;
-            // a lower-ranked seed can therefore yield the best Suggestion.
             var winner = pairCandidates
                 .OrderByDescending(item => item.Counterparts[0].Score)
                 .ThenByDescending(item => item.Seed.ExcessConcentratedGroups)
@@ -129,7 +126,7 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
             blockedRoots.Add(winner.Counterparts[0].Branch.Path);
 
             var ranked = RankSuggestions(suggestions);
-            suggestionsChanged?.Invoke(new BranchPairSuggestionResult(ranked, timer.Elapsed));
+            suggestionsChanged?.Invoke(new BranchPairSuggestionResult(ranked, timer.Elapsed, IsComplete: false));
             progress?.Report(new OperationProgress($"Finding Suggestions — {suggestions.Count:N0} found"));
         }
 
