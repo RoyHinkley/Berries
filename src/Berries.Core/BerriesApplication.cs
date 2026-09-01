@@ -343,7 +343,12 @@ public sealed class BerriesApplication
                             suggestionLimit: 25,
                             counterpartLimit: 5,
                             cancellationToken: token,
-                            progress: ForwardProgress(progress)), token);
+                            progress: ForwardProgress(progress),
+                            suggestionsChanged: partial =>
+                            {
+                                if (suggestions.TryPublishIntermediate(generation, PortraitGeneration, partial))
+                                    AnalysisChanged?.Invoke();
+                            }), token);
                         if (suggestions.TryPublish(generation, PortraitGeneration, result))
                         {
                             Debug.WriteLine($"[Berries] Analysis ready: {snapshot.Groups.Count:N0} Groups, {result.Suggestions.Count:N0} Suggestions.");
