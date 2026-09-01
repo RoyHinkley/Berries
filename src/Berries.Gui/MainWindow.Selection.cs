@@ -61,9 +61,9 @@ public partial class MainWindow
             {
                 if (tree.SelectedItems is null) continue;
                 tree.SelectedItems.Clear();
-                foreach (var leaf in EnumerateNodes(tree.ItemsSource)
-                    .Where(node => node.Children.Count == 0 && node.Files.Count == 1 && session.Selection.Contains(node.Files[0])))
-                    tree.SelectedItems.Add(leaf);
+                foreach (var node in EnumerateNodes(tree.ItemsSource)
+                    .Where(node => node.Files.Count > 0 && node.Files.All(session.Selection.Contains)))
+                    tree.SelectedItems.Add(node);
             }
         }
         finally { synchronizingSelection = false; }
