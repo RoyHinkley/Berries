@@ -46,7 +46,8 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
         int suggestionLimit = int.MaxValue,
         int counterpartLimit = 5,
         CancellationToken cancellationToken = default,
-        IProgress<OperationProgress>? progress = null)
+        IProgress<OperationProgress>? progress = null,
+        Action<BranchPairSuggestionResult>? suggestionsChanged = null)
     {
         var timer = Stopwatch.StartNew();
         var byPath = branches.ToDictionary(branch => branch.Path);
@@ -126,11 +127,14 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
             suggestions.Add(winner);
             blockedRoots.Add(winner.Seed.Branch.Path);
             blockedRoots.Add(winner.Counterparts[0].Branch.Path);
+
+            var ranked = RankSuggestions(suggestions);
+            suggestionsChanged?.Invoke(new BranchPairSuggestionResult(ranked, timer.Elapsed));
             progress?.Report(new OperationProgress($"Finding Suggestions — {suggestions.Count:N0} found"));
         }
 
         timer.Stop();
-        return new BranchPairSuggestionResult(suggestions, timer.Elapsed);
+        return new BranchPairSuggestionResult(RankSuggestions(suggestions), timer.Elapsed);
     }
 
     public BestBranchPairResult? FindBestPair(
@@ -179,6 +183,14 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
 
         return best;
     }
+
+    public static IReadOnlyList<BranchPairSuggestion> RankSuggestions(IEnumerable<BranchPairSuggestion> suggestions) =>
+        suggestions
+            .OrderByDescending(item => item.Counterparts.Count == 0 ? double.MinValue : item.Counterparts[0].Score)
+            .ThenByDescending(item => item.Seed.ExcessConcentratedGroups)
+            .ThenBy(item => item.CandidateSeedRank)
+            .ThenBy(item => item.Seed.Branch.Path.Value, StringComparer.Ordinal)
+            .ToArray();
 
     private HashSet<ContentId> ContentsUnder(FileSystemPath branch, IReadOnlyList<Group> groups) =>
         groups
