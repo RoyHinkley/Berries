@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
@@ -105,6 +106,7 @@ public partial class MainWindow : Window
 
             var scan = await scanTask;
             await ShowContentProjectionAsync();
+            _ = PrewarmCorpusRootsAsync();
             EndProgress(
                 $"Ready — {scan.FileCount:N0} files, with {scan.GroupedFileCount:N0} files in {scan.GroupCount:N0} Groups."
                 + (scan.EvictionCount == 0
@@ -122,6 +124,30 @@ public partial class MainWindow : Window
         finally
         {
             SetRootControlsEnabled(true);
+        }
+    }
+
+    private async Task PrewarmCorpusRootsAsync()
+    {
+        var session = controller.Session;
+        var corpus = controller.Corpus;
+        if (session is null || corpus is null) return;
+
+        var portrait = session.WorkingPortrait;
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            await Projections.CorpusRootsAsync(session, corpus);
+            if (ReferenceEquals(controller.Session?.WorkingPortrait, portrait))
+                Debug.WriteLine($"[Berries] Corpus Roots projection prewarmed in {stopwatch.Elapsed.TotalMilliseconds:N1} ms.");
+        }
+        catch (OperationCanceledException)
+        {
+            Debug.WriteLine("[Berries] Corpus Roots projection prewarm canceled.");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Berries] Corpus Roots projection prewarm failed: {ex.Message}");
         }
     }
 
