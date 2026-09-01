@@ -63,7 +63,7 @@ public partial class MainWindow
         var session = controller.Session;
         if (session is null || corpus is null) return;
 
-        var operation = BeginNavigation("Building Corpus Roots view...", true);
+        var operation = BeginNavigation("Building Roots view...", true);
         try
         {
             var projections = await Projections.CorpusRootsAsync(
@@ -71,32 +71,32 @@ public partial class MainWindow
                 corpus,
                 new Progress<OperationProgress>(progress => ShowNavigationProgress(operation, progress)),
                 operation.Token);
-            operation.Mark("Corpus Roots projection acquired");
+            operation.Mark("Roots projection acquired");
             operation.Token.ThrowIfCancellationRequested();
             var nodes = await Task.Run(
                 () => projections.Select(projection => BuildBranchExplorerNode(projection.Root)).ToArray(),
                 operation.Token);
-            operation.Mark($"Corpus Roots GUI nodes built ({nodes.Length:N0} roots)");
+            operation.Mark($"Roots GUI nodes built ({nodes.Length:N0} roots)");
             if (!IsCurrentNavigation(operation))
                 throw new OperationCanceledException(operation.Token);
 
             PairExplorer.IsVisible = false;
             SingleExplorer.IsVisible = true;
             SetProjectionState(ProjectionKind.CorpusRoots, nodes.SelectMany(node => node.Files));
-            operation.Mark("Corpus Roots projection state set");
+            operation.Mark("Roots projection state set");
             BreadcrumbPanel.IsVisible = false;
             BreadcrumbPanel.Children.Clear();
-            ProjectionTitle.Text = "Corpus Roots";
+            ProjectionTitle.Text = "Roots";
             ExplorerTree.ItemsSource = nodes;
-            operation.Mark("Corpus Roots ItemsSource assigned");
+            operation.Mark("Roots ItemsSource assigned");
             SynchronizeVisibleSelection();
-            operation.Mark("Corpus Roots selection synchronized");
+            operation.Mark("Roots selection synchronized");
             UpdateSelectionSummary();
             UpdateCapabilities();
             UpdatePivotCapabilities();
-            operation.Mark("Corpus Roots capabilities updated");
-            operation.MarkWhenUiSettled("Corpus Roots UI reached Background priority");
-            CompleteNavigation(operation, "Corpus Roots");
+            operation.Mark("Roots capabilities updated");
+            operation.MarkWhenUiSettled("Roots UI reached Background priority");
+            CompleteNavigation(operation, "Roots");
         }
         catch (OperationCanceledException) when (operation.Token.IsCancellationRequested || !IsCurrentNavigation(operation))
         {
@@ -104,7 +104,7 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            CompleteNavigation(operation, "Could not build Corpus Roots view: " + ex.Message);
+            CompleteNavigation(operation, "Could not build Roots view: " + ex.Message);
         }
     }
 
