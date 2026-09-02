@@ -52,12 +52,15 @@ public static class DirectoryNamesakeStructureAnalyzer
         {
             cancellationToken.ThrowIfCancellationRequested();
             foreach (var occurrence in namesake.Value)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
                 AddFeatureToAncestors(
                     occurrence,
                     namesake.Key,
                     session.Corpus,
                     fileSystem,
                     featuresByBranch);
+            }
         }
 
         var buckets = new Dictionary<string, HashSet<FileSystemPath>>(StringComparer.OrdinalIgnoreCase);
@@ -123,7 +126,7 @@ public static class DirectoryNamesakeStructureAnalyzer
 
             var candidate = new DirectoryNamesakeStructureCandidate(branches, evidence, score);
             var candidateKey = string.Join(
-                '\u001e',
+                "\u001e",
                 branches.Select(path => path.Value)
                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
 
