@@ -250,6 +250,18 @@ public partial class MainWindow
         return focusedNode?.SemanticPath;
     }
 
+    private FileSystemPath? FocusedSelectedScope()
+    {
+        var session = controller.Session;
+        var node = focusedNode;
+        if (session is null
+            || node?.SemanticPath is not { } path
+            || node.Files.Count == 0)
+            return null;
+
+        return node.Files.All(session.Selection.Contains) ? path : null;
+    }
+
     private FileSystemPath? ContainingDirectoryScope()
     {
         var session = controller.Session;
@@ -257,7 +269,8 @@ public partial class MainWindow
             return null;
 
         if (!session.Selection.IsEmpty)
-            return session.Selection.SelectedDirectories.CommonAncestor;
+            return FocusedSelectedScope()
+                ?? session.Selection.SelectedDirectories.CommonAncestor;
 
         if (currentProjection is { IsPair: false, Primary: { } primary } current)
             return current.Kind == ProjectionKind.Directory
@@ -276,6 +289,10 @@ public partial class MainWindow
         if (session.Selection.IsEmpty)
             return FocusedOrCurrentScope();
 
+        var focused = FocusedSelectedScope();
+        if (focused is not null)
+            return focused;
+
         var directories = session.Selection.SelectedDirectories;
         return directories.Single ?? directories.CommonAncestor;
     }
@@ -285,9 +302,12 @@ public partial class MainWindow
         var session = controller.Session;
         if (session is null)
             return null;
-        return session.Selection.IsEmpty
-            ? CurrentOrFocusedScope()
-            : session.Selection.SelectedDirectories.Single;
+
+        if (session.Selection.IsEmpty)
+            return CurrentOrFocusedScope();
+
+        return FocusedSelectedScope()
+            ?? session.Selection.SelectedDirectories.Single;
     }
 
     private FileSystemPath? BranchPairSeed()
@@ -295,8 +315,13 @@ public partial class MainWindow
         var session = controller.Session;
         if (session is null)
             return null;
+
         if (session.Selection.IsEmpty)
             return CurrentOrFocusedScope();
+
+        var focused = FocusedSelectedScope();
+        if (focused is not null)
+            return focused;
 
         var directories = session.Selection.SelectedDirectories;
         return directories.Single ?? directories.CommonAncestor;
