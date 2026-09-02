@@ -75,18 +75,23 @@ public sealed class BerriesSelectionTests
     {
         var a = File("/root/one/a.txt");
         var b = File("/root/two/b.txt");
-        var c = File("/other/three/c.txt");
-        var selection = new BerriesSelection(new TestFileSystem(), TestCorpus(), new Portrait([a, b, c]));
+        var c = File("/root/three/c.txt");
+        var d = File("/other/four/d.txt");
+        var selection = new BerriesSelection(new TestFileSystem(), TestCorpus(), new Portrait([a, b, c, d]));
         var changes = 0;
         selection.SelectedDirectoriesChanged += (_, _) => changes++;
 
-        selection.Add([a, b]);
+        selection.Add([a, b, c]);
         Assert.Equal(1, changes);
-        Assert.True(selection.SelectedDirectories.Pair.HasValue);
+        Assert.False(selection.SelectedDirectories.None);
+        Assert.Null(selection.SelectedDirectories.Single);
+        Assert.Null(selection.SelectedDirectories.Pair);
         Assert.Equal(new FileSystemPath("/root"), selection.SelectedDirectories.CommonAncestor);
 
-        selection.Add([c]);
+        selection.Add([d]);
         Assert.Equal(2, changes);
+        Assert.False(selection.SelectedDirectories.None);
+        Assert.Null(selection.SelectedDirectories.Single);
         Assert.Null(selection.SelectedDirectories.Pair);
         Assert.Equal(new FileSystemPath("/"), selection.SelectedDirectories.CommonAncestor);
     }
