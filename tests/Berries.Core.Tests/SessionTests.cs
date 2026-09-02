@@ -16,7 +16,7 @@ public sealed class SessionTests
         var fs = new TestFileSystem();
         var first = File("/old/a.txt", A);
         var second = File("/new/a.txt", A);
-        var session = new BerriesSession(fs, new Portrait([first, second]));
+        var session = new BerriesSession(fs, TestCorpus(), new Portrait([first, second]));
 
         session.Exclude([first]);
 
@@ -33,7 +33,7 @@ public sealed class SessionTests
         var first = File("/a.txt", A);
         var second = File("/b.txt", A);
         var third = File("/c.txt", A);
-        var session = new BerriesSession(fs, new Portrait([first, second, third]));
+        var session = new BerriesSession(fs, TestCorpus(), new Portrait([first, second, third]));
 
         session.Exclude([first, second]);
 
@@ -53,7 +53,7 @@ public sealed class SessionTests
         var fs = new TestFileSystem();
         var first = File("/a.txt", A);
         var second = File("/b.txt", A);
-        var session = new BerriesSession(fs, new Portrait([first, second]));
+        var session = new BerriesSession(fs, TestCorpus(), new Portrait([first, second]));
 
         session.Exclude([first, second]);
 
@@ -72,7 +72,7 @@ public sealed class SessionTests
         var first = File("/a.txt", A);
         var second = File("/b.txt", A);
         var third = File("/c.txt", A);
-        var session = new BerriesSession(fs, new Portrait([first, second, third]));
+        var session = new BerriesSession(fs, TestCorpus(), new Portrait([first, second, third]));
 
         session.Delete([first, second]);
 
@@ -90,7 +90,7 @@ public sealed class SessionTests
         var source = File("/old/trips/vacation.jpg", A);
         var destination = File("/photos/travel/img1234.jpg", A);
         var conflictingName = File("/photos/travel/vacation.jpg", B);
-        var session = new BerriesSession(fs, new Portrait([source, destination, conflictingName]));
+        var session = new BerriesSession(fs, TestCorpus(), new Portrait([source, destination, conflictingName]));
 
         var result = session.Move([source], new("/old/trips"), new("/photos/travel"));
 
@@ -108,7 +108,7 @@ public sealed class SessionTests
         var source = File("/old/trips/vacation.jpg", A);
         var occupant = File("/photos/travel/vacation.jpg", B);
         var otherA = File("/elsewhere/a.jpg", A);
-        var session = new BerriesSession(fs, new Portrait([source, occupant, otherA]));
+        var session = new BerriesSession(fs, TestCorpus(), new Portrait([source, occupant, otherA]));
 
         var result = session.Move([source], new("/old/trips"), new("/photos/travel"));
 
@@ -124,7 +124,7 @@ public sealed class SessionTests
         var fs = new TestFileSystem();
         var source = File("/old/photos/trips/2024/a.jpg", A);
         var otherA = File("/backup/a.jpg", A);
-        var session = new BerriesSession(fs, new Portrait([source, otherA]));
+        var session = new BerriesSession(fs, TestCorpus(), new Portrait([source, otherA]));
 
         var result = session.Move([source], new("/old/photos/trips"), new("/photos/travel"));
 
@@ -137,6 +137,8 @@ public sealed class SessionTests
         Assert.Contains(session.WorkingPortrait.Files, file => file.Path == source.Path);
         Assert.Empty(session.Actions);
     }
+
+    private static Corpus TestCorpus() => new([new CorpusRoot(new FileSystemPath("/"))]);
 
     private static FileInstance File(string path, ContentId content)
     {
