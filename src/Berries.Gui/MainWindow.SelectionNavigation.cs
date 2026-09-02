@@ -18,23 +18,8 @@ public partial class MainWindow
         e.Handled = true;
     }
 
-    private void PivotButton_Click(object? sender, RoutedEventArgs e)
-    {
-        // Selection is persistent Core state; focus identifies the particular Explorer
-        // object from which location-oriented pivots other than Containing Directory are resolved.
-        var hasSession = controller.Session is not null;
-        var canResolveScope = focusedNode is not null || currentProjection?.Primary is not null;
-
-        PivotCorpusRootsMenu.IsEnabled = hasSession;
-        PivotContentMenu.IsEnabled = hasSession;
-        PivotDirectoryMenu.IsEnabled = ContainingDirectoryScope() is not null;
-        PivotBranchMenu.IsEnabled = hasSession && canResolveScope;
-        PivotBestDirectoryPairMenu.IsEnabled = hasSession && canResolveScope;
-        PivotBestBranchPairMenu.IsEnabled = hasSession && canResolveScope;
-
-        var suggestions = controller.Suggestions?.Suggestions;
-        PivotBranchPairMenu.IsEnabled = suggestionIndex >= 0 && suggestions is { Count: > 0 };
-    }
+    private void PivotButton_Click(object? sender, RoutedEventArgs e) =>
+        UpdatePivotCapabilities();
 
     private void ExplorerNode_ContextRequested(object? sender, RoutedEventArgs e)
     {
