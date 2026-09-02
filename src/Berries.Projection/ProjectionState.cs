@@ -10,6 +10,7 @@ public enum ProjectionKind
     Groups,
     DirectoryNamesakes,
     DirectoryNamesakeStructure,
+    DirectoryNamesakeMinHash,
     Directory,
     Branch,
     DirectoryPair,
