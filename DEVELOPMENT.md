@@ -76,7 +76,11 @@ Ranks promising Seeds using parent-relative Group concentration (`ExcessConcentr
 
 ### `BranchCounterpartAnalyzer`
 
-For several good Seeds, finds strong non-nested Counterparts and chooses Suggestions by actual relationship score. The best pair often does not come from the highest-ranked Seed; preserve that distinction.
+For several good Seeds, finds strong non-nested Counterparts and emits promising Branch Pair candidates. Its Seed/Counterpart search is analysis machinery; Suggestion ordering is owned separately.
+
+### `SuggestionBox`
+
+Accepts analyzer-independent Suggestion candidates, owns comparison/ranking policy, deduplication, seen/current state, and highest-ranked-unseen dispensing for the current portrait generation. Future analyzers may submit concurrently without knowing about one another.
 
 ### `FileActionExecutor`
 
@@ -103,7 +107,8 @@ Derived analysis:
     Working Portrait + Groups + retained unique counts
         -> Directory analysis / Directory Pairs
         -> Branch statistics
-        -> Suggestions
+        -> analyzer candidates
+        -> SuggestionBox
 
 A successful Exclude/Delete/Move/Undo rebuilds the Working Portrait, advances generation, makes older derived products stale, requests cancellation of obsolete work, and schedules the chain for the new generation.
 
@@ -119,8 +124,8 @@ Timing instrumentation around navigation/projection phases is intentionally reta
 
 Seed concentration for child vs immediate parent:
 
-    group retention = child GroupCount / parent GroupCount
-    file retention  = child FileCount / parent FileCount
+    group retention = child GroupCount / parent.GroupCount
+    file retention  = child FileCount / parent.FileCount
     C = group retention / file retention
 
     ExcessConcentratedGroups = child GroupCount * (1 - 1/C), C > 1
@@ -130,7 +135,7 @@ Counterpart relationship:
 
     score = shared Group count * Jaccard overlap
 
-Each Suggestion round examines the top 10 eligible Seeds, finds each Seed's best Counterpart, then chooses the strongest pair across that window. Seed priority is only a later tie-breaker. Chosen Seed/Counterpart families are blocked before the next round.
+Each Branch Pair search round examines the top 10 eligible Seeds, finds each Seed's best Counterpart, then chooses the strongest pair across that window. Seed priority is only a later tie-breaker. Chosen Seed/Counterpart families are blocked before the next round. SuggestionBox currently reproduces the Branch Pair presentation ordering independently; heterogeneous comparison remains to be designed.
 
 ## Current invariants worth protecting
 
@@ -148,10 +153,17 @@ Each Suggestion round examines the top 10 eligible Seeds, finds each Seed's best
 
 ## Near-term work
 
-Keep this section short and remove completed items rather than preserving a development diary.
+Keep this section concise, but preserve unresolved design decisions until they are settled.
 
-- continue auditing navigation paths for stale-request races;
-- continue real-corpus validation of Suggestion quality;
-- decide whether Suggestions should eventually combine/cull Groups, Directories, Directory Pairs, and Branch Pairs;
-- implement navigation history only when its desired semantics are clear;
-- decide whether session persistence provides enough user value to justify Save/Load.
+- Contextual counterpart search: infer a current Directory/Branch Seed from the presented case where possible. Start low-priority Core searches opportunistically; cancel immediately when the inferred Seed changes or disappears. Reuse the Branch Counterpart search machinery rather than maintaining a second Branch Pair algorithm. Slice long work finely enough for effectively immediate cancellation. Enable Best Directory Pair / Best Branch Pair only after a current-seed result exists and the resulting pair differs from the current view.
+- Define inferred-Seed semantics explicitly for Groups, Directory, Branch, Roots, Directory Pair, Branch Pair, focused nodes, and breadcrumbs before implementing the background contextual searches.
+- Pair construction from selection: whenever exactly two Directory nodes are semantically selected, allow viewing them as either a Directory Pair or Branch Pair.
+- Projection titles should include useful numerical context; decide the appropriate counts/metrics for every projection type rather than adding ad-hoc title data.
+- Add a Suggestion analyzer for repeated Directory names. Develop what constitutes a useful same-name Directory Case, including occurrence count, duplicate contribution, likely Exclude disposition, ranking, and possible persistent exclusion.
+- Persistent exclusions: retain simple path-pattern configuration. Consider an unobtrusive `Exclude always` path that writes an expressible exclusion rule for the user; ordinary Exclude should remain simple. README must prominently explain that configuration exists, why early exclusions matter, and give advisable syntax examples such as `/LICENSE` for any file or Directory named `LICENSE`.
+- Add an explicit acquisition setting for excluding zero-length files; empty content is a compelling exception to pathname-only exclusion because all empty files collapse into one analytically uninformative Group.
+- Toolbar/action organization: separate Invert from disposition buttons; group Move with Exclude/Delete. Keep Undo conceptually separate pending final layout.
+- Continue real-corpus validation of heterogeneous Suggestion quality and design a common comparison metric based on decision leverage rather than producer-supplied scores.
+- Revisit whether Suggest and Pivot remain separate navigation concepts once viewed-case Back/Forward semantics are clear. Back/Forward stays deferred until its desired behavior has demonstrated utility.
+- Continue auditing navigation paths for stale-request races.
+- Decide whether session persistence provides enough user value to justify Save/Load.
