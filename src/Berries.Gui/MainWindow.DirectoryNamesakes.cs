@@ -9,13 +9,13 @@ public partial class MainWindow
     private async void PivotDirectoryNamesakes_Click(object? sender, RoutedEventArgs e)
     {
         var session = controller.Session;
-        if (session is null) return;
+        if (session is null || currentProjection?.Kind == ProjectionKind.DirectoryNamesakes) return;
 
         var operation = BeginNavigation("Building Directory Namesakes view...", true);
         try
         {
             var namesakes = await Task.Run(
-                () => DirectoryNamesakeProjections.Build(session),
+                () => DirectoryNamesakeProjections.Build(session, fileSystem),
                 operation.Token);
             operation.Token.ThrowIfCancellationRequested();
 
