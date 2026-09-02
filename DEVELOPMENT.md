@@ -153,17 +153,17 @@ Each Branch Pair search round examines the top 10 eligible Seeds, finds each See
 
 ## Inferred Directory
 
-Some context-sensitive pivots/searches need one Directory as their Seed. Treat this as a general **inferred Directory** operation rather than embedding different inference rules in each command. The selection-derived portion belongs to `BerriesSelection`, because selection is the durable semantic state and every selected file has a containing Directory.
+Some context-sensitive pivots/searches need one Directory as their Seed. Treat this as a general **inferred Directory** operation rather than embedding different inference rules in each command.
 
-On every semantic selection change, determine the distinct containing Directories represented by selected files. This is intentionally a tiny analysis: walk selected files, collect distinct parent Directories, and stop as soon as a third distinct Directory is encountered. No filesystem traversal is required.
+`BerriesSelection` owns only the selection-derived Directory state. On every semantic selection change, determine the distinct containing Directories represented by selected files. This is intentionally a tiny analysis: walk selected files, collect distinct parent Directories, and stop as soon as a third distinct Directory is encountered. No filesystem traversal is required. Expose this result directly so all consumers use the same interpretation of selection.
 
-Resolve inferred Directory in this order:
+The GUI combines that selection-derived state with the current projection to make the final inferred-Directory decision:
 
 1. If the selection represents files from exactly one distinct containing Directory, infer that Directory. This includes one file or multiple files in the same Directory, regardless of which projection/node interactions produced the selection.
 2. Otherwise, if the selection is empty and the current projection is a Directory or Branch view, infer that view's top-level Directory.
 3. Otherwise there is no inferred Directory. Cancel work dependent on the previous inference and disable commands that require one.
 
-The same selection analysis also detects the exactly-two-Directory case. If selected files belong to exactly two distinct containing Directories, there is no single inferred Directory, but those two Directories may be viewed explicitly as a Directory Pair or Branch Pair. Three or more distinct containing Directories provide neither a single inferred Directory nor an explicit pair.
+The same `BerriesSelection` analysis also detects the exactly-two-Directory case. If selected files belong to exactly two distinct containing Directories, there is no single inferred Directory, but those two Directories may be viewed explicitly as a Directory Pair or Branch Pair. Three or more distinct containing Directories provide neither a single inferred Directory nor an explicit pair.
 
 Commands using an inferred Directory should not offer a no-op projection. In particular, when the inferred Directory is already the top-level Directory of the current Directory view, disable the Directory pivot; Branch remains available, and Best Branch Pair becomes available when its contextual counterpart result has been found. Conversely, in a Branch view rooted at the inferred Directory, disable Branch while leaving Directory available.
 
