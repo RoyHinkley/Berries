@@ -71,6 +71,27 @@ public sealed class BerriesSelectionTests
     }
 
     [Fact]
+    public void SelectedDirectoriesChanged_FiresWhenOnlyCommonAncestorChanges()
+    {
+        var a = File("/root/one/a.txt");
+        var b = File("/root/two/b.txt");
+        var c = File("/other/three/c.txt");
+        var selection = new BerriesSelection(new TestFileSystem(), TestCorpus(), new Portrait([a, b, c]));
+        var changes = 0;
+        selection.SelectedDirectoriesChanged += (_, _) => changes++;
+
+        selection.Add([a, b]);
+        Assert.Equal(1, changes);
+        Assert.True(selection.SelectedDirectories.Pair.HasValue);
+        Assert.Equal(new FileSystemPath("/root"), selection.SelectedDirectories.CommonAncestor);
+
+        selection.Add([c]);
+        Assert.Equal(2, changes);
+        Assert.Null(selection.SelectedDirectories.Pair);
+        Assert.Equal(new FileSystemPath("/"), selection.SelectedDirectories.CommonAncestor);
+    }
+
+    [Fact]
     public void SelectedDirectoriesChanged_FiresOnlyWhenDirectorySummaryChanges()
     {
         var a1 = File("/a/1.txt");
