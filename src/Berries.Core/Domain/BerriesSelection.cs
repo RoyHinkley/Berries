@@ -4,6 +4,15 @@ using Berries.FileSystem.Abstractions;
 namespace Berries.Core.Domain;
 
 /// <summary>
+/// Compact selection-derived Directory state. NoDir distinguishes an empty selection
+/// from a selection spanning three or more Directories, where all three properties are empty.
+/// </summary>
+public readonly record struct SelectedDirectories(
+    bool NoDir,
+    FileSystemPath? OneDir,
+    (FileSystemPath First, FileSystemPath Second)? DirPair);
+
+/// <summary>
 /// The persistent semantic selection for a Berries session. Selection is always a literal
 /// set of files in the current Working Portrait; projections merely display or modify it.
 /// </summary>
@@ -22,6 +31,10 @@ public sealed class BerriesSelection
 
     public int Count => selected.Count;
     public bool IsEmpty => selected.Count == 0;
+    public SelectedDirectories SelectedDirectories { get; private set; }
+
+    /// <summary>Raised only when the Directory summary changes, not for every file-selection change.</summary>
+    public event EventHandler? SelectedDirectoriesChanged;
 
     public IReadOnlyList<FileInstance> Files => selected
         .Select(key => filesByPath.GetValueOrDefault(key))
@@ -32,16 +45,25 @@ public sealed class BerriesSelection
     public bool Contains(FileInstance file) => selected.Contains(PathKey(file.Path));
     public bool Contains(FileSystemPath path) => selected.Contains(PathKey(path));
 
-    public void Clear() => selected.Clear();
+    public void Clear()
+    {
+        if (selected.Count == 0) return;
+        selected.Clear();
+        UpdateSelectedDirectories();
+    }
 
     public void Add(IEnumerable<FileInstance> files)
     {
-        foreach (var file in Current(files)) selected.Add(PathKey(file.Path));
+        var changed = false;
+        foreach (var file in Current(files)) changed |= selected.Add(PathKey(file.Path));
+        if (changed) UpdateSelectedDirectories();
     }
 
     public void Remove(IEnumerable<FileInstance> files)
     {
-        foreach (var file in files) selected.Remove(PathKey(file.Path));
+        var changed = false;
+        foreach (var file in files) changed |= selected.Remove(PathKey(file.Path));
+        if (changed) UpdateSelectedDirectories();
     }
 
     public void Toggle(IEnumerable<FileInstance> files)
@@ -55,6 +77,7 @@ public sealed class BerriesSelection
             var key = PathKey(file.Path);
             if (remove) selected.Remove(key); else selected.Add(key);
         }
+        UpdateSelectedDirectories();
     }
 
     public void ToggleDirectory(FileSystemPath directory)
@@ -85,11 +108,14 @@ public sealed class BerriesSelection
     /// <summary>Invert within an explicitly supplied universe, such as all Groups in a Groups projection.</summary>
     public void Invert(IEnumerable<FileInstance> universe)
     {
+        var changed = false;
         foreach (var file in Current(universe))
         {
             var key = PathKey(file.Path);
             if (!selected.Remove(key)) selected.Add(key);
+            changed = true;
         }
+        if (changed) UpdateSelectedDirectories();
     }
 
     public int CountGroups(IReadOnlyList<Group> groups) =>
@@ -108,6 +134,7 @@ public sealed class BerriesSelection
             .GroupBy(file => PathKey(file.ParentDirectory), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
         selected.RemoveWhere(key => !filesByPath.ContainsKey(key));
+        UpdateSelectedDirectories();
     }
 
     internal void MovePath(FileSystemPath source, FileSystemPath destination)
@@ -115,6 +142,45 @@ public sealed class BerriesSelection
         var sourceKey = PathKey(source);
         if (!selected.Remove(sourceKey)) return;
         selected.Add(PathKey(destination));
+        UpdateSelectedDirectories();
+    }
+
+    private void UpdateSelectedDirectories()
+    {
+        var next = AnalyzeSelectedDirectories();
+        if (next == SelectedDirectories) return;
+        SelectedDirectories = next;
+        SelectedDirectoriesChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private SelectedDirectories AnalyzeSelectedDirectories()
+    {
+        if (selected.Count == 0)
+            return new SelectedDirectories(true, null, null);
+
+        var directories = new Dictionary<string, FileSystemPath>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in selected)
+        {
+            if (!filesByPath.TryGetValue(path, out var file)) continue;
+            var key = PathKey(file.ParentDirectory);
+            directories.TryAdd(key, new FileSystemPath(key));
+            if (directories.Count >= 3)
+                return new SelectedDirectories(false, null, null);
+        }
+
+        if (directories.Count == 1)
+            return new SelectedDirectories(false, directories.Values.First(), null);
+
+        if (directories.Count == 2)
+        {
+            var pair = directories.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(item => item.Value)
+                .ToArray();
+            return new SelectedDirectories(false, null, (pair[0], pair[1]));
+        }
+
+        // Defensive fallback: selected paths should always resolve through filesByPath.
+        return new SelectedDirectories(true, null, null);
     }
 
     private IEnumerable<FileInstance> Current(IEnumerable<FileInstance> files)
