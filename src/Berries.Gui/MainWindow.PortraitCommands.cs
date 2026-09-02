@@ -15,6 +15,7 @@ public partial class MainWindow
     {
         var files = SemanticSelection();
         if (files.Count == 0 || controller.Session is null || portraitCommandBusy) return;
+        if (!await ConfirmOutsideSelectionAsync("Exclude")) return;
         await RunPortraitCommandAsync(
             $"Excluding {files.Count:N0} files...",
             $"Excluded {files.Count:N0} file(s) from the Corpus.",
@@ -25,6 +26,7 @@ public partial class MainWindow
     {
         var files = SemanticSelection();
         if (files.Count == 0 || controller.Session is null || portraitCommandBusy) return;
+        if (!await ConfirmOutsideSelectionAsync("Delete")) return;
         await RunPortraitCommandAsync(
             $"Scheduling deletion of {files.Count:N0} files...",
             $"Scheduled deletion of {files.Count:N0} file(s).",
@@ -38,6 +40,7 @@ public partial class MainWindow
         var descendants = currentProjection.Kind == ProjectionKind.BranchPair;
         var files = SemanticSelectionInScope(first, descendants);
         if (files.Count == 0) return;
+        if (!await ConfirmOutsideSelectionAsync("Move →")) return;
         MoveResult? result = null;
         await RunPortraitCommandAsync(
             $"Moving {files.Count:N0} files...",
@@ -53,6 +56,7 @@ public partial class MainWindow
         var descendants = currentProjection.Kind == ProjectionKind.BranchPair;
         var files = SemanticSelectionInScope(second, descendants);
         if (files.Count == 0) return;
+        if (!await ConfirmOutsideSelectionAsync("← Move")) return;
         MoveResult? result = null;
         await RunPortraitCommandAsync(
             $"Moving {files.Count:N0} files...",
