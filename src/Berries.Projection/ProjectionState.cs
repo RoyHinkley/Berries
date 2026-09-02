@@ -9,6 +9,7 @@ public enum ProjectionKind
     CorpusRoots,
     Groups,
     DirectoryNamesakes,
+    DirectoryNamesakeStructure,
     Directory,
     Branch,
     DirectoryPair,
