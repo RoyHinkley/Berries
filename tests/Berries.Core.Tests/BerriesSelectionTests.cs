@@ -15,27 +15,59 @@ public sealed class BerriesSelectionTests
         var c = File("/c/1.txt");
         var selection = new BerriesSelection(new TestFileSystem(), TestCorpus(), new Portrait([a1, a2, b, c]));
 
-        Assert.True(selection.SelectedDirectories.NoDir);
-        Assert.Null(selection.SelectedDirectories.OneDir);
-        Assert.Null(selection.SelectedDirectories.DirPair);
+        Assert.True(selection.SelectedDirectories.None);
+        Assert.Null(selection.SelectedDirectories.Single);
+        Assert.Null(selection.SelectedDirectories.Pair);
+        Assert.Null(selection.SelectedDirectories.CommonAncestor);
 
         selection.Add([a1, a2]);
-        Assert.False(selection.SelectedDirectories.NoDir);
-        Assert.Equal(new FileSystemPath("/a"), selection.SelectedDirectories.OneDir);
-        Assert.Null(selection.SelectedDirectories.DirPair);
+        Assert.False(selection.SelectedDirectories.None);
+        Assert.Equal(new FileSystemPath("/a"), selection.SelectedDirectories.Single);
+        Assert.Null(selection.SelectedDirectories.Pair);
+        Assert.Equal(new FileSystemPath("/a"), selection.SelectedDirectories.CommonAncestor);
 
         selection.Add([b]);
-        Assert.False(selection.SelectedDirectories.NoDir);
-        Assert.Null(selection.SelectedDirectories.OneDir);
-        Assert.True(selection.SelectedDirectories.DirPair.HasValue);
-        var pair = selection.SelectedDirectories.DirPair.Value;
+        Assert.False(selection.SelectedDirectories.None);
+        Assert.Null(selection.SelectedDirectories.Single);
+        Assert.True(selection.SelectedDirectories.Pair.HasValue);
+        var pair = selection.SelectedDirectories.Pair.Value;
         Assert.Equal(new FileSystemPath("/a"), pair.First);
         Assert.Equal(new FileSystemPath("/b"), pair.Second);
+        Assert.Equal(new FileSystemPath("/"), selection.SelectedDirectories.CommonAncestor);
 
         selection.Add([c]);
-        Assert.False(selection.SelectedDirectories.NoDir);
-        Assert.Null(selection.SelectedDirectories.OneDir);
-        Assert.Null(selection.SelectedDirectories.DirPair);
+        Assert.False(selection.SelectedDirectories.None);
+        Assert.Null(selection.SelectedDirectories.Single);
+        Assert.Null(selection.SelectedDirectories.Pair);
+        Assert.Equal(new FileSystemPath("/"), selection.SelectedDirectories.CommonAncestor);
+    }
+
+    [Fact]
+    public void SelectedDirectories_CommonAncestorIsDeepestSharedAncestor()
+    {
+        var first = File("/photos/2024/trips/a.jpg");
+        var second = File("/photos/2025/b.jpg");
+        var selection = new BerriesSelection(new TestFileSystem(), TestCorpus(), new Portrait([first, second]));
+
+        selection.Add([first, second]);
+
+        Assert.Equal(new FileSystemPath("/photos"), selection.SelectedDirectories.CommonAncestor);
+    }
+
+    [Fact]
+    public void SelectedDirectories_CommonAncestorDoesNotCrossCorpusRoots()
+    {
+        var first = File("/first/a/1.txt");
+        var second = File("/second/b/1.txt");
+        var corpus = new Corpus([
+            new CorpusRoot(new FileSystemPath("/first")),
+            new CorpusRoot(new FileSystemPath("/second"))
+        ]);
+        var selection = new BerriesSelection(new TestFileSystem(), corpus, new Portrait([first, second]));
+
+        selection.Add([first, second]);
+
+        Assert.Null(selection.SelectedDirectories.CommonAncestor);
     }
 
     [Fact]
@@ -62,7 +94,7 @@ public sealed class BerriesSelectionTests
 
         selection.Remove([a2]);
         Assert.Equal(3, changes);
-        Assert.Equal(new FileSystemPath("/b"), selection.SelectedDirectories.OneDir);
+        Assert.Equal(new FileSystemPath("/b"), selection.SelectedDirectories.Single);
     }
 
     private static Corpus TestCorpus() => new([new CorpusRoot(new FileSystemPath("/"))]);
@@ -76,11 +108,29 @@ public sealed class BerriesSelectionTests
     private sealed class TestFileSystem : IFileSystem
     {
         public FileSystemPath NormalizePath(FileSystemPath path) => new(Normalize(path.Value));
-        public FileSystemPath? GetParentDirectory(FileSystemPath path) => throw Unexpected();
+
+        public FileSystemPath? GetParentDirectory(FileSystemPath path)
+        {
+            var normalized = Normalize(path.Value);
+            if (normalized == "/") return null;
+            var separator = normalized.LastIndexOf('/');
+            return separator <= 0 ? new FileSystemPath("/") : new FileSystemPath(normalized[..separator]);
+        }
+
         public FileSystemPath GetRelativePath(FileSystemPath relativeTo, FileSystemPath path) => throw Unexpected();
         public FileSystemPath Combine(FileSystemPath directory, FileSystemPath relativePath) => throw Unexpected();
         public bool PathsEqual(FileSystemPath left, FileSystemPath right) => Normalize(left.Value) == Normalize(right.Value);
-        public bool IsDescendant(FileSystemPath candidate, FileSystemPath ancestor) => throw Unexpected();
+
+        public bool IsDescendant(FileSystemPath candidate, FileSystemPath ancestor)
+        {
+            var child = Normalize(candidate.Value);
+            var parent = Normalize(ancestor.Value);
+            if (parent == "/") return child != "/" && child.StartsWith('/');
+            return child.Length > parent.Length
+                && child.StartsWith(parent, StringComparison.Ordinal)
+                && child[parent.Length] == '/';
+        }
+
         public IEnumerable<FileSystemFile> EnumerateFiles(FileSystemPath root) => throw Unexpected();
         public Stream OpenRead(FileSystemPath path) => throw Unexpected();
         public bool Exists(FileSystemPath path) => throw Unexpected();
@@ -89,7 +139,11 @@ public sealed class BerriesSelectionTests
         public void MoveFile(FileSystemPath source, FileSystemPath destination) => throw Unexpected();
         public void DeleteFile(FileSystemPath path) => throw Unexpected();
         public void RemoveDirectory(FileSystemPath path) => throw Unexpected();
-        private static string Normalize(string value) => value.Replace('\\', '/').TrimEnd('/');
+        private static string Normalize(string value)
+        {
+            var normalized = value.Replace('\\', '/').TrimEnd('/');
+            return normalized.Length == 0 ? "/" : normalized;
+        }
         private static InvalidOperationException Unexpected() => new("Unexpected filesystem call.");
     }
 }
