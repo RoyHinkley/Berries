@@ -17,21 +17,23 @@ public sealed class BerriesSession
     private readonly IReadOnlyList<ContentId> groupContents;
     private IReadOnlyList<Group> groups = [];
 
-    public BerriesSession(IFileSystem fileSystem, Portrait initialPortrait)
-        : this(fileSystem, initialPortrait, new Dictionary<FileSystemPath, int>())
+    public BerriesSession(IFileSystem fileSystem, Corpus corpus, Portrait initialPortrait)
+        : this(fileSystem, corpus, initialPortrait, new Dictionary<FileSystemPath, int>())
     {
     }
 
     public BerriesSession(
         IFileSystem fileSystem,
+        Corpus corpus,
         Portrait initialPortrait,
         IReadOnlyDictionary<FileSystemPath, int> uniqueFileCountsByDirectory)
     {
         this.fileSystem = fileSystem;
+        Corpus = corpus;
         InitialPortrait = initialPortrait;
         WorkingPortrait = initialPortrait;
         UniqueFileCountsByDirectory = uniqueFileCountsByDirectory;
-        Selection = new BerriesSelection(fileSystem, initialPortrait);
+        Selection = new BerriesSelection(fileSystem, corpus, initialPortrait);
         groupContents = initialPortrait.Files
             .Where(file => file.Content is not null)
             .GroupBy(file => file.Content!.Value)
@@ -41,6 +43,7 @@ public sealed class BerriesSession
         groups = BuildGroups(initialPortrait);
     }
 
+    public Corpus Corpus { get; }
     public Portrait InitialPortrait { get; }
     public Portrait WorkingPortrait { get; private set; }
     public BerriesSelection Selection { get; }
