@@ -44,9 +44,6 @@ public static class DirectoryNamesakeMinHashAnalyzer
             .Where(group => group.Count() > 1)
             .ToArray();
 
-        var namesakeNames = new HashSet<string>(
-            namesakes.Select(group => group.Key),
-            StringComparer.OrdinalIgnoreCase);
         var namesakeDirectories = namesakes
             .SelectMany(group => group.Select(item => item.Path))
             .Distinct()
