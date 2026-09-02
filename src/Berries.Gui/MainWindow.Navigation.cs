@@ -41,17 +41,27 @@ public partial class MainWindow
 
     private void UpdatePivotCapabilities()
     {
-        var scope = SelectedScope();
+        var session = controller.Session;
         var containingDirectory = ContainingDirectoryScope();
-        PivotCorpusRootsMenu.IsEnabled = controller.Session is not null;
-        PivotContentMenu.IsEnabled = controller.Session is not null;
-        PivotDirectoryMenu.IsEnabled = containingDirectory is not null;
-        PivotBranchMenu.IsEnabled = scope is not null;
-        PivotBestDirectoryPairMenu.IsEnabled = scope is not null;
+        var branch = BranchScope();
+        var directoryPairSeed = DirectoryPairSeed();
+        var branchPairSeed = BranchPairSeed();
+
+        PivotCorpusRootsMenu.IsEnabled = session is not null
+            && currentProjection?.Kind != ProjectionKind.CorpusRoots;
+        PivotContentMenu.IsEnabled = session is not null
+            && (!session.Selection.IsEmpty || currentProjection?.Kind != ProjectionKind.Groups);
+        PivotDirectoryMenu.IsEnabled = containingDirectory is not null
+            && !IsCurrentProjection(ProjectionKind.Directory, containingDirectory.Value);
+        PivotBranchMenu.IsEnabled = branch is not null
+            && !IsCurrentProjection(ProjectionKind.Branch, branch.Value);
+        PivotBestDirectoryPairMenu.IsEnabled = directoryPairSeed is not null;
+
         var branches = controller.BranchStatistics?.Branches;
-        PivotBestBranchPairMenu.IsEnabled = scope is not null
+        PivotBestBranchPairMenu.IsEnabled = branchPairSeed is not null
             && branches is not null
-            && Projections.HasBranchPairCandidate(branches, scope.Value);
+            && Projections.HasBranchPairCandidate(branches, branchPairSeed.Value);
+
         var suggestions = controller.Suggestions?.Suggestions;
         PivotBranchPairMenu.IsEnabled = suggestionIndex >= 0 && suggestions is { Count: > 0 };
     }
@@ -182,13 +192,13 @@ public partial class MainWindow
 
     private async void PivotBranch_Click(object? sender, RoutedEventArgs e)
     {
-        var scope = SelectedScope();
+        var scope = BranchScope();
         if (scope is not null) await ShowBranchProjectionAsync(scope.Value);
     }
 
     private async void PivotBestDirectoryPair_Click(object? sender, RoutedEventArgs e)
     {
-        var scope = SelectedScope();
+        var scope = DirectoryPairSeed();
         if (scope is null) return;
         var pairs = controller.DirectoryAnalysis?.DirectoryPairs;
         var pair = pairs is null ? null : Projections.BestDirectoryPair(pairs, scope.Value);
@@ -208,7 +218,7 @@ public partial class MainWindow
 
     private async void PivotBestBranchPair_Click(object? sender, RoutedEventArgs e)
     {
-        var scope = SelectedScope();
+        var scope = BranchPairSeed();
         if (scope is null) return;
         try
         {
@@ -226,17 +236,86 @@ public partial class MainWindow
         }
     }
 
-    private FileSystemPath? SelectedScope() => focusedNode?.SemanticPath ?? currentProjection?.Primary;
+    private FileSystemPath? FocusedOrCurrentScope()
+    {
+        if (focusedNode?.SemanticPath is { } focused)
+            return focused;
+        return currentProjection is { IsPair: false, Primary: { } primary } ? primary : null;
+    }
 
     private FileSystemPath? ContainingDirectoryScope()
     {
         var session = controller.Session;
         if (session is null)
             return null;
-        return session.Selection.IsEmpty
-            ? SelectedScope()
-            : session.Selection.SelectedDirectories.CommonAncestor;
+
+        if (!session.Selection.IsEmpty)
+            return session.Selection.SelectedDirectories.CommonAncestor;
+
+        if (focusedNode?.SemanticPath is { } focused)
+            return focused;
+
+        if (currentProjection is not { IsPair: false, Primary: { } primary } current)
+            return null;
+
+        return current.Kind == ProjectionKind.Directory
+            ? ParentWithinCorpus(primary)
+            : primary;
     }
+
+    private FileSystemPath? BranchScope()
+    {
+        var session = controller.Session;
+        if (session is null)
+            return null;
+
+        if (session.Selection.IsEmpty)
+            return FocusedOrCurrentScope();
+
+        var directories = session.Selection.SelectedDirectories;
+        return directories.Single ?? directories.CommonAncestor;
+    }
+
+    private FileSystemPath? DirectoryPairSeed()
+    {
+        var session = controller.Session;
+        if (session is null)
+            return null;
+        return session.Selection.IsEmpty
+            ? FocusedOrCurrentScope()
+            : session.Selection.SelectedDirectories.Single;
+    }
+
+    private FileSystemPath? BranchPairSeed()
+    {
+        var session = controller.Session;
+        if (session is null)
+            return null;
+        if (session.Selection.IsEmpty)
+            return FocusedOrCurrentScope();
+
+        var directories = session.Selection.SelectedDirectories;
+        return directories.Single ?? directories.CommonAncestor;
+    }
+
+    private FileSystemPath? ParentWithinCorpus(FileSystemPath path)
+    {
+        var parent = fileSystem.GetParentDirectory(path);
+        var corpus = controller.Corpus;
+        if (parent is null || corpus is null)
+            return null;
+
+        return corpus.Roots.Any(root =>
+                fileSystem.PathsEqual(parent.Value, root.Path)
+                || fileSystem.IsDescendant(parent.Value, root.Path))
+            ? parent
+            : null;
+    }
+
+    private bool IsCurrentProjection(ProjectionKind kind, FileSystemPath scope) =>
+        currentProjection is { IsPair: false, Primary: { } primary } current
+        && current.Kind == kind
+        && fileSystem.PathsEqual(primary, scope);
 
     private async Task ShowAdHocBranchPairAsync(
         FileSystemPath first,
