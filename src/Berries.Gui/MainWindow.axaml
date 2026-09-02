@@ -129,7 +129,7 @@
                 <TreeView.ItemsPanel>
                   <ItemsPanelTemplate>
                     <VirtualizingStackPanel />
-                  </TreeView.ItemsPanel>
+                  </ItemsPanelTemplate>
                 </TreeView.ItemsPanel>
                 <TreeView.ItemTemplate>
                   <TreeDataTemplate x:DataType="local:ExplorerNode" ItemsSource="{Binding Children}">
