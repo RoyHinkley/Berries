@@ -56,11 +56,15 @@ Highlighting an internal node does not create a separate structural selection st
 
 ## Suggestions and navigation
 
-A **Suggestion** is a promising place for attention, currently a Branch Pair found by targeted Seed/Counterpart analysis. It is not a command or necessarily the final useful Case boundary.
+A **Suggestion** is a promising place for attention. Suggestion producers are independent analyses that submit promising candidates to a common Suggestion box; the box, not the producer, assigns the presentation rank, maintains the ordered unseen set, and dispenses the highest-ranking unseen Suggestion. The box is generation-scoped and safe for concurrent producers.
 
-Suggestion analysis publishes ranked partial results as it proceeds. `Suggest` becomes available as soon as at least one current-generation Suggestion has been found. Each click presents the highest-ranking Suggestion not yet shown in that portrait generation, so later discoveries may move ahead of lower-ranked unseen Suggestions without repeating one already seen.
+The current producer discovers Branch Pair candidates by targeted Seed/Counterpart analysis. The architecture does not require future Suggestions to be Branch Pairs: another analyzer may submit a different Case/projection candidate without participating in Branch Pair analysis or maintaining its own presentation order.
 
-**Pivot** changes projection or scope without changing the Working Portrait. Pair breadcrumbs let either side be broadened or narrowed independently. Pivoting back to the current Suggested Branch Pair likewise changes only navigation.
+`Suggest` becomes available as soon as at least one current-generation candidate has been submitted. Each click presents the highest-ranking Suggestion not yet shown in that portrait generation, so later discoveries may move ahead of lower-ranked unseen Suggestions without repeating one already seen.
+
+The common comparison policy is intentionally centralized in Suggestions. The current Branch Pair rank retains the existing shared-Group/Jaccard behavior; a meaningful relative ranking policy for heterogeneous Case types remains to be developed.
+
+**Pivot** changes projection or scope without changing the Working Portrait. Pair breadcrumbs let either side be broadened or narrowed independently. Pivoting back to the current Suggestion likewise changes only navigation.
 
 Selection persists across projections. Back/Forward controls exist, but navigation history is not yet implemented.
 
