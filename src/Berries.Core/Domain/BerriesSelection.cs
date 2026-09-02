@@ -19,13 +19,15 @@ public readonly record struct SelectedDirectories(
 public sealed class BerriesSelection
 {
     private readonly IFileSystem fileSystem;
+    private readonly Corpus corpus;
     private readonly HashSet<string> selected = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, FileInstance> filesByPath = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, FileInstance[]> filesByDirectory = new(StringComparer.OrdinalIgnoreCase);
 
-    public BerriesSelection(IFileSystem fileSystem, Portrait portrait)
+    public BerriesSelection(IFileSystem fileSystem, Corpus corpus, Portrait portrait)
     {
         this.fileSystem = fileSystem;
+        this.corpus = corpus;
         Refresh(portrait);
     }
 
