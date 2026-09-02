@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Avalonia.Interactivity;
 using Berries.Core.Analysis;
 using Berries.Projection;
@@ -21,6 +22,22 @@ public partial class MainWindow
                     cancellationToken: operation.Token),
                 operation.Token);
             operation.Token.ThrowIfCancellationRequested();
+
+            var jsonPath = Path.Combine(AppContext.BaseDirectory, "namesake-minhash.json");
+            var json = JsonSerializer.Serialize(
+                buckets.Select((bucket, index) => new
+                {
+                    Index = index + 1,
+                    Band = bucket.Band + 1,
+                    BandHash = $"{bucket.BandHash:X16}",
+                    Members = bucket.Members.Select(member => new
+                    {
+                        Path = member.Path.Value,
+                        member.DescendantNamesakeCount
+                    })
+                }),
+                new JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(jsonPath, json, operation.Token);
 
             var nodes = await Task.Run(() =>
                 buckets.Select((bucket, index) =>
@@ -53,7 +70,7 @@ public partial class MainWindow
             UpdateSelectionSummary();
             UpdateCapabilities();
             UpdatePivotCapabilities();
-            CompleteNavigation(operation, ProjectionTitle.Text ?? "Namesake MinHash");
+            CompleteNavigation(operation, $"Wrote {jsonPath}");
         }
         catch (OperationCanceledException) when (operation.Token.IsCancellationRequested || !IsCurrentNavigation(operation))
         {
