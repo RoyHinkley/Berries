@@ -20,6 +20,7 @@ public sealed class BerriesApplication
     private readonly AnalysisProduct<DirectoryAnalysisResult> directoryAnalysis = new();
     private readonly AnalysisProduct<BranchStatisticsResult> branchStatistics = new();
     private readonly AnalysisProduct<BranchPairSuggestionResult> suggestions = new();
+    private readonly SuggestionBox suggestionBox = new();
     private CancellationTokenSource sessionCancellation = new();
     private Task schedulerTask = Task.CompletedTask;
     private bool schedulerRequested;
@@ -51,6 +52,11 @@ public sealed class BerriesApplication
         branchStatistics.IsValid(PortraitGeneration) ? branchStatistics.Result : null;
     public BranchPairSuggestionResult? Suggestions =>
         suggestions.IsValid(PortraitGeneration) ? suggestions.Result : null;
+    public Suggestion? CurrentSuggestion => suggestionBox.Current(PortraitGeneration);
+
+    public Suggestion? PeekSuggestion() => suggestionBox.PeekNext(PortraitGeneration);
+
+    public Suggestion? TakeSuggestion() => suggestionBox.TakeNext(PortraitGeneration);
 
     public IReadOnlyList<string> NormalizeRoots(IEnumerable<string> rootPaths) =>
         engine.CreateCorpus(rootPaths.Select(path => new FileSystemPath(path)))
@@ -344,9 +350,9 @@ public sealed class BerriesApplication
                             counterpartLimit: 5,
                             cancellationToken: token,
                             progress: ForwardProgress(progress),
-                            suggestionsChanged: partial =>
+                            suggestionFound: candidate =>
                             {
-                                if (suggestions.TryPublishIntermediate(generation, PortraitGeneration, partial))
+                                if (suggestionBox.Submit(generation, new BranchPairSuggestionCandidate(candidate)))
                                     AnalysisChanged?.Invoke();
                             }), token);
                         if (suggestions.TryPublish(generation, PortraitGeneration, result))
@@ -395,6 +401,7 @@ public sealed class BerriesApplication
         directoryAnalysis.CancelObsolete(generation);
         branchStatistics.CancelObsolete(generation);
         suggestions.CancelObsolete(generation);
+        suggestionBox.Reset(generation);
         AnalysisChanged?.Invoke();
     }
 
@@ -403,10 +410,11 @@ public sealed class BerriesApplication
         sessionCancellation.Cancel();
         sessionCancellation.Dispose();
         sessionCancellation = new CancellationTokenSource();
-        Interlocked.Increment(ref portraitGeneration);
+        var generation = Interlocked.Increment(ref portraitGeneration);
         directoryAnalysis.Reset();
         branchStatistics.Reset();
         suggestions.Reset();
+        suggestionBox.Reset(generation);
         Corpus = null;
         Session = null;
         Scan = null;
