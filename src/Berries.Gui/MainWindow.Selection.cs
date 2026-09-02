@@ -44,16 +44,18 @@ public partial class MainWindow
         session.Selection.Clear(); SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
 
-    private void InvertSelectedCopies_Click(object? sender, RoutedEventArgs e)
+    private async void InvertSelectedCopies_Click(object? sender, RoutedEventArgs e)
     {
         if (controller.Session is not { } session || session.Selection.IsEmpty) return;
+        if (!await ConfirmOutsideSelectionAsync("Invert selected copies")) return;
         session.InvertSelectedCopies();
         SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
 
-    private void InvertAllGroups_Click(object? sender, RoutedEventArgs e)
+    private async void InvertAllGroups_Click(object? sender, RoutedEventArgs e)
     {
         if (controller.Session is not { } session || !IsGroupsProjection()) return;
+        if (!await ConfirmOutsideSelectionAsync("Invert all Groups")) return;
         session.Selection.Invert(RepresentedFiles());
         SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
     }
@@ -61,6 +63,56 @@ public partial class MainWindow
     private bool IsGroupsProjection() => currentProjection?.Kind == ProjectionKind.Groups;
 
     private IReadOnlyList<FileInstance> RepresentedFiles() => currentProjection?.RepresentedFiles ?? [];
+
+    private async Task<bool> ConfirmOutsideSelectionAsync(string action)
+    {
+        if (controller.Session is not { } session) return false;
+
+        var outside = session.Selection.CountOutside(RepresentedFiles());
+        if (outside == 0) return true;
+
+        var total = session.Selection.Count;
+        var outsideText = outside == total
+            ? $"All {outside:N0} selected file(s) are outside the current view."
+            : $"{outside:N0} of {total:N0} selected file(s) are outside the current view.";
+
+        var dialog = new Window
+        {
+            Title = "Selection outside current view",
+            Width = 440,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+
+        var continueButton = new Button { Content = action, MinWidth = 90 };
+        var cancelButton = new Button { Content = "Cancel", MinWidth = 90, IsCancel = true };
+        continueButton.Click += (_, _) => dialog.Close(true);
+        cancelButton.Click += (_, _) => dialog.Close(false);
+
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(20),
+            Spacing = 16,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = $"{outsideText}\n\nContinue with {action}?",
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                },
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Spacing = 8,
+                    Children = { continueButton, cancelButton }
+                }
+            }
+        };
+
+        return await dialog.ShowDialog<bool>(this);
+    }
 
     private IEnumerable<TreeView> ActiveTrees()
     {
