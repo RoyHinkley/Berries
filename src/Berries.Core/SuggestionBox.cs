@@ -17,7 +17,7 @@ public sealed record Suggestion(string Id, SuggestionCandidate Candidate, double
 
 /// <summary>
 /// Receives candidates from independent analyzers, applies the central Suggestion ranking
-/// policy, maintains one ordered generation-scoped pool, and dispenses unseen Suggestions.
+/// policy, maintains one ordered generation-scoped pool, and dispenses Suggestions cyclically.
 /// Thread-safe so independent analyzers may submit concurrently.
 /// </summary>
 public sealed class SuggestionBox
@@ -58,7 +58,10 @@ public sealed class SuggestionBox
         {
             if (currentGeneration != generation)
                 return null;
-            return OrderedSuggestions().FirstOrDefault(item => !seen.Contains(item.Id));
+
+            var ordered = OrderedSuggestions().ToArray();
+            return ordered.FirstOrDefault(item => !seen.Contains(item.Id))
+                ?? ordered.FirstOrDefault();
         }
     }
 
@@ -69,7 +72,13 @@ public sealed class SuggestionBox
             if (currentGeneration != generation)
                 return null;
 
-            var next = OrderedSuggestions().FirstOrDefault(item => !seen.Contains(item.Id));
+            var ordered = OrderedSuggestions().ToArray();
+            var next = ordered.FirstOrDefault(item => !seen.Contains(item.Id));
+            if (next is null)
+            {
+                seen.Clear();
+                next = ordered.FirstOrDefault();
+            }
             if (next is null)
                 return null;
 
