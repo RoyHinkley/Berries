@@ -4,13 +4,15 @@ using Berries.FileSystem.Abstractions;
 namespace Berries.Core.Domain;
 
 /// <summary>
-/// Compact selection-derived Directory state. NoDir distinguishes an empty selection
-/// from a selection spanning three or more Directories, where all three properties are empty.
+/// Compact selection-derived Directory state. None distinguishes an empty selection
+/// from a selection spanning three or more direct parent Directories.
+/// CommonAncestor is the deepest Directory within one Corpus Root containing every selected file.
 /// </summary>
 public readonly record struct SelectedDirectories(
-    bool NoDir,
-    FileSystemPath? OneDir,
-    (FileSystemPath First, FileSystemPath Second)? DirPair);
+    bool None,
+    FileSystemPath? Single,
+    (FileSystemPath First, FileSystemPath Second)? Pair,
+    FileSystemPath? CommonAncestor);
 
 /// <summary>
 /// The persistent semantic selection for a Berries session. Selection is always a literal
@@ -158,31 +160,94 @@ public sealed class BerriesSelection
     private SelectedDirectories AnalyzeSelectedDirectories()
     {
         if (selected.Count == 0)
-            return new SelectedDirectories(true, null, null);
+            return new SelectedDirectories(true, null, null, null);
 
         var directories = new Dictionary<string, FileSystemPath>(StringComparer.OrdinalIgnoreCase);
+        FileSystemPath? commonAncestor = null;
+        FileSystemPath? commonRoot = null;
+        var representedFileCount = 0;
+
         foreach (var path in selected)
         {
             if (!filesByPath.TryGetValue(path, out var file)) continue;
-            var key = PathKey(file.ParentDirectory);
-            directories.TryAdd(key, new FileSystemPath(key));
-            if (directories.Count >= 3)
-                return new SelectedDirectories(false, null, null);
+            representedFileCount++;
+
+            var directory = file.ParentDirectory;
+            if (directories.Count < 3)
+                directories.TryAdd(PathKey(directory), new FileSystemPath(PathKey(directory)));
+
+            var root = FindContainingRoot(directory);
+            if (root is null)
+            {
+                commonAncestor = null;
+                commonRoot = null;
+                continue;
+            }
+
+            if (representedFileCount == 1)
+            {
+                commonRoot = root;
+                commonAncestor = directory;
+                continue;
+            }
+
+            if (commonRoot is null || !fileSystem.PathsEqual(commonRoot.Value, root.Value))
+            {
+                commonAncestor = null;
+                commonRoot = null;
+                continue;
+            }
+
+            if (commonAncestor is not null)
+                commonAncestor = FindCommonAncestor(commonAncestor.Value, directory, commonRoot.Value);
         }
 
+        if (representedFileCount == 0)
+            return new SelectedDirectories(true, null, null, null);
+
         if (directories.Count == 1)
-            return new SelectedDirectories(false, directories.Values.First(), null);
+            return new SelectedDirectories(false, directories.Values.First(), null, commonAncestor);
 
         if (directories.Count == 2)
         {
             var pair = directories.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(item => item.Value)
                 .ToArray();
-            return new SelectedDirectories(false, null, (pair[0], pair[1]));
+            return new SelectedDirectories(false, null, (pair[0], pair[1]), commonAncestor);
         }
 
-        // Defensive fallback: selected paths should always resolve through filesByPath.
-        return new SelectedDirectories(true, null, null);
+        return new SelectedDirectories(false, null, null, commonAncestor);
+    }
+
+    private FileSystemPath? FindContainingRoot(FileSystemPath directory)
+    {
+        foreach (var root in corpus.Roots)
+        {
+            if (fileSystem.PathsEqual(directory, root.Path) || fileSystem.IsDescendant(directory, root.Path))
+                return root.Path;
+        }
+        return null;
+    }
+
+    private FileSystemPath? FindCommonAncestor(
+        FileSystemPath candidate,
+        FileSystemPath directory,
+        FileSystemPath root)
+    {
+        var ancestor = candidate;
+        while (!fileSystem.PathsEqual(directory, ancestor) && !fileSystem.IsDescendant(directory, ancestor))
+        {
+            if (fileSystem.PathsEqual(ancestor, root))
+                return null;
+
+            var parent = fileSystem.GetParentDirectory(ancestor);
+            if (parent is null
+                || (!fileSystem.PathsEqual(parent.Value, root) && !fileSystem.IsDescendant(parent.Value, root)))
+                return null;
+
+            ancestor = parent.Value;
+        }
+        return ancestor;
     }
 
     private IEnumerable<FileInstance> Current(IEnumerable<FileInstance> files)
