@@ -47,6 +47,7 @@
                     <MenuItem x:Name="PivotCorpusRootsMenu" Header="Roots" Click="PivotCorpusRoots_Click" IsEnabled="False" />
                     <MenuItem Header="-" />
                     <MenuItem x:Name="PivotContentMenu" Header="Group" Click="PivotContentOrAll_Click" IsEnabled="False" />
+                    <MenuItem Header="Directory Namesakes" Click="PivotDirectoryNamesakes_Click" />
                     <MenuItem x:Name="PivotDirectoryMenu" Header="Containing Directory" Click="PivotDirectory_Click" IsEnabled="False" />
                     <MenuItem x:Name="PivotBranchMenu" Header="Branch" Click="PivotBranch_Click" IsEnabled="False" />
                     <MenuItem x:Name="PivotBestDirectoryPairMenu" Header="Best Directory Pair" Click="PivotBestDirectoryPair_Click" IsEnabled="False" />
