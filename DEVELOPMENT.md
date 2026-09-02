@@ -153,22 +153,26 @@ Each Branch Pair search round examines the top 10 eligible Seeds, finds each See
 
 ## Inferred Directory
 
-Some context-sensitive pivots/searches need one Directory as their Seed. Treat this as a general **inferred Directory** operation rather than embedding different inference rules in each command. Resolve it in this order:
+Some context-sensitive pivots/searches need one Directory as their Seed. Treat this as a general **inferred Directory** operation rather than embedding different inference rules in each command. The selection-derived portion belongs to `BerriesSelection`, because selection is the durable semantic state and every selected file has a containing Directory.
 
-1. If exactly one Directory node is selected/focused as the relevant structural context, that Directory is inferred.
-2. Otherwise, if no Directory is selected and the current projection is a Directory or Branch view, infer that view's top-level Directory.
+On every semantic selection change, determine the distinct containing Directories represented by selected files. This is intentionally a tiny analysis: walk selected files, collect distinct parent Directories, and stop as soon as a third distinct Directory is encountered. No filesystem traversal is required.
+
+Resolve inferred Directory in this order:
+
+1. If the selection represents files from exactly one distinct containing Directory, infer that Directory. This includes one file or multiple files in the same Directory, regardless of which projection/node interactions produced the selection.
+2. Otherwise, if the selection is empty and the current projection is a Directory or Branch view, infer that view's top-level Directory.
 3. Otherwise there is no inferred Directory. Cancel work dependent on the previous inference and disable commands that require one.
 
-A possible additional inference remains to be decided: when the relevant focused item is exactly one file, its containing Directory could be inferred without ambiguity. Do not infer a single Directory from multiple Directory selections; those instead support explicit Directory Pair / Branch Pair projection when exactly two Directory nodes are selected.
+The same selection analysis also detects the exactly-two-Directory case. If selected files belong to exactly two distinct containing Directories, there is no single inferred Directory, but those two Directories may be viewed explicitly as a Directory Pair or Branch Pair. Three or more distinct containing Directories provide neither a single inferred Directory nor an explicit pair.
 
-Commands using an inferred Directory should not offer a no-op projection. In particular, when the inferred Directory is already the top-level Directory of the current Directory view, disable the Directory pivot; Branch remains available, and Best Branch Pair becomes available when its contextual counterpart result has been found.
+Commands using an inferred Directory should not offer a no-op projection. In particular, when the inferred Directory is already the top-level Directory of the current Directory view, disable the Directory pivot; Branch remains available, and Best Branch Pair becomes available when its contextual counterpart result has been found. Conversely, in a Branch view rooted at the inferred Directory, disable Branch while leaving Directory available.
 
 ## Near-term work
 
 Keep this section concise, but preserve unresolved design decisions until they are settled.
 
 - Contextual counterpart search: infer a current Directory Seed using the contract above. Start low-priority Core searches opportunistically; cancel immediately when the inferred Directory changes or disappears. Reuse the Branch Counterpart search machinery rather than maintaining a second Branch Pair algorithm. Slice long work finely enough for effectively immediate cancellation. Enable Best Directory Pair / Best Branch Pair only after a current-seed result exists and the resulting pair differs from the current view.
-- Pair construction from selection: whenever exactly two Directory nodes are semantically selected, allow viewing them as either a Directory Pair or Branch Pair.
+- Pair construction from selection: when `BerriesSelection` reports exactly two distinct containing Directories, allow viewing them as either a Directory Pair or Branch Pair.
 - Projection titles should include useful numerical context; decide the appropriate counts/metrics for every projection type rather than adding ad-hoc title data.
 - Add a Suggestion analyzer for repeated Directory names. Develop what constitutes a useful same-name Directory Case, including occurrence count, duplicate contribution, likely Exclude disposition, ranking, and possible persistent exclusion.
 - Persistent exclusions: retain simple path-pattern configuration. Consider an unobtrusive `Exclude always` path that writes an expressible exclusion rule for the user; ordinary Exclude should remain simple. README must prominently explain that configuration exists, why early exclusions matter, and give advisable syntax examples such as `/LICENSE` for any file or Directory named `LICENSE`.
