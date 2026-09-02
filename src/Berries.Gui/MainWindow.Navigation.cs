@@ -211,8 +211,8 @@ public partial class MainWindow
         var directories = controller.DirectoryAnalysis?.Directories;
         var record = directories is null ? null : Projections.DirectoryRecord(directories, scope.Value);
         StatusText.Text = record is null || record.GroupedFileCount == 0
-            ? "The selected Directory contains no grouped files."
-            : "The selected Directory contains Groups, but shares none with another Directory.";
+            ? "The Directory contains no grouped files."
+            : "The Directory contains Groups, but shares none with another Directory.";
         StatusProgress.IsVisible = false;
     }
 
@@ -225,7 +225,7 @@ public partial class MainWindow
             var pair = await controller.FindBestBranchPairAsync(scope.Value);
             if (pair is null)
             {
-                EndProgress("No Branch Pair shares a Group with the selected Branch.");
+                EndProgress("No Branch Pair shares a Group with the Branch.");
                 return;
             }
             await ShowAdHocBranchPairAsync(pair.First, pair.Second, pair.SharedGroupCount);
@@ -243,6 +243,13 @@ public partial class MainWindow
         return currentProjection is { IsPair: false, Primary: { } primary } ? primary : null;
     }
 
+    private FileSystemPath? CurrentOrFocusedScope()
+    {
+        if (currentProjection is { IsPair: false, Primary: { } primary })
+            return primary;
+        return focusedNode?.SemanticPath;
+    }
+
     private FileSystemPath? ContainingDirectoryScope()
     {
         var session = controller.Session;
@@ -252,15 +259,12 @@ public partial class MainWindow
         if (!session.Selection.IsEmpty)
             return session.Selection.SelectedDirectories.CommonAncestor;
 
-        if (focusedNode?.SemanticPath is { } focused)
-            return focused;
+        if (currentProjection is { IsPair: false, Primary: { } primary } current)
+            return current.Kind == ProjectionKind.Directory
+                ? ParentWithinCorpus(primary)
+                : primary;
 
-        if (currentProjection is not { IsPair: false, Primary: { } primary } current)
-            return null;
-
-        return current.Kind == ProjectionKind.Directory
-            ? ParentWithinCorpus(primary)
-            : primary;
+        return focusedNode?.SemanticPath;
     }
 
     private FileSystemPath? BranchScope()
@@ -282,7 +286,7 @@ public partial class MainWindow
         if (session is null)
             return null;
         return session.Selection.IsEmpty
-            ? FocusedOrCurrentScope()
+            ? CurrentOrFocusedScope()
             : session.Selection.SelectedDirectories.Single;
     }
 
@@ -292,7 +296,7 @@ public partial class MainWindow
         if (session is null)
             return null;
         if (session.Selection.IsEmpty)
-            return FocusedOrCurrentScope();
+            return CurrentOrFocusedScope();
 
         var directories = session.Selection.SelectedDirectories;
         return directories.Single ?? directories.CommonAncestor;
