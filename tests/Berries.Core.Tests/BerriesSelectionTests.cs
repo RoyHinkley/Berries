@@ -13,7 +13,7 @@ public sealed class BerriesSelectionTests
         var a2 = File("/a/2.txt");
         var b = File("/b/1.txt");
         var c = File("/c/1.txt");
-        var selection = new BerriesSelection(new TestFileSystem(), new Portrait([a1, a2, b, c]));
+        var selection = new BerriesSelection(new TestFileSystem(), TestCorpus(), new Portrait([a1, a2, b, c]));
 
         Assert.True(selection.SelectedDirectories.NoDir);
         Assert.Null(selection.SelectedDirectories.OneDir);
@@ -44,7 +44,7 @@ public sealed class BerriesSelectionTests
         var a1 = File("/a/1.txt");
         var a2 = File("/a/2.txt");
         var b = File("/b/1.txt");
-        var selection = new BerriesSelection(new TestFileSystem(), new Portrait([a1, a2, b]));
+        var selection = new BerriesSelection(new TestFileSystem(), TestCorpus(), new Portrait([a1, a2, b]));
         var changes = 0;
         selection.SelectedDirectoriesChanged += (_, _) => changes++;
 
@@ -64,6 +64,8 @@ public sealed class BerriesSelectionTests
         Assert.Equal(3, changes);
         Assert.Equal(new FileSystemPath("/b"), selection.SelectedDirectories.OneDir);
     }
+
+    private static Corpus TestCorpus() => new([new CorpusRoot(new FileSystemPath("/"))]);
 
     private static FileInstance File(string path)
     {
