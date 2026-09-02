@@ -42,9 +42,9 @@ public sealed class BerriesApplication
     public event Action<OperationProgress>? AnalysisProgressChanged;
     public event Action? AnalysisChanged;
 
-    public Corpus? Corpus { get; private set; }
+    public Corpus? Corpus => Session?.Corpus;
     public IReadOnlyList<FileSystemPath> Roots =>
-        Corpus?.Roots.Select(root => root.Path).ToArray() ?? [];
+        Session?.Corpus.Roots.Select(root => root.Path).ToArray() ?? [];
     public BerriesSession? Session { get; private set; }
     public ScanResult? Scan { get; private set; }
     public long PortraitGeneration => Interlocked.Read(ref portraitGeneration);
@@ -82,14 +82,14 @@ public sealed class BerriesApplication
             var totalTimer = Stopwatch.StartNew();
             var phaseTimer = Stopwatch.StartNew();
             Debug.WriteLine("[Berries] Normalizing corpus roots...");
-            Corpus = engine.CreateCorpus(rootPaths.Select(path => new FileSystemPath(path)));
+            var corpus = engine.CreateCorpus(rootPaths.Select(path => new FileSystemPath(path)));
             phaseTimer.Stop();
             var normalizationElapsed = phaseTimer.Elapsed;
 
             Debug.WriteLine("[Berries] Acquiring initial portrait...");
             phaseTimer.Restart();
             var acquired = await engine.BuildInitialPortraitAsync(
-                Corpus,
+                corpus,
                 excludePath,
                 scanProgress,
                 cancellationToken);
@@ -100,12 +100,13 @@ public sealed class BerriesApplication
             var discovery = await engine.DiscoverGroupsAsync(acquired, groupProgress, cancellationToken);
             Session = new BerriesSession(
                 fileSystem,
+                corpus,
                 discovery.Portrait,
                 discovery.UniqueFileCountsByDirectory);
 
             totalTimer.Stop();
             Scan = new ScanResult(
-                Corpus.Roots.Select(root => root.Path.Value).ToArray(),
+                corpus.Roots.Select(root => root.Path.Value).ToArray(),
                 discovery.FileCount,
                 discovery.TotalBytes,
                 discovery.Groups.Count,
@@ -158,7 +159,7 @@ public sealed class BerriesApplication
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (Corpus is null || Session is null)
+            if (Session is null)
                 throw new InvalidOperationException("A session must exist before analysis.");
 
             ScheduleAnalysis(progress);
@@ -178,21 +179,22 @@ public sealed class BerriesApplication
         FileSystemPath branch,
         CancellationToken cancellationToken = default)
     {
-        if (Corpus is null || Session is null)
+        if (Session is null)
             return null;
 
         if (BranchStatistics is null)
             await RefreshAnalysisAsync(cancellationToken);
 
         var branches = BranchStatistics;
-        if (branches is null || Corpus is null || Session is null)
+        var session = Session;
+        if (branches is null || session is null)
             return null;
 
         return await Task.Run(() => branchCounterpartAnalyzer.FindBestPair(
-            Corpus,
+            session.Corpus,
             branch,
             branches.Branches,
-            Session.Groups,
+            session.Groups,
             cancellationToken,
             ForwardProgress(null)), cancellationToken);
     }
@@ -285,7 +287,7 @@ public sealed class BerriesApplication
                 var snapshot = await CaptureSnapshotAsync(generation, sessionToken);
                 if (snapshot is null)
                 {
-                    if (Corpus is null || Session is null)
+                    if (Session is null)
                         return;
                     continue;
                 }
@@ -383,13 +385,14 @@ public sealed class BerriesApplication
         await portraitMutation.WaitAsync(cancellationToken);
         try
         {
-            if (expectedGeneration != PortraitGeneration || Corpus is null || Session is null)
+            var session = Session;
+            if (expectedGeneration != PortraitGeneration || session is null)
                 return null;
             return new AnalysisSnapshot(
-                Corpus,
-                Session.WorkingPortrait,
-                Session.Groups,
-                Session.UniqueFileCountsByDirectory);
+                session.Corpus,
+                session.WorkingPortrait,
+                session.Groups,
+                session.UniqueFileCountsByDirectory);
         }
         finally
         {
@@ -417,7 +420,6 @@ public sealed class BerriesApplication
         branchStatistics.Reset();
         suggestions.Reset();
         suggestionBox.Reset(generation);
-        Corpus = null;
         Session = null;
         Scan = null;
         AnalysisChanged?.Invoke();
