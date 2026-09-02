@@ -85,8 +85,19 @@ public partial class MainWindow
             WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
 
-        var continueButton = new Button { Content = action, MinWidth = 90 };
-        var cancelButton = new Button { Content = "Cancel", MinWidth = 90, IsCancel = true };
+        var continueButton = new Button
+        {
+            Content = action,
+            MinWidth = 90,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center
+        };
+        var cancelButton = new Button
+        {
+            Content = "Cancel",
+            MinWidth = 90,
+            IsCancel = true,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center
+        };
         continueButton.Click += (_, _) => dialog.Close(true);
         cancelButton.Click += (_, _) => dialog.Close(false);
 
