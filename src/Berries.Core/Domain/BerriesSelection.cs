@@ -162,8 +162,9 @@ public sealed class BerriesSelection
         foreach (var file in added)
         {
             var directory = file.ParentDirectory;
-            next = AddDirectDirectory(next, directory);
-            next = next with { CommonAncestor = AddCommonAncestor(next.CommonAncestor, directory, next.None) };
+            var wasEmpty = next.None;
+            var ancestor = AddCommonAncestor(next.CommonAncestor, directory, wasEmpty);
+            next = AddDirectDirectory(next, directory) with { CommonAncestor = ancestor };
         }
 
         SetSelectedDirectories(next);
