@@ -151,12 +151,23 @@ Each Branch Pair search round examines the top 10 eligible Seeds, finds each See
 - Large Explorer populations are virtualized.
 - Cache keys must include every state dimension on which the result depends.
 
+## Inferred Directory
+
+Some context-sensitive pivots/searches need one Directory as their Seed. Treat this as a general **inferred Directory** operation rather than embedding different inference rules in each command. Resolve it in this order:
+
+1. If exactly one Directory node is selected/focused as the relevant structural context, that Directory is inferred.
+2. Otherwise, if no Directory is selected and the current projection is a Directory or Branch view, infer that view's top-level Directory.
+3. Otherwise there is no inferred Directory. Cancel work dependent on the previous inference and disable commands that require one.
+
+A possible additional inference remains to be decided: when the relevant focused item is exactly one file, its containing Directory could be inferred without ambiguity. Do not infer a single Directory from multiple Directory selections; those instead support explicit Directory Pair / Branch Pair projection when exactly two Directory nodes are selected.
+
+Commands using an inferred Directory should not offer a no-op projection. In particular, when the inferred Directory is already the top-level Directory of the current Directory view, disable the Directory pivot; Branch remains available, and Best Branch Pair becomes available when its contextual counterpart result has been found.
+
 ## Near-term work
 
 Keep this section concise, but preserve unresolved design decisions until they are settled.
 
-- Contextual counterpart search: infer a current Directory/Branch Seed from the presented case where possible. Start low-priority Core searches opportunistically; cancel immediately when the inferred Seed changes or disappears. Reuse the Branch Counterpart search machinery rather than maintaining a second Branch Pair algorithm. Slice long work finely enough for effectively immediate cancellation. Enable Best Directory Pair / Best Branch Pair only after a current-seed result exists and the resulting pair differs from the current view.
-- Define inferred-Seed semantics explicitly for Groups, Directory, Branch, Roots, Directory Pair, Branch Pair, focused nodes, and breadcrumbs before implementing the background contextual searches.
+- Contextual counterpart search: infer a current Directory Seed using the contract above. Start low-priority Core searches opportunistically; cancel immediately when the inferred Directory changes or disappears. Reuse the Branch Counterpart search machinery rather than maintaining a second Branch Pair algorithm. Slice long work finely enough for effectively immediate cancellation. Enable Best Directory Pair / Best Branch Pair only after a current-seed result exists and the resulting pair differs from the current view.
 - Pair construction from selection: whenever exactly two Directory nodes are semantically selected, allow viewing them as either a Directory Pair or Branch Pair.
 - Projection titles should include useful numerical context; decide the appropriate counts/metrics for every projection type rather than adding ad-hoc title data.
 - Add a Suggestion analyzer for repeated Directory names. Develop what constitutes a useful same-name Directory Case, including occurrence count, duplicate contribution, likely Exclude disposition, ranking, and possible persistent exclusion.
