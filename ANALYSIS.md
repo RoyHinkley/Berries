@@ -90,6 +90,24 @@ The best Branch Pair often does not come from the highest-ranked Seed. This dist
 
 Targeted search is part of the product design, not merely a performance shortcut: the useful question is normally local and comprehensible, while exhaustive Branch-Pair enumeration produces large populations of weak or redundant relationships.
 
+## Directory Namesake structure experiment
+
+A Directory Namesake is a recurring Directory leaf name. Name equality alone is weak evidence: conventional names such as `src`, `include`, `lib`, or `images` may occur hundreds of times without implying that their Directories are related.
+
+The stronger structural signal under investigation is concentration of several distinct Namesakes beneath the same collection of Branches. The current experimental analyzer:
+
+1. reconstructs the Directory ancestry implied by the scanned files;
+2. retains only Directory names occurring more than once in the Corpus;
+3. represents each Branch by the set of Namesake names beneath it;
+4. chooses a small number of the globally rarest Namesakes in each Branch as anchors;
+5. uses pairs of those anchors as an inverted index into candidate Branch collections rather than enumerating all Branch pairs;
+6. reduces each anchor bucket to its deepest non-nested containers;
+7. retains collections sharing several Namesakes and ranks them using rarity-weighted shared evidence.
+
+This is deliberately an inspectable research view before becoming a Suggestion source. The objective question is whether the resulting collections are repeatedly recognizable as meaningful related structures across varied Corpora.
+
+MinHash / locality-sensitive hashing remains a separate candidate-generation technique worth preserving. It can cheaply approximate similarity between large feature sets and may replace or complement rare-anchor indexing here, or apply elsewhere to sets of names, relative paths, Group identities, or other structural features.
+
 ## Suggestions
 
 Current Suggestions are Branch Pair views. A Suggestion is a promising place to begin looking, not necessarily the final Case boundary. Pair breadcrumbs and Pivot let the user adjust either scope until the relationship is useful and recognizable.
