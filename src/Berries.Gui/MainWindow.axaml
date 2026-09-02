@@ -38,7 +38,7 @@
 
       <Grid x:Name="ExplorerPanel" IsVisible="False" RowDefinitions="Auto,*">
         <Border Padding="10,8" BorderThickness="0,0,0,1">
-          <Grid ColumnDefinitions="Auto,20,Auto,Auto,Auto,20,Auto,*" ColumnSpacing="7">
+          <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,20,Auto,20,Auto,20,Auto,*" ColumnSpacing="7">
             <StackPanel Orientation="Horizontal" Spacing="7">
               <Button x:Name="BackButton" Content="Back" IsEnabled="False" />
               <Button x:Name="PivotButton" Content="Pivot ▾" Click="PivotButton_Click">
@@ -69,13 +69,20 @@
                 </MenuFlyout>
               </Button.Flyout>
             </Button>
-            <Button x:Name="ExcludeButton" Grid.Column="3" Content="Exclude" Click="ExcludeImmediateButton_Click" IsEnabled="False" />
-            <Button x:Name="DeleteButton" Grid.Column="4" Content="Delete" Click="DeleteImmediateButton_Click" IsEnabled="False" />
 
-            <StackPanel Grid.Column="6" Orientation="Horizontal" Spacing="7">
+            <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="7">
+              <Button x:Name="ExcludeButton" Content="Exclude" Click="ExcludeImmediateButton_Click" IsEnabled="False" />
+              <Button x:Name="DeleteButton" Content="Delete" Click="DeleteImmediateButton_Click" IsEnabled="False" />
               <Button x:Name="MoveRightButton" Content="Move →" Click="MoveRightImmediateButton_Click" IsEnabled="False" />
               <Button x:Name="MoveLeftButton" Content="← Move" Click="MoveLeftImmediateButton_Click" IsEnabled="False" />
-              <Button x:Name="UndoButton" Content="Undo" Click="UndoImmediateButton_Click" IsEnabled="False" />
+            </StackPanel>
+
+            <Button x:Name="UndoButton" Grid.Column="6" Content="Undo" Click="UndoImmediateButton_Click" IsEnabled="False" />
+
+            <StackPanel Grid.Row="1" Grid.Column="4" Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="7" Margin="0,5,0,0">
+              <TextBlock x:Name="SelectionText" Text="Selected: none" VerticalAlignment="Center" />
+              <Button x:Name="ClearSelectionButton" Content="Clear" Click="ClearSelectionButton_Click" IsEnabled="False" Padding="7,2"
+                      ToolTip.Tip="Clear selection (Esc)" />
             </StackPanel>
           </Grid>
         </Border>
@@ -138,12 +145,9 @@
     </Grid>
 
     <Border Grid.Row="2" Padding="10,6" BorderThickness="0,1,0,0">
-      <Grid ColumnDefinitions="*,260,Auto,Auto" ColumnSpacing="10">
+      <Grid ColumnDefinitions="*,260" ColumnSpacing="10">
         <TextBlock x:Name="StatusText" Text="Select roots to begin." VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
         <ProgressBar x:Name="StatusProgress" Grid.Column="1" Height="12" Minimum="0" Maximum="100" IsVisible="False" />
-        <TextBlock x:Name="SelectionText" Grid.Column="2" Text="Selected: none" VerticalAlignment="Center" />
-        <Button x:Name="ClearSelectionButton" Grid.Column="3" Content="Clear" Click="ClearSelectionButton_Click" IsEnabled="False" Padding="7,2"
-                ToolTip.Tip="Clear selection (Esc)" />
       </Grid>
     </Border>
   </Grid>
