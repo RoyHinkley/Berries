@@ -58,15 +58,23 @@ public sealed class BerriesSelection
 
     public void Add(IEnumerable<FileInstance> files)
     {
-        var added = new List<FileInstance>();
+        var next = SelectedDirectories;
+        var changed = false;
+
         foreach (var file in Current(files))
         {
-            if (selected.Add(PathKey(file.Path)))
-                added.Add(file);
+            if (!selected.Add(PathKey(file.Path)))
+                continue;
+
+            changed = true;
+            var directory = file.ParentDirectory;
+            var wasEmpty = next.None;
+            var ancestor = AddCommonAncestor(next.CommonAncestor, directory, wasEmpty);
+            next = AddDirectDirectory(next, directory) with { CommonAncestor = ancestor };
         }
 
-        if (added.Count > 0)
-            AddSelectedDirectories(added);
+        if (changed)
+            SetSelectedDirectories(next);
     }
 
     public void Remove(IEnumerable<FileInstance> files)
@@ -153,21 +161,6 @@ public sealed class BerriesSelection
         if (!selected.Remove(sourceKey)) return;
         selected.Add(PathKey(destination));
         UpdateSelectedDirectories();
-    }
-
-    private void AddSelectedDirectories(IEnumerable<FileInstance> added)
-    {
-        var next = SelectedDirectories;
-
-        foreach (var file in added)
-        {
-            var directory = file.ParentDirectory;
-            var wasEmpty = next.None;
-            var ancestor = AddCommonAncestor(next.CommonAncestor, directory, wasEmpty);
-            next = AddDirectDirectory(next, directory) with { CommonAncestor = ancestor };
-        }
-
-        SetSelectedDirectories(next);
     }
 
     private SelectedDirectories AddDirectDirectory(SelectedDirectories current, FileSystemPath directory)
