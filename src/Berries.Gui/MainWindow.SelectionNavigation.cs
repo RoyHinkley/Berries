@@ -21,13 +21,13 @@ public partial class MainWindow
     private void PivotButton_Click(object? sender, RoutedEventArgs e)
     {
         // Selection is persistent Core state; focus identifies the particular Explorer
-        // object from which a location-oriented pivot should be resolved.
+        // object from which location-oriented pivots other than Containing Directory are resolved.
         var hasSession = controller.Session is not null;
         var canResolveScope = focusedNode is not null || currentProjection?.Primary is not null;
 
         PivotCorpusRootsMenu.IsEnabled = hasSession;
         PivotContentMenu.IsEnabled = hasSession;
-        PivotDirectoryMenu.IsEnabled = hasSession && canResolveScope;
+        PivotDirectoryMenu.IsEnabled = ContainingDirectoryScope() is not null;
         PivotBranchMenu.IsEnabled = hasSession && canResolveScope;
         PivotBestDirectoryPairMenu.IsEnabled = hasSession && canResolveScope;
         PivotBestBranchPairMenu.IsEnabled = hasSession && canResolveScope;
