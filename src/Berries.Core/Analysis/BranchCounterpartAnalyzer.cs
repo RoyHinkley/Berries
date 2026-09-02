@@ -145,37 +145,56 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
         var seed = branches.FirstOrDefault(candidate => fileSystem.PathsEqual(candidate.Path, branch));
         if (seed is null || seed.GroupCount == 0) return null;
 
-        var seedContents = ContentsUnder(branch, groups);
-        if (seedContents.Count == 0) return null;
-
-        var candidates = branches.Where(candidate =>
-                !fileSystem.PathsEqual(candidate.Path, branch)
-                && !fileSystem.IsDescendant(candidate.Path, branch)
-                && !fileSystem.IsDescendant(branch, candidate.Path)
-                && candidate.GroupCount > 0)
-            .ToArray();
-
-        progress?.Report(new OperationProgress("Finding best Branch Pair", 0, candidates.Length));
-        BestBranchPairResult? best = null;
-        double bestScore = 0;
+        var byPath = branches.ToDictionary(candidate => candidate.Path);
+        var ancestorCache = new Dictionary<FileSystemPath, IReadOnlyList<FileSystemPath>>();
+        var overlaps = new Dictionary<FileSystemPath, int>();
+        var seedGroupCount = 0;
         long completed = 0;
 
-        foreach (var candidate in candidates)
+        progress?.Report(new OperationProgress("Finding best Branch Pair", 0, groups.Count));
+
+        foreach (var group in groups)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var candidateContents = ContentsUnder(candidate.Path, groups);
-            var shared = seedContents.Count(content => candidateContents.Contains(content));
-            if (shared > 0)
+            if (!group.Files.Any(file => IsWithinOrEqual(file.ParentDirectory, branch)))
             {
-                var union = seedContents.Count + candidateContents.Count - shared;
-                var score = union == 0 ? 0 : shared * ((double)shared / union);
-                if (best is null || score > bestScore)
-                {
-                    bestScore = score;
-                    best = new BestBranchPairResult(branch, candidate.Path, shared, score);
-                }
+                progress?.Report(new OperationProgress("Finding best Branch Pair", ++completed, groups.Count));
+                continue;
             }
-            progress?.Report(new OperationProgress("Finding best Branch Pair", ++completed, candidates.Length));
+
+            seedGroupCount++;
+            var touchedCandidates = new HashSet<FileSystemPath>();
+            foreach (var file in group.Files)
+            foreach (var candidatePath in GetAncestorsWithinCorpus(file.ParentDirectory, corpus, ancestorCache))
+            {
+                if (!byPath.ContainsKey(candidatePath)
+                    || fileSystem.PathsEqual(candidatePath, branch)
+                    || AreNested(branch, candidatePath))
+                    continue;
+                touchedCandidates.Add(candidatePath);
+            }
+
+            foreach (var candidatePath in touchedCandidates)
+                overlaps[candidatePath] = overlaps.GetValueOrDefault(candidatePath) + 1;
+
+            progress?.Report(new OperationProgress("Finding best Branch Pair", ++completed, groups.Count));
+        }
+
+        if (seedGroupCount == 0) return null;
+
+        BestBranchPairResult? best = null;
+        double bestScore = 0;
+        foreach (var (candidatePath, shared) in overlaps)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var candidate = byPath[candidatePath];
+            var union = seedGroupCount + candidate.GroupCount - shared;
+            var score = union == 0 ? 0 : shared * ((double)shared / union);
+            if (best is null || score > bestScore)
+            {
+                bestScore = score;
+                best = new BestBranchPairResult(branch, candidatePath, shared, score);
+            }
         }
 
         return best;
@@ -188,14 +207,6 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
             .ThenBy(item => item.CandidateSeedRank)
             .ThenBy(item => item.Seed.Branch.Path.Value, StringComparer.Ordinal)
             .ToArray();
-
-    private HashSet<ContentId> ContentsUnder(FileSystemPath branch, IReadOnlyList<Group> groups) =>
-        groups
-            .Where(group => group.Files.Any(file =>
-                fileSystem.PathsEqual(file.ParentDirectory, branch)
-                || fileSystem.IsDescendant(file.ParentDirectory, branch)))
-            .Select(group => group.Content)
-            .ToHashSet();
 
     private IReadOnlyList<BranchCounterpart> FindCounterparts(
         BranchPriorityMetric seed,
@@ -252,6 +263,9 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
 
     private bool AreNested(FileSystemPath first, FileSystemPath second) =>
         fileSystem.IsDescendant(first, second) || fileSystem.IsDescendant(second, first);
+
+    private bool IsWithinOrEqual(FileSystemPath candidate, FileSystemPath scope) =>
+        fileSystem.PathsEqual(candidate, scope) || fileSystem.IsDescendant(candidate, scope);
 
     private IReadOnlyList<FileSystemPath> GetAncestorsWithinCorpus(
         FileSystemPath directory,
