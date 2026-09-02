@@ -43,6 +43,8 @@ public sealed class BerriesApplication
     public event Action? AnalysisChanged;
 
     public Corpus? Corpus { get; private set; }
+    public IReadOnlyList<FileSystemPath> Roots =>
+        Corpus?.Roots.Select(root => root.Path).ToArray() ?? [];
     public BerriesSession? Session { get; private set; }
     public ScanResult? Scan { get; private set; }
     public long PortraitGeneration => Interlocked.Read(ref portraitGeneration);
