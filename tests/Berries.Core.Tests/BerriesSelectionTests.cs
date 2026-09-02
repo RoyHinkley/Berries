@@ -27,7 +27,8 @@ public sealed class BerriesSelectionTests
         selection.Add([b]);
         Assert.False(selection.SelectedDirectories.NoDir);
         Assert.Null(selection.SelectedDirectories.OneDir);
-        var pair = Assert.IsType<(FileSystemPath First, FileSystemPath Second)>(selection.SelectedDirectories.DirPair);
+        Assert.True(selection.SelectedDirectories.DirPair.HasValue);
+        var pair = selection.SelectedDirectories.DirPair.Value;
         Assert.Equal(new FileSystemPath("/a"), pair.First);
         Assert.Equal(new FileSystemPath("/b"), pair.Second);
 
