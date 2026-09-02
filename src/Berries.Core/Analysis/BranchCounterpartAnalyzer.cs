@@ -14,8 +14,9 @@ public sealed record BranchCounterpart(
     int DirectDirectoryPairSharedGroupCount = 0);
 
 /// <summary>
-/// A Branch Pair selected for presentation because its relationship appears worth user attention.
-/// The Seed is an internal search aid; its highest-scoring Counterpart forms the suggested pair.
+/// A promising Branch Pair discovered by Branch analysis.
+/// The Seed is an internal search aid; its highest-scoring Counterpart forms the pair.
+/// Suggestion ordering is intentionally owned outside this analyzer.
 /// </summary>
 public sealed record BranchPairSuggestion(
     BranchPriorityMetric Seed,
@@ -46,7 +47,7 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
         int counterpartLimit = 5,
         CancellationToken cancellationToken = default,
         IProgress<OperationProgress>? progress = null,
-        Action<BranchPairSuggestionResult>? suggestionsChanged = null)
+        Action<BranchPairSuggestion>? suggestionFound = null)
     {
         var timer = Stopwatch.StartNew();
         var byPath = branches.ToDictionary(branch => branch.Path);
@@ -122,11 +123,10 @@ public sealed class BranchCounterpartAnalyzer(IFileSystem fileSystem)
 
             winner = winner with { Counterparts = diagnosedCounterparts };
             suggestions.Add(winner);
+            suggestionFound?.Invoke(winner);
             blockedRoots.Add(winner.Seed.Branch.Path);
             blockedRoots.Add(winner.Counterparts[0].Branch.Path);
 
-            var ranked = RankSuggestions(suggestions);
-            suggestionsChanged?.Invoke(new BranchPairSuggestionResult(ranked, timer.Elapsed, IsComplete: false));
             progress?.Report(new OperationProgress($"Finding Suggestions — {suggestions.Count:N0} found"));
         }
 
