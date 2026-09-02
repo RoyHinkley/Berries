@@ -53,14 +53,20 @@ public sealed class BerriesSelection
     {
         if (selected.Count == 0) return;
         selected.Clear();
-        UpdateSelectedDirectories();
+        SetSelectedDirectories(new SelectedDirectories(true, null, null, null));
     }
 
     public void Add(IEnumerable<FileInstance> files)
     {
-        var changed = false;
-        foreach (var file in Current(files)) changed |= selected.Add(PathKey(file.Path));
-        if (changed) UpdateSelectedDirectories();
+        var added = new List<FileInstance>();
+        foreach (var file in Current(files))
+        {
+            if (selected.Add(PathKey(file.Path)))
+                added.Add(file);
+        }
+
+        if (added.Count > 0)
+            AddSelectedDirectories(added);
     }
 
     public void Remove(IEnumerable<FileInstance> files)
@@ -149,9 +155,83 @@ public sealed class BerriesSelection
         UpdateSelectedDirectories();
     }
 
-    private void UpdateSelectedDirectories()
+    private void AddSelectedDirectories(IEnumerable<FileInstance> added)
     {
-        var next = AnalyzeSelectedDirectories();
+        var next = SelectedDirectories;
+
+        foreach (var file in added)
+        {
+            var directory = file.ParentDirectory;
+            next = AddDirectDirectory(next, directory);
+            next = next with { CommonAncestor = AddCommonAncestor(next.CommonAncestor, directory, next.None) };
+        }
+
+        SetSelectedDirectories(next);
+    }
+
+    private SelectedDirectories AddDirectDirectory(SelectedDirectories current, FileSystemPath directory)
+    {
+        if (current.None)
+            return new SelectedDirectories(false, directory, null, current.CommonAncestor);
+
+        if (current.Single is { } single)
+        {
+            if (fileSystem.PathsEqual(single, directory))
+                return current;
+
+            return current with
+            {
+                Single = null,
+                Pair = OrderPair(single, directory)
+            };
+        }
+
+        if (current.Pair is { } pair)
+        {
+            if (fileSystem.PathsEqual(pair.First, directory) || fileSystem.PathsEqual(pair.Second, directory))
+                return current;
+
+            return current with { Pair = null };
+        }
+
+        return current;
+    }
+
+    private FileSystemPath? AddCommonAncestor(
+        FileSystemPath? currentAncestor,
+        FileSystemPath directory,
+        bool wasEmpty)
+    {
+        var root = FindContainingRoot(directory);
+        if (root is null)
+            return null;
+
+        if (wasEmpty)
+            return directory;
+
+        if (currentAncestor is null)
+            return null;
+
+        var currentRoot = FindContainingRoot(currentAncestor.Value);
+        if (currentRoot is null || !fileSystem.PathsEqual(currentRoot.Value, root.Value))
+            return null;
+
+        return FindCommonAncestor(currentAncestor.Value, directory, root.Value);
+    }
+
+    private (FileSystemPath First, FileSystemPath Second) OrderPair(FileSystemPath first, FileSystemPath second)
+    {
+        var firstKey = PathKey(first);
+        var secondKey = PathKey(second);
+        return string.Compare(firstKey, secondKey, StringComparison.OrdinalIgnoreCase) <= 0
+            ? (new FileSystemPath(firstKey), new FileSystemPath(secondKey))
+            : (new FileSystemPath(secondKey), new FileSystemPath(firstKey));
+    }
+
+    private void UpdateSelectedDirectories() => SetSelectedDirectories(AnalyzeSelectedDirectories());
+
+    private void SetSelectedDirectories(SelectedDirectories next)
+    {
         if (next == SelectedDirectories) return;
         SelectedDirectories = next;
         SelectedDirectoriesChanged?.Invoke(this, EventArgs.Empty);
@@ -174,7 +254,10 @@ public sealed class BerriesSelection
 
             var directory = file.ParentDirectory;
             if (directories.Count < 3)
-                directories.TryAdd(PathKey(directory), new FileSystemPath(PathKey(directory)));
+            {
+                var directoryKey = PathKey(directory);
+                directories.TryAdd(directoryKey, new FileSystemPath(directoryKey));
+            }
 
             var root = FindContainingRoot(directory);
             if (root is null)
