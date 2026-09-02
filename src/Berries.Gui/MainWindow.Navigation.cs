@@ -42,9 +42,10 @@ public partial class MainWindow
     private void UpdatePivotCapabilities()
     {
         var scope = SelectedScope();
+        var containingDirectory = ContainingDirectoryScope();
         PivotCorpusRootsMenu.IsEnabled = controller.Session is not null;
         PivotContentMenu.IsEnabled = controller.Session is not null;
-        PivotDirectoryMenu.IsEnabled = scope is not null;
+        PivotDirectoryMenu.IsEnabled = containingDirectory is not null;
         PivotBranchMenu.IsEnabled = scope is not null;
         PivotBestDirectoryPairMenu.IsEnabled = scope is not null;
         var branches = controller.BranchStatistics?.Branches;
@@ -175,7 +176,7 @@ public partial class MainWindow
 
     private async void PivotDirectory_Click(object? sender, RoutedEventArgs e)
     {
-        var scope = SelectedScope();
+        var scope = ContainingDirectoryScope();
         if (scope is not null) await ShowDirectoryProjectionAsync(scope.Value);
     }
 
@@ -226,6 +227,16 @@ public partial class MainWindow
     }
 
     private FileSystemPath? SelectedScope() => focusedNode?.SemanticPath ?? currentProjection?.Primary;
+
+    private FileSystemPath? ContainingDirectoryScope()
+    {
+        var session = controller.Session;
+        if (session is null)
+            return null;
+        return session.Selection.IsEmpty
+            ? SelectedScope()
+            : session.Selection.SelectedDirectories.CommonAncestor;
+    }
 
     private async Task ShowAdHocBranchPairAsync(
         FileSystemPath first,
