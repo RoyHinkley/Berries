@@ -5,7 +5,8 @@ using Berries.FileSystem.Abstractions;
 namespace Berries.Core.Analysis;
 
 public sealed record DirectoryNamesakeMinHashAnalysis(
-    IReadOnlyList<DirectoryNamesakeMinHashNamesakeCandidate> Candidates);
+    IReadOnlyList<DirectoryNamesakeMinHashNamesakeCandidate> Candidates,
+    IReadOnlyList<DirectoryNamesakeMinHashNamesakeCandidate> IntrinsicCandidates);
 
 public sealed record DirectoryNamesakeMinHashNamesakeCandidate(
     string Namesake,
@@ -35,7 +36,8 @@ public sealed record DirectoryNamesakeMinHashMember(
 /// MinHash/LSH discovers similar structural families. Families are evidence for one Namesake-level
 /// exclusion candidate. Namesakes are then ranked greedily by residual evidence: once a Namesake is
 /// chosen, all descendants beneath every occurrence of that name are covered and cease contributing
-/// evidence to later candidates.
+/// evidence to later candidates. IntrinsicCandidates preserves the pre-greedy evidence for experiments
+/// that must not inherit the greedy coverage bias.
 /// </summary>
 public static class DirectoryNamesakeMinHashAnalyzer
 {
@@ -172,6 +174,18 @@ public static class DirectoryNamesakeMinHashAnalyzer
             item => DistinctMembers(item.Value).Count,
             StringComparer.OrdinalIgnoreCase);
 
+        var intrinsicCandidates = familiesByNamesake
+            .Select(item => new DirectoryNamesakeMinHashNamesakeCandidate(
+                item.Key,
+                occurrencesByNamesake[item.Key].Count,
+                item.Value.Count,
+                intrinsicSupportByNamesake[item.Key],
+                item.Value.Count,
+                intrinsicSupportByNamesake[item.Key],
+                item.Value))
+            .OrderBy(candidate => candidate.Namesake, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         var remaining = new HashSet<string>(familiesByNamesake.Keys, StringComparer.OrdinalIgnoreCase);
         var coverageRoots = new List<FileSystemPath>();
         var rankedNamesakes = new List<DirectoryNamesakeMinHashNamesakeCandidate>();
@@ -207,13 +221,10 @@ public static class DirectoryNamesakeMinHashAnalyzer
 
             rankedNamesakes.Add(best);
             remaining.Remove(best.Namesake);
-
-            // Exclusion is by name, so selecting this candidate covers descendants beneath every
-            // occurrence of the Namesake, not merely members of the structural family that ranked it.
             coverageRoots.AddRange(occurrencesByNamesake[best.Namesake]);
         }
 
-        return new DirectoryNamesakeMinHashAnalysis(rankedNamesakes);
+        return new DirectoryNamesakeMinHashAnalysis(rankedNamesakes, intrinsicCandidates);
     }
 
     private static DirectoryNamesakeMinHashNamesakeCandidate BuildResidualCandidate(
