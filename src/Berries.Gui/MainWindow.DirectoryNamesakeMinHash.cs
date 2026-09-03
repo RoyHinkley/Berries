@@ -23,6 +23,15 @@ public partial class MainWindow
                 operation.Token);
             operation.Token.ThrowIfCancellationRequested();
 
+            var leverageAnalysis = await Task.Run(
+                () => DirectoryNamesakeLeverageAnalyzer.Analyze(
+                    session,
+                    fileSystem,
+                    analysis,
+                    operation.Token),
+                operation.Token);
+            operation.Token.ThrowIfCancellationRequested();
+
             var jsonPath = Path.Combine(AppContext.BaseDirectory, "namesake-minhash.json");
             var json = JsonSerializer.Serialize(
                 analysis.Candidates.Select((candidate, index) => new
@@ -58,6 +67,12 @@ public partial class MainWindow
                 }),
                 new JsonSerializerOptions { WriteIndented = true });
             await File.WriteAllTextAsync(jsonPath, json, operation.Token);
+
+            var leverageJsonPath = Path.Combine(AppContext.BaseDirectory, "namesake-leverage.json");
+            var leverageJson = JsonSerializer.Serialize(
+                leverageAnalysis.Candidates,
+                new JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(leverageJsonPath, leverageJson, operation.Token);
 
             const int displayLimit = 250;
             var displayedCandidates = analysis.Candidates.Take(displayLimit).ToArray();
@@ -120,7 +135,8 @@ public partial class MainWindow
             UpdatePivotCapabilities();
             CompleteNavigation(
                 operation,
-                $"Wrote {analysis.Candidates.Count:N0} greedily ranked Namesake candidates to {jsonPath}");
+                $"Wrote {analysis.Candidates.Count:N0} MinHash candidates to {jsonPath}; "
+                + $"{leverageAnalysis.Candidates.Count:N0} all-Namesake leverage measurements to {leverageJsonPath}");
         }
         catch (OperationCanceledException) when (operation.Token.IsCancellationRequested || !IsCurrentNavigation(operation))
         {
