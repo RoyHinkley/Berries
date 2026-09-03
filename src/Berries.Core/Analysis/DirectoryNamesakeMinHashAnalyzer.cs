@@ -17,10 +17,11 @@ public sealed record DirectoryNamesakeMinHashMember(
     int MaxDescendantNamesakeDepth);
 
 /// <summary>
-/// Experimental fuzzy structural comparison of Directory Namesakes.
-/// Each Namesake Directory is represented by its own Namesake plus the set of Namesake leaf names beneath it.
-/// A MinHash signature approximates Jaccard similarity of those sets; repeated identical LSH member sets
-/// across bands are consolidated into candidate collections without an exhaustive pairwise comparison.
+/// Experimental fuzzy structural comparison within Directory Namesake sets.
+/// The common directory name defines the population and is not part of the MinHash feature set.
+/// Each occurrence is represented only by the set of Namesake leaf names beneath it.
+/// A MinHash signature approximates Jaccard similarity of those descendant sets; repeated identical
+/// LSH member sets across bands are consolidated into candidate collections without exhaustive pairwise comparison.
 /// </summary>
 public static class DirectoryNamesakeMinHashAnalyzer
 {
@@ -47,30 +48,25 @@ public static class DirectoryNamesakeMinHashAnalyzer
             .Where(group => group.Count() > 1)
             .ToArray();
 
-        var namesakeDirectories = namesakes
-            .SelectMany(group => group.Select(item => item.Path))
-            .Distinct()
-            .ToArray();
+        var namesakeByDirectory = namesakes
+            .SelectMany(group => group.Select(item => (item.Path, Name: group.Key)))
+            .ToDictionary(item => item.Path, item => item.Name);
 
         var featuresByDirectory = new Dictionary<FileSystemPath, HashSet<string>>();
         var descendantOccurrenceCounts = new Dictionary<FileSystemPath, int>();
         var maxDescendantDepths = new Dictionary<FileSystemPath, int>();
 
-        foreach (var group in namesakes)
+        foreach (var directory in namesakeByDirectory.Keys)
         {
-            foreach (var occurrence in group.Select(item => item.Path))
-            {
-                featuresByDirectory[occurrence] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                {
-                    group.Key
-                };
-                descendantOccurrenceCounts[occurrence] = 0;
-                maxDescendantDepths[occurrence] = 0;
-            }
+            featuresByDirectory[directory] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            descendantOccurrenceCounts[directory] = 0;
+            maxDescendantDepths[directory] = 0;
         }
 
         // Walk each Namesake occurrence upward. Its leaf name becomes a feature of every Namesake ancestor,
         // while occurrence count and maximum structural depth retain information that MinHash itself discards.
+        // The ancestor's own Namesake is not added merely because it is the ancestor; same-name membership is
+        // enforced separately when LSH buckets are formed.
         foreach (var group in namesakes)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -99,9 +95,9 @@ public static class DirectoryNamesakeMinHashAnalyzer
         }
 
         var bands = signatureLength / rowsPerBand;
-        var bandBuckets = new Dictionary<(int Band, ulong Hash), List<DirectoryNamesakeMinHashMember>>();
+        var bandBuckets = new Dictionary<(string Namesake, int Band, ulong Hash), List<DirectoryNamesakeMinHashMember>>();
 
-        foreach (var directory in namesakeDirectories)
+        foreach (var (directory, namesake) in namesakeByDirectory)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -110,19 +106,17 @@ public static class DirectoryNamesakeMinHashAnalyzer
                 continue;
 
             var features = featuresByDirectory[directory];
-            var ownName = Path.GetFileName(directory.Value);
-            var distinctDescendantCount = features.Count - (features.Contains(ownName) ? 1 : 0);
             var member = new DirectoryNamesakeMinHashMember(
                 directory,
                 descendantCount,
-                Math.Max(0, distinctDescendantCount),
+                features.Count,
                 maxDescendantDepths[directory]);
 
             var signature = MinHashSignature(features, signatureLength);
             for (var band = 0; band < bands; band++)
             {
                 var bandHash = HashBand(signature, band * rowsPerBand, rowsPerBand);
-                var key = (band, bandHash);
+                var key = (namesake.ToUpperInvariant(), band, bandHash);
                 if (!bandBuckets.TryGetValue(key, out var members))
                     bandBuckets[key] = members = [];
                 members.Add(member);
@@ -130,8 +124,8 @@ public static class DirectoryNamesakeMinHashAnalyzer
         }
 
         // A raw LSH bucket is implementation evidence, not the object we ultimately want to inspect.
-        // Consolidate buckets having exactly the same member set; the number of bands producing that set
-        // becomes the primary similarity evidence without pairwise Jaccard or transitive clustering.
+        // Buckets can contain only occurrences of the same Namesake. Consolidate buckets having exactly
+        // the same member set; the number of bands producing that set becomes the primary similarity evidence.
         var collections = new Dictionary<string, CandidateAccumulator>(StringComparer.OrdinalIgnoreCase);
         foreach (var bucket in bandBuckets.Where(item => item.Value.Count > 1))
         {
@@ -140,7 +134,7 @@ public static class DirectoryNamesakeMinHashAnalyzer
             var members = bucket.Value
                 .OrderBy(member => member.Path.Value, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            var key = string.Join("\n", members.Select(member => member.Path.Value));
+            var key = bucket.Key.Namesake + "\n" + string.Join("\n", members.Select(member => member.Path.Value));
 
             if (!collections.TryGetValue(key, out var accumulator))
                 collections[key] = accumulator = new CandidateAccumulator(members);
