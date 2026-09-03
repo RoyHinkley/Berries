@@ -15,7 +15,7 @@ public partial class MainWindow
         var operation = BeginNavigation("Finding Namesake MinHash candidates...", true);
         try
         {
-            var candidates = await Task.Run(
+            var analysis = await Task.Run(
                 () => DirectoryNamesakeMinHashAnalyzer.Analyze(
                     session,
                     fileSystem,
@@ -23,12 +23,14 @@ public partial class MainWindow
                 operation.Token);
             operation.Token.ThrowIfCancellationRequested();
 
+            var retained = analysis.Candidates.ToHashSet();
             var jsonPath = Path.Combine(AppContext.BaseDirectory, "namesake-minhash.json");
             var json = JsonSerializer.Serialize(
-                candidates.Select((candidate, index) => new
+                analysis.RankedCandidates.Select((candidate, index) => new
                 {
                     Index = index + 1,
-                    Namesake = Path.GetFileName(candidate.Members[0].Path.Value),
+                    candidate.Namesake,
+                    Retained = retained.Contains(candidate),
                     candidate.MatchingBands,
                     candidate.TotalBands,
                     Bands = candidate.Bands.Select(band => band + 1),
@@ -47,18 +49,19 @@ public partial class MainWindow
                 new JsonSerializerOptions { WriteIndented = true });
             await File.WriteAllTextAsync(jsonPath, json, operation.Token);
 
+            const int displayLimit = 250;
+            var displayedCandidates = analysis.Candidates.Take(displayLimit).ToArray();
             var nodes = await Task.Run(() =>
-                candidates.Select((candidate, index) =>
+                displayedCandidates.Select((candidate, index) =>
                 {
                     operation.Token.ThrowIfCancellationRequested();
 
-                    var namesake = Path.GetFileName(candidate.Members[0].Path.Value);
                     var minCount = candidate.Members.Min(member => member.DescendantNamesakeCount);
                     var averageCount = candidate.Members.Average(member => member.DescendantNamesakeCount);
                     var maxDepth = candidate.Members.Max(member => member.MaxDescendantNamesakeDepth);
 
                     var root = new ExplorerNode(
-                        $"{index + 1}. {namesake} — {candidate.MatchingBands}/{candidate.TotalBands} bands — "
+                        $"{index + 1}. {candidate.Namesake} — {candidate.MatchingBands}/{candidate.TotalBands} bands — "
                         + $"{candidate.Members.Count:N0} directories — "
                         + $"Namesakes min {minCount:N0}, avg {averageCount:F1} — max depth {maxDepth:N0}",
                         []);
@@ -82,13 +85,18 @@ public partial class MainWindow
             SetProjectionState(ProjectionKind.DirectoryNamesakeMinHash, []);
             BreadcrumbPanel.IsVisible = false;
             BreadcrumbPanel.Children.Clear();
-            ProjectionTitle.Text = $"Namesake MinHash — {candidates.Count:N0} candidates";
+            ProjectionTitle.Text = analysis.Candidates.Count > displayLimit
+                ? $"Namesake MinHash — {displayedCandidates.Length:N0} of {analysis.Candidates.Count:N0} retained candidates"
+                : $"Namesake MinHash — {analysis.Candidates.Count:N0} retained candidates";
             ExplorerTree.ItemsSource = nodes;
             SynchronizeVisibleSelection();
             UpdateSelectionSummary();
             UpdateCapabilities();
             UpdatePivotCapabilities();
-            CompleteNavigation(operation, $"Wrote {jsonPath}");
+            CompleteNavigation(
+                operation,
+                $"Wrote {analysis.RankedCandidates.Count:N0} ranked candidates to {jsonPath}; "
+                + $"{analysis.Candidates.Count:N0} retained after containment culling");
         }
         catch (OperationCanceledException) when (operation.Token.IsCancellationRequested || !IsCurrentNavigation(operation))
         {
