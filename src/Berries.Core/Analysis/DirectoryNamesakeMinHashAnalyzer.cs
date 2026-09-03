@@ -140,7 +140,7 @@ public static class DirectoryNamesakeMinHashAnalyzer
             var members = bucket.Value
                 .OrderBy(member => member.Path.Value, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            var key = string.Join('\n', members.Select(member => member.Path.Value));
+            var key = string.Join("\n", members.Select(member => member.Path.Value));
 
             if (!collections.TryGetValue(key, out var accumulator))
                 collections[key] = accumulator = new CandidateAccumulator(members);
