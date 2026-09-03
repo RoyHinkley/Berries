@@ -53,7 +53,7 @@ public static class DirectoryNamesakeLeverageAnalyzer
                 group.Select(item => item.Path).ToArray()))
             .ToArray();
 
-        var minHashByNamesake = (minHashAnalysis?.Candidates ?? [])
+        var minHashByNamesake = (minHashAnalysis?.IntrinsicCandidates ?? [])
             .GroupBy(candidate => candidate.Namesake, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
 
