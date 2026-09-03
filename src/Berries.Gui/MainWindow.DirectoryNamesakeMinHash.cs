@@ -12,10 +12,10 @@ public partial class MainWindow
         var session = controller.Session;
         if (session is null || currentProjection?.Kind == ProjectionKind.DirectoryNamesakeMinHash) return;
 
-        var operation = BeginNavigation("Finding Namesake MinHash buckets...", true);
+        var operation = BeginNavigation("Finding Namesake MinHash candidates...", true);
         try
         {
-            var buckets = await Task.Run(
+            var candidates = await Task.Run(
                 () => DirectoryNamesakeMinHashAnalyzer.Analyze(
                     session,
                     fileSystem,
@@ -25,31 +25,47 @@ public partial class MainWindow
 
             var jsonPath = Path.Combine(AppContext.BaseDirectory, "namesake-minhash.json");
             var json = JsonSerializer.Serialize(
-                buckets.Select((bucket, index) => new
+                candidates.Select((candidate, index) => new
                 {
                     Index = index + 1,
-                    Band = bucket.Band + 1,
-                    BandHash = $"{bucket.BandHash:X16}",
-                    Members = bucket.Members.Select(member => new
+                    candidate.MatchingBands,
+                    candidate.TotalBands,
+                    Bands = candidate.Bands.Select(band => band + 1),
+                    MinimumDescendantNamesakeCount = candidate.Members.Min(member => member.DescendantNamesakeCount),
+                    AverageDescendantNamesakeCount = candidate.Members.Average(member => member.DescendantNamesakeCount),
+                    MaximumNamesakeDepth = candidate.Members.Max(member => member.MaxDescendantNamesakeDepth),
+                    AverageNamesakeDepth = candidate.Members.Average(member => member.MaxDescendantNamesakeDepth),
+                    Members = candidate.Members.Select(member => new
                     {
                         Path = member.Path.Value,
-                        member.DescendantNamesakeCount
+                        member.DescendantNamesakeCount,
+                        member.DistinctDescendantNamesakeCount,
+                        member.MaxDescendantNamesakeDepth
                     })
                 }),
                 new JsonSerializerOptions { WriteIndented = true });
             await File.WriteAllTextAsync(jsonPath, json, operation.Token);
 
             var nodes = await Task.Run(() =>
-                buckets.Select((bucket, index) =>
+                candidates.Select((candidate, index) =>
                 {
                     operation.Token.ThrowIfCancellationRequested();
+
+                    var minCount = candidate.Members.Min(member => member.DescendantNamesakeCount);
+                    var averageCount = candidate.Members.Average(member => member.DescendantNamesakeCount);
+                    var maxDepth = candidate.Members.Max(member => member.MaxDescendantNamesakeDepth);
+
                     var root = new ExplorerNode(
-                        $"{index + 1}. Band {bucket.Band + 1} — {bucket.Members.Count:N0} directories — {bucket.BandHash:X16}",
+                        $"{index + 1}. {candidate.MatchingBands}/{candidate.TotalBands} bands — "
+                        + $"{candidate.Members.Count:N0} directories — "
+                        + $"Namesakes min {minCount:N0}, avg {averageCount:F1} — max depth {maxDepth:N0}",
                         []);
 
-                    foreach (var member in bucket.Members)
+                    foreach (var member in candidate.Members)
                         root.Children.Add(new ExplorerNode(
-                            $"{member.Path.Value} — {member.DescendantNamesakeCount:N0} descendant Namesakes",
+                            $"{member.Path.Value} — {member.DescendantNamesakeCount:N0} descendant Namesake directories — "
+                            + $"{member.DistinctDescendantNamesakeCount:N0} distinct descendant Namesake names — "
+                            + $"depth {member.MaxDescendantNamesakeDepth:N0}",
                             [],
                             member.Path));
 
@@ -64,7 +80,7 @@ public partial class MainWindow
             SetProjectionState(ProjectionKind.DirectoryNamesakeMinHash, []);
             BreadcrumbPanel.IsVisible = false;
             BreadcrumbPanel.Children.Clear();
-            ProjectionTitle.Text = $"Namesake MinHash — {buckets.Count:N0} matching band buckets";
+            ProjectionTitle.Text = $"Namesake MinHash — {candidates.Count:N0} candidates";
             ExplorerTree.ItemsSource = nodes;
             SynchronizeVisibleSelection();
             UpdateSelectionSummary();
