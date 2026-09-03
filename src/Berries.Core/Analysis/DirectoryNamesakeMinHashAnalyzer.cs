@@ -4,7 +4,12 @@ using Berries.FileSystem.Abstractions;
 
 namespace Berries.Core.Analysis;
 
+public sealed record DirectoryNamesakeMinHashAnalysis(
+    IReadOnlyList<DirectoryNamesakeMinHashCandidate> RankedCandidates,
+    IReadOnlyList<DirectoryNamesakeMinHashCandidate> Candidates);
+
 public sealed record DirectoryNamesakeMinHashCandidate(
+    string Namesake,
     int MatchingBands,
     int TotalBands,
     IReadOnlyList<int> Bands,
@@ -22,23 +27,22 @@ public sealed record DirectoryNamesakeMinHashMember(
 /// Each occurrence is represented only by the set of Namesake leaf names beneath it.
 /// A MinHash signature approximates Jaccard similarity of those descendant sets; repeated identical
 /// LSH member sets across bands are consolidated into candidate collections without exhaustive pairwise comparison.
+/// Ranked candidates are then culled when their complete member collection lies beneath a stronger candidate.
 /// </summary>
 public static class DirectoryNamesakeMinHashAnalyzer
 {
-    public static IReadOnlyList<DirectoryNamesakeMinHashCandidate> Analyze(
+    public static DirectoryNamesakeMinHashAnalysis Analyze(
         BerriesSession session,
         IFileSystem fileSystem,
         int signatureLength = 64,
         int rowsPerBand = 4,
         int minimumDescendantNamesakes = 2,
-        int resultLimit = 250,
         CancellationToken cancellationToken = default)
     {
         if (signatureLength < 1) throw new ArgumentOutOfRangeException(nameof(signatureLength));
         if (rowsPerBand < 1 || signatureLength % rowsPerBand != 0)
             throw new ArgumentOutOfRangeException(nameof(rowsPerBand), "Rows per band must evenly divide the signature length.");
         if (minimumDescendantNamesakes < 1) throw new ArgumentOutOfRangeException(nameof(minimumDescendantNamesakes));
-        if (resultLimit < 1) throw new ArgumentOutOfRangeException(nameof(resultLimit));
 
         var directories = BuildDirectoryInventory(session, fileSystem, cancellationToken);
         var namesakes = directories
@@ -137,12 +141,13 @@ public static class DirectoryNamesakeMinHashAnalyzer
             var key = bucket.Key.Namesake + "\n" + string.Join("\n", members.Select(member => member.Path.Value));
 
             if (!collections.TryGetValue(key, out var accumulator))
-                collections[key] = accumulator = new CandidateAccumulator(members);
+                collections[key] = accumulator = new CandidateAccumulator(bucket.Key.Namesake, members);
             accumulator.Bands.Add(bucket.Key.Band);
         }
 
-        return collections.Values
+        var ranked = collections.Values
             .Select(accumulator => new DirectoryNamesakeMinHashCandidate(
+                accumulator.Namesake,
                 accumulator.Bands.Count,
                 bands,
                 accumulator.Bands.OrderBy(band => band).ToArray(),
@@ -153,14 +158,59 @@ public static class DirectoryNamesakeMinHashAnalyzer
             .ThenBy(candidate => candidate.Members.Max(member => member.MaxDescendantNamesakeDepth))
             .ThenBy(candidate => candidate.Members.Average(member => member.MaxDescendantNamesakeDepth))
             .ThenByDescending(candidate => candidate.Members.Count)
-            .Take(resultLimit)
             .ToArray();
+
+        var retained = new List<DirectoryNamesakeMinHashCandidate>();
+        foreach (var candidate in ranked)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (retained.Any(stronger => IsContainedBy(candidate, stronger, fileSystem)))
+                continue;
+            retained.Add(candidate);
+        }
+
+        return new DirectoryNamesakeMinHashAnalysis(ranked, retained);
     }
 
-    private sealed class CandidateAccumulator(IReadOnlyList<DirectoryNamesakeMinHashMember> members)
+    private sealed class CandidateAccumulator(
+        string namesake,
+        IReadOnlyList<DirectoryNamesakeMinHashMember> members)
     {
+        public string Namesake { get; } = namesake;
         public IReadOnlyList<DirectoryNamesakeMinHashMember> Members { get; } = members;
         public HashSet<int> Bands { get; } = [];
+    }
+
+    private static bool IsContainedBy(
+        DirectoryNamesakeMinHashCandidate candidate,
+        DirectoryNamesakeMinHashCandidate stronger,
+        IFileSystem fileSystem)
+    {
+        var strictlyContained = false;
+
+        foreach (var member in candidate.Members)
+        {
+            var container = stronger.Members.FirstOrDefault(strongerMember =>
+                fileSystem.PathsEqual(member.Path, strongerMember.Path)
+                || fileSystem.IsDescendant(member.Path, strongerMember.Path));
+
+            if (container is null)
+                return false;
+
+            if (!fileSystem.PathsEqual(member.Path, container.Path))
+                strictlyContained = true;
+        }
+
+        // Do not let a larger candidate suppress a relationship represented beneath only part of it.
+        foreach (var strongerMember in stronger.Members)
+        {
+            if (!candidate.Members.Any(member =>
+                    fileSystem.PathsEqual(member.Path, strongerMember.Path)
+                    || fileSystem.IsDescendant(member.Path, strongerMember.Path)))
+                return false;
+        }
+
+        return strictlyContained;
     }
 
     private static ulong[] MinHashSignature(IEnumerable<string> features, int signatureLength)
