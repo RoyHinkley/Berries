@@ -28,6 +28,7 @@ public partial class MainWindow
                 candidates.Select((candidate, index) => new
                 {
                     Index = index + 1,
+                    Namesake = Path.GetFileName(candidate.Members[0].Path.Value),
                     candidate.MatchingBands,
                     candidate.TotalBands,
                     Bands = candidate.Bands.Select(band => band + 1),
@@ -51,12 +52,13 @@ public partial class MainWindow
                 {
                     operation.Token.ThrowIfCancellationRequested();
 
+                    var namesake = Path.GetFileName(candidate.Members[0].Path.Value);
                     var minCount = candidate.Members.Min(member => member.DescendantNamesakeCount);
                     var averageCount = candidate.Members.Average(member => member.DescendantNamesakeCount);
                     var maxDepth = candidate.Members.Max(member => member.MaxDescendantNamesakeDepth);
 
                     var root = new ExplorerNode(
-                        $"{index + 1}. {candidate.MatchingBands}/{candidate.TotalBands} bands — "
+                        $"{index + 1}. {namesake} — {candidate.MatchingBands}/{candidate.TotalBands} bands — "
                         + $"{candidate.Members.Count:N0} directories — "
                         + $"Namesakes min {minCount:N0}, avg {averageCount:F1} — max depth {maxDepth:N0}",
                         []);
