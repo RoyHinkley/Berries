@@ -23,27 +23,37 @@ public partial class MainWindow
                 operation.Token);
             operation.Token.ThrowIfCancellationRequested();
 
-            var retained = analysis.Candidates.ToHashSet();
             var jsonPath = Path.Combine(AppContext.BaseDirectory, "namesake-minhash.json");
             var json = JsonSerializer.Serialize(
-                analysis.RankedCandidates.Select((candidate, index) => new
+                analysis.Candidates.Select((candidate, index) => new
                 {
                     Index = index + 1,
                     candidate.Namesake,
-                    Retained = retained.Contains(candidate),
-                    candidate.MatchingBands,
-                    candidate.TotalBands,
-                    Bands = candidate.Bands.Select(band => band + 1),
-                    MinimumDescendantNamesakeCount = candidate.Members.Min(member => member.DescendantNamesakeCount),
-                    AverageDescendantNamesakeCount = candidate.Members.Average(member => member.DescendantNamesakeCount),
-                    MaximumNamesakeDepth = candidate.Members.Max(member => member.MaxDescendantNamesakeDepth),
-                    AverageNamesakeDepth = candidate.Members.Average(member => member.MaxDescendantNamesakeDepth),
-                    Members = candidate.Members.Select(member => new
+                    candidate.TotalOccurrences,
+                    candidate.IntrinsicFamilyCount,
+                    candidate.IntrinsicSupportingOccurrenceCount,
+                    candidate.ResidualFamilyCount,
+                    candidate.ResidualSupportingOccurrenceCount,
+                    ResidualSupportFraction = candidate.IntrinsicSupportingOccurrenceCount == 0
+                        ? 0
+                        : (double)candidate.ResidualSupportingOccurrenceCount / candidate.IntrinsicSupportingOccurrenceCount,
+                    Families = candidate.Families.Select((family, familyIndex) => new
                     {
-                        Path = member.Path.Value,
-                        member.DescendantNamesakeCount,
-                        member.DistinctDescendantNamesakeCount,
-                        member.MaxDescendantNamesakeDepth
+                        Index = familyIndex + 1,
+                        family.MatchingBands,
+                        family.TotalBands,
+                        Bands = family.Bands.Select(band => band + 1),
+                        MinimumDescendantNamesakeCount = family.Members.Min(member => member.DescendantNamesakeCount),
+                        AverageDescendantNamesakeCount = family.Members.Average(member => member.DescendantNamesakeCount),
+                        MaximumNamesakeDepth = family.Members.Max(member => member.MaxDescendantNamesakeDepth),
+                        AverageNamesakeDepth = family.Members.Average(member => member.MaxDescendantNamesakeDepth),
+                        Members = family.Members.Select(member => new
+                        {
+                            Path = member.Path.Value,
+                            member.DescendantNamesakeCount,
+                            member.DistinctDescendantNamesakeCount,
+                            member.MaxDescendantNamesakeDepth
+                        })
                     })
                 }),
                 new JsonSerializerOptions { WriteIndented = true });
@@ -56,23 +66,38 @@ public partial class MainWindow
                 {
                     operation.Token.ThrowIfCancellationRequested();
 
-                    var minCount = candidate.Members.Min(member => member.DescendantNamesakeCount);
-                    var averageCount = candidate.Members.Average(member => member.DescendantNamesakeCount);
-                    var maxDepth = candidate.Members.Max(member => member.MaxDescendantNamesakeDepth);
-
+                    var residualPercent = candidate.IntrinsicSupportingOccurrenceCount == 0
+                        ? 0
+                        : 100.0 * candidate.ResidualSupportingOccurrenceCount / candidate.IntrinsicSupportingOccurrenceCount;
                     var root = new ExplorerNode(
-                        $"{index + 1}. {candidate.Namesake} — {candidate.MatchingBands}/{candidate.TotalBands} bands — "
-                        + $"{candidate.Members.Count:N0} directories — "
-                        + $"Namesakes min {minCount:N0}, avg {averageCount:F1} — max depth {maxDepth:N0}",
+                        $"{index + 1}. {candidate.Namesake} — "
+                        + $"{candidate.ResidualSupportingOccurrenceCount:N0}/{candidate.IntrinsicSupportingOccurrenceCount:N0} supporting occurrences ({residualPercent:F0}% residual) — "
+                        + $"{candidate.ResidualFamilyCount:N0}/{candidate.IntrinsicFamilyCount:N0} families — "
+                        + $"{candidate.TotalOccurrences:N0} total occurrences",
                         []);
 
-                    foreach (var member in candidate.Members)
-                        root.Children.Add(new ExplorerNode(
-                            $"{member.Path.Value} — {member.DescendantNamesakeCount:N0} descendant Namesake directories — "
-                            + $"{member.DistinctDescendantNamesakeCount:N0} distinct descendant Namesake names — "
-                            + $"depth {member.MaxDescendantNamesakeDepth:N0}",
-                            [],
-                            member.Path));
+                    foreach (var family in candidate.Families
+                                 .OrderByDescending(item => item.MatchingBands)
+                                 .ThenByDescending(item => item.Members.Min(member => member.DescendantNamesakeCount)))
+                    {
+                        var minCount = family.Members.Min(member => member.DescendantNamesakeCount);
+                        var averageCount = family.Members.Average(member => member.DescendantNamesakeCount);
+                        var maxDepth = family.Members.Max(member => member.MaxDescendantNamesakeDepth);
+                        var familyNode = new ExplorerNode(
+                            $"{family.MatchingBands}/{family.TotalBands} bands — {family.Members.Count:N0} directories — "
+                            + $"Namesakes min {minCount:N0}, avg {averageCount:F1} — max depth {maxDepth:N0}",
+                            []);
+
+                        foreach (var member in family.Members)
+                            familyNode.Children.Add(new ExplorerNode(
+                                $"{member.Path.Value} — {member.DescendantNamesakeCount:N0} descendant Namesake directories — "
+                                + $"{member.DistinctDescendantNamesakeCount:N0} distinct descendant Namesake names — "
+                                + $"depth {member.MaxDescendantNamesakeDepth:N0}",
+                                [],
+                                member.Path));
+
+                        root.Children.Add(familyNode);
+                    }
 
                     return root;
                 }).ToArray(), operation.Token);
@@ -86,8 +111,8 @@ public partial class MainWindow
             BreadcrumbPanel.IsVisible = false;
             BreadcrumbPanel.Children.Clear();
             ProjectionTitle.Text = analysis.Candidates.Count > displayLimit
-                ? $"Namesake MinHash — {displayedCandidates.Length:N0} of {analysis.Candidates.Count:N0} retained candidates"
-                : $"Namesake MinHash — {analysis.Candidates.Count:N0} retained candidates";
+                ? $"Namesake MinHash — {displayedCandidates.Length:N0} of {analysis.Candidates.Count:N0} Namesake candidates"
+                : $"Namesake MinHash — {analysis.Candidates.Count:N0} Namesake candidates";
             ExplorerTree.ItemsSource = nodes;
             SynchronizeVisibleSelection();
             UpdateSelectionSummary();
@@ -95,8 +120,7 @@ public partial class MainWindow
             UpdatePivotCapabilities();
             CompleteNavigation(
                 operation,
-                $"Wrote {analysis.RankedCandidates.Count:N0} ranked candidates to {jsonPath}; "
-                + $"{analysis.Candidates.Count:N0} retained after containment culling");
+                $"Wrote {analysis.Candidates.Count:N0} greedily ranked Namesake candidates to {jsonPath}");
         }
         catch (OperationCanceledException) when (operation.Token.IsCancellationRequested || !IsCurrentNavigation(operation))
         {
