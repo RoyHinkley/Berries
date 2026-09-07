@@ -57,55 +57,107 @@ public static class DirectoryNamesakeLeverageAnalyzer
             .GroupBy(candidate => candidate.Namesake, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
 
-        var workingFiles = session.WorkingPortrait.Files;
-        var groups = session.Groups;
-        var measurements = new List<Measurement>(namesakes.Length);
+        var occurrenceByDirectory = namesakes
+            .SelectMany(population => population.Occurrences.Select(path => (Path: path, population.Name)))
+            .ToDictionary(item => item.Path, item => item.Name);
 
-        foreach (var population in namesakes)
+        var accumulators = namesakes.ToDictionary(
+            population => population.Name,
+            population => new Accumulator(population.Occurrences.Count),
+            StringComparer.OrdinalIgnoreCase);
+
+        // A file can lie beneath several different Namesake occurrences. Walk its ancestor chain
+        // once and accumulate all affected Namesakes rather than rescanning every file for every name.
+        var namesakesByFile = new Dictionary<FileSystemPath, HashSet<string>>();
+        foreach (var file in session.WorkingPortrait.Files)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var affectedNamesakes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var current = file.ParentDirectory;
 
-            bool UnderOccurrence(FileSystemPath path) => population.Occurrences.Any(occurrence =>
-                fileSystem.PathsEqual(path, occurrence)
-                || fileSystem.IsDescendant(path, occurrence));
-
-            var files = workingFiles
-                .Where(file => UnderOccurrence(file.ParentDirectory))
-                .ToArray();
-            var filePaths = files.Select(file => file.Path).ToHashSet();
-
-            var occurrencesWithGroupedFiles = population.Occurrences.Count(occurrence =>
-                files.Any(file =>
-                    fileSystem.PathsEqual(file.ParentDirectory, occurrence)
-                    || fileSystem.IsDescendant(file.ParentDirectory, occurrence)));
-
-            var uniqueFileCount = session.UniqueFileCountsByDirectory
-                .Where(item => UnderOccurrence(item.Key))
-                .Sum(item => item.Value);
-
-            var touchedGroups = 0;
-            var resolvedGroups = 0;
-            var excessCopiesRemoved = 0;
-
-            foreach (var group in groups)
+            while (InsideCorpus(current, session.Corpus, fileSystem))
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var before = group.Files.Count;
-                if (before == 0)
-                    continue;
+                if (occurrenceByDirectory.TryGetValue(current, out var namesake))
+                {
+                    affectedNamesakes.Add(namesake);
+                    accumulators[namesake].OccurrencesWithGroupedFiles.Add(current);
+                }
 
-                var removed = group.Files.Count(file => filePaths.Contains(file.Path));
-                if (removed == 0)
-                    continue;
+                if (session.Corpus.Roots.Any(root => fileSystem.PathsEqual(current, root.Path)))
+                    break;
 
-                touchedGroups++;
-                var after = before - removed;
-                if (before > 1 && after <= 1)
-                    resolvedGroups++;
-
-                excessCopiesRemoved += Math.Max(0, before - 1) - Math.Max(0, after - 1);
+                var parent = fileSystem.GetParentDirectory(current);
+                if (parent is null)
+                    break;
+                current = parent.Value;
             }
 
+            namesakesByFile[file.Path] = affectedNamesakes;
+            foreach (var namesake in affectedNamesakes)
+                accumulators[namesake].GroupedFileCount++;
+        }
+
+        // Unique-file counts are fixed session metadata. Attribute each directory's count to every
+        // Namesake ancestor once; nested occurrences of the same name must not double count it.
+        foreach (var (directory, count) in session.UniqueFileCountsByDirectory)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var affectedNamesakes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var current = directory;
+
+            while (InsideCorpus(current, session.Corpus, fileSystem))
+            {
+                if (occurrenceByDirectory.TryGetValue(current, out var namesake))
+                    affectedNamesakes.Add(namesake);
+
+                if (session.Corpus.Roots.Any(root => fileSystem.PathsEqual(current, root.Path)))
+                    break;
+
+                var parent = fileSystem.GetParentDirectory(current);
+                if (parent is null)
+                    break;
+                current = parent.Value;
+            }
+
+            foreach (var namesake in affectedNamesakes)
+                accumulators[namesake].UniqueFileCount += count;
+        }
+
+        // For each Group, count how many members a name-wide exclusion would remove. This computes
+        // disposition leverage in one pass over Group members rather than one pass over Groups per name.
+        foreach (var group in session.Groups)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var before = group.Files.Count;
+            if (before == 0)
+                continue;
+
+            var removedByNamesake = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in group.Files)
+            {
+                if (!namesakesByFile.TryGetValue(file.Path, out var affectedNamesakes))
+                    continue;
+
+                foreach (var namesake in affectedNamesakes)
+                    removedByNamesake[namesake] = removedByNamesake.GetValueOrDefault(namesake) + 1;
+            }
+
+            foreach (var (namesake, removed) in removedByNamesake)
+            {
+                var accumulator = accumulators[namesake];
+                accumulator.TouchedGroupCount++;
+                var after = before - removed;
+                if (before > 1 && after <= 1)
+                    accumulator.ResolvedGroupCount++;
+
+                accumulator.ExcessCopiesRemoved +=
+                    Math.Max(0, before - 1) - Math.Max(0, after - 1);
+            }
+        }
+
+        var measurements = namesakes.Select(population =>
+        {
+            var accumulator = accumulators[population.Name];
             minHashByNamesake.TryGetValue(population.Name, out var structural);
             var structuralFamilyCount = structural?.IntrinsicFamilyCount ?? 0;
             var structuralSupportingOccurrenceCount = structural?.IntrinsicSupportingOccurrenceCount ?? 0;
@@ -113,19 +165,19 @@ public static class DirectoryNamesakeLeverageAnalyzer
                 ? 0
                 : structuralSupportingOccurrenceCount / (double)population.Occurrences.Count;
 
-            measurements.Add(new Measurement(
+            return new Measurement(
                 population.Name,
                 population.Occurrences.Count,
-                occurrencesWithGroupedFiles,
-                files.Length,
-                uniqueFileCount,
-                touchedGroups,
-                resolvedGroups,
-                excessCopiesRemoved,
+                accumulator.OccurrencesWithGroupedFiles.Count,
+                accumulator.GroupedFileCount,
+                accumulator.UniqueFileCount,
+                accumulator.TouchedGroupCount,
+                accumulator.ResolvedGroupCount,
+                accumulator.ExcessCopiesRemoved,
                 structuralFamilyCount,
                 structuralSupportingOccurrenceCount,
-                structuralSupportFraction));
-        }
+                structuralSupportFraction);
+        }).ToArray();
 
         var resolvedRanks = Rank(measurements,
             item => item.ResolvedGroupCount,
@@ -191,6 +243,17 @@ public static class DirectoryNamesakeLeverageAnalyzer
     private sealed record NamesakePopulation(
         string Name,
         IReadOnlyList<FileSystemPath> Occurrences);
+
+    private sealed class Accumulator(int totalOccurrences)
+    {
+        public int TotalOccurrences { get; } = totalOccurrences;
+        public HashSet<FileSystemPath> OccurrencesWithGroupedFiles { get; } = [];
+        public int GroupedFileCount { get; set; }
+        public int UniqueFileCount { get; set; }
+        public int TouchedGroupCount { get; set; }
+        public int ResolvedGroupCount { get; set; }
+        public int ExcessCopiesRemoved { get; set; }
+    }
 
     private sealed record Measurement(
         string Namesake,
