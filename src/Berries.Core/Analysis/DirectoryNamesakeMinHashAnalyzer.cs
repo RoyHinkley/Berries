@@ -33,11 +33,8 @@ public sealed record DirectoryNamesakeMinHashMember(
 /// Experimental fuzzy structural comparison within Directory Namesake sets.
 /// The common directory name defines the population and is not part of the MinHash feature set.
 /// Each occurrence is represented only by the set of Namesake leaf names beneath it.
-/// MinHash/LSH discovers similar structural families. Families are evidence for one Namesake-level
-/// exclusion candidate. Namesakes are then ranked greedily by residual evidence: once a Namesake is
-/// chosen, all descendants beneath every occurrence of that name are covered and cease contributing
-/// evidence to later candidates. IntrinsicCandidates preserves the pre-greedy evidence for experiments
-/// that must not inherit the greedy coverage bias.
+/// MinHash/LSH discovers similar structural families. Every Namesake remains independently
+/// eligible for the current leverage experiment; no greedy hypothetical exclusion pass is applied.
 /// </summary>
 public static class DirectoryNamesakeMinHashAnalyzer
 {
@@ -169,101 +166,37 @@ public static class DirectoryNamesakeMinHashAnalyzer
                 group => (IReadOnlyList<DirectoryNamesakeMinHashFamily>)group.Select(item => item.Family).ToArray(),
                 StringComparer.OrdinalIgnoreCase);
 
-        var intrinsicSupportByNamesake = familiesByNamesake.ToDictionary(
-            item => item.Key,
-            item => DistinctMembers(item.Value).Count,
-            StringComparer.OrdinalIgnoreCase);
-
         var intrinsicCandidates = familiesByNamesake
-            .Select(item => new DirectoryNamesakeMinHashNamesakeCandidate(
-                item.Key,
-                occurrencesByNamesake[item.Key].Count,
-                item.Value.Count,
-                intrinsicSupportByNamesake[item.Key],
-                item.Value.Count,
-                intrinsicSupportByNamesake[item.Key],
-                item.Value))
-            .OrderBy(candidate => candidate.Namesake, StringComparer.OrdinalIgnoreCase)
+            .Select(item =>
+            {
+                var supportingOccurrences = DistinctMembers(item.Value).Count;
+                return new DirectoryNamesakeMinHashNamesakeCandidate(
+                    item.Key,
+                    occurrencesByNamesake[item.Key].Count,
+                    item.Value.Count,
+                    supportingOccurrences,
+                    item.Value.Count,
+                    supportingOccurrences,
+                    item.Value);
+            })
             .ToArray();
 
-        var remaining = new HashSet<string>(familiesByNamesake.Keys, StringComparer.OrdinalIgnoreCase);
-        var coverageRoots = new List<FileSystemPath>();
-        var rankedNamesakes = new List<DirectoryNamesakeMinHashNamesakeCandidate>();
-
-        while (remaining.Count > 0)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var residuals = remaining
-                .Select(namesake => BuildResidualCandidate(
-                    namesake,
-                    occurrencesByNamesake[namesake],
-                    familiesByNamesake[namesake],
-                    intrinsicSupportByNamesake[namesake],
-                    coverageRoots,
-                    fileSystem))
-                .Where(candidate => candidate.ResidualFamilyCount > 0)
-                .ToArray();
-
-            if (residuals.Length == 0)
-                break;
-
-            var best = residuals
-                .OrderByDescending(candidate => candidate.Families.Max(family => family.MatchingBands))
-                .ThenByDescending(candidate => candidate.Families.Max(family => family.Members.Min(member => member.DescendantNamesakeCount)))
-                .ThenByDescending(candidate => candidate.Families.Max(family => family.Members.Average(member => member.DescendantNamesakeCount)))
-                .ThenBy(candidate => candidate.Families.Min(family => family.Members.Max(member => member.MaxDescendantNamesakeDepth)))
-                .ThenBy(candidate => candidate.Families.Min(family => family.Members.Average(member => member.MaxDescendantNamesakeDepth)))
-                .ThenByDescending(candidate => candidate.ResidualSupportingOccurrenceCount)
-                .ThenByDescending(candidate => candidate.ResidualFamilyCount)
-                .ThenBy(candidate => candidate.Namesake, StringComparer.OrdinalIgnoreCase)
-                .First();
-
-            rankedNamesakes.Add(best);
-            remaining.Remove(best.Namesake);
-            coverageRoots.AddRange(occurrencesByNamesake[best.Namesake]);
-        }
-
-        return new DirectoryNamesakeMinHashAnalysis(rankedNamesakes, intrinsicCandidates);
-    }
-
-    private static DirectoryNamesakeMinHashNamesakeCandidate BuildResidualCandidate(
-        string namesake,
-        IReadOnlyList<FileSystemPath> allOccurrences,
-        IReadOnlyList<DirectoryNamesakeMinHashFamily> intrinsicFamilies,
-        int intrinsicSupportingOccurrenceCount,
-        IReadOnlyList<FileSystemPath> coverageRoots,
-        IFileSystem fileSystem)
-    {
-        var residualFamilies = intrinsicFamilies
-            .Select(family => new DirectoryNamesakeMinHashFamily(
-                family.MatchingBands,
-                family.TotalBands,
-                family.Bands,
-                family.Members.Where(member => !IsCovered(member.Path, coverageRoots, fileSystem)).ToArray()))
-            .Where(family => family.Members.Count >= 2)
+        var rankedCandidates = intrinsicCandidates
+            .OrderByDescending(candidate => candidate.Families.Max(family => family.MatchingBands))
+            .ThenByDescending(candidate => candidate.Families.Max(family => family.Members.Min(member => member.DescendantNamesakeCount)))
+            .ThenByDescending(candidate => candidate.Families.Max(family => family.Members.Average(member => member.DescendantNamesakeCount)))
+            .ThenBy(candidate => candidate.Families.Min(family => family.Members.Max(member => member.MaxDescendantNamesakeDepth)))
+            .ThenBy(candidate => candidate.Families.Min(family => family.Members.Average(member => member.MaxDescendantNamesakeDepth)))
+            .ThenByDescending(candidate => candidate.IntrinsicSupportingOccurrenceCount)
+            .ThenByDescending(candidate => candidate.IntrinsicFamilyCount)
+            .ThenBy(candidate => candidate.Namesake, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return new DirectoryNamesakeMinHashNamesakeCandidate(
-            namesake,
-            allOccurrences.Count,
-            intrinsicFamilies.Count,
-            intrinsicSupportingOccurrenceCount,
-            residualFamilies.Length,
-            DistinctMembers(residualFamilies).Count,
-            residualFamilies);
+        return new DirectoryNamesakeMinHashAnalysis(rankedCandidates, intrinsicCandidates);
     }
 
     private static HashSet<FileSystemPath> DistinctMembers(IEnumerable<DirectoryNamesakeMinHashFamily> families) =>
         families.SelectMany(family => family.Members).Select(member => member.Path).ToHashSet();
-
-    private static bool IsCovered(
-        FileSystemPath path,
-        IReadOnlyList<FileSystemPath> coverageRoots,
-        IFileSystem fileSystem) =>
-        coverageRoots.Any(root =>
-            fileSystem.PathsEqual(path, root)
-            || fileSystem.IsDescendant(path, root));
 
     private sealed class FamilyAccumulator(
         string namesake,
