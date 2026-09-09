@@ -224,7 +224,8 @@ public partial class MainWindow
 
     private async Task ShowDirectoryProjectionAsync(IReadOnlyList<FileSystemPath> directories)
     {
-        if (controller.Session is null || directories.Count == 0)
+        var session = controller.Session;
+        if (session is null || directories.Count == 0)
             return;
 
         if (directories.Count == 1)
@@ -237,10 +238,12 @@ public partial class MainWindow
         var operation = BeginNavigation("Opening Directories...", true);
         try
         {
-            var tasks = directories
-                .Select(directory => BuildDirectoryExplorerNodeAsync(directory, operation.Token))
-                .ToArray();
-            var nodes = await Task.WhenAll(tasks);
+            var projections = await DirectoryProjectionBatch.BuildAsync(
+                session,
+                directories,
+                new Progress<OperationProgress>(progress => ShowNavigationProgress(operation, progress)),
+                operation.Token);
+            var nodes = projections.Select(BuildDirectoryExplorerNode).ToArray();
             if (!IsCurrentNavigation(operation))
                 throw new OperationCanceledException(operation.Token);
 
@@ -270,11 +273,13 @@ public partial class MainWindow
 
     private async Task RefreshMultipleDirectoryProjectionAsync()
     {
-        if (controller.Session is null || currentDirectoryProjectionScopes.Count <= 1)
+        var session = controller.Session;
+        if (session is null || currentDirectoryProjectionScopes.Count <= 1)
             return;
 
         var directories = currentDirectoryProjectionScopes.ToArray();
-        var nodes = await Task.WhenAll(directories.Select(directory => BuildDirectoryExplorerNodeAsync(directory)));
+        var projections = await DirectoryProjectionBatch.BuildAsync(session, directories);
+        var nodes = projections.Select(BuildDirectoryExplorerNode).ToArray();
         ExplorerTree.ItemsSource = nodes;
         SetProjectionState(ProjectionKind.Directory, nodes.SelectMany(node => node.Files));
         currentDirectoryProjectionScopes = directories;
@@ -295,7 +300,7 @@ public partial class MainWindow
             return;
 
         var files = DistinctFilesFast(directories.SelectMany(directory =>
-            Projections.FilesInContext(session.WorkingPortrait.Files, directory, descendants: true)));
+            Projections.FilesInContext(session.WorkingPortrait.Files, directory, true)));
 
         if (choice == DirectoryNamesakeExcludeChoice.Permanent)
         {
