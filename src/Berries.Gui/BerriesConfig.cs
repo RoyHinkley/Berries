@@ -128,14 +128,18 @@ internal sealed class BerriesConfig
 
     private static Regex CompileGlob(string sourcePattern, bool matchPath)
     {
-        var pattern = sourcePattern.Replace('\\', '/').Trim('/');
+        var normalizedPattern = sourcePattern.Replace('\\', '/');
+        var requiresDescendant = matchPath && normalizedPattern.EndsWith('/');
+        var pattern = normalizedPattern.Trim('/');
         var expression = Regex.Escape(pattern)
             .Replace(@"\*\*", ".*")
             .Replace(@"\*", "[^/]*")
             .Replace(@"\?", "[^/]");
 
         expression = matchPath
-            ? $@"(?:^|/){expression}(?:/|$)"
+            ? requiresDescendant
+                ? $@"(?:^|/){expression}/"
+                : $@"(?:^|/){expression}(?:/|$)"
             : $@"^{expression}$";
 
         return new Regex(
