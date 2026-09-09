@@ -13,6 +13,12 @@ public partial class MainWindow
 
     private async void ExcludeImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
+        if (IsDirectoryNamesakesProjection())
+        {
+            await ExcludeDirectoryNamesakeSelectionAsync();
+            return;
+        }
+
         var files = SemanticSelection();
         if (files.Count == 0 || controller.Session is null || portraitCommandBusy) return;
         if (!await ConfirmOutsideSelectionAsync("Exclude")) return;
@@ -24,6 +30,8 @@ public partial class MainWindow
 
     private async void DeleteImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
+        if (IsDirectoryNamesakesProjection()) return;
+
         var files = SemanticSelection();
         if (files.Count == 0 || controller.Session is null || portraitCommandBusy) return;
         if (!await ConfirmOutsideSelectionAsync("Delete")) return;
@@ -35,6 +43,7 @@ public partial class MainWindow
 
     private async void MoveRightImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
+        if (IsDirectoryNamesakesProjection()) return;
         if (currentProjection is not { IsPair: true, Primary: { } first, Secondary: { } second }
             || controller.Session is null || portraitCommandBusy) return;
         var descendants = currentProjection.Kind == ProjectionKind.BranchPair;
@@ -51,6 +60,7 @@ public partial class MainWindow
 
     private async void MoveLeftImmediateButton_Click(object? sender, RoutedEventArgs e)
     {
+        if (IsDirectoryNamesakesProjection()) return;
         if (currentProjection is not { IsPair: true, Primary: { } first, Secondary: { } second }
             || controller.Session is null || portraitCommandBusy) return;
         var descendants = currentProjection.Kind == ProjectionKind.BranchPair;
@@ -106,6 +116,12 @@ public partial class MainWindow
         var session = controller.Session;
         if (session is null || currentProjection is null) return;
 
+        if (currentProjection.Kind == ProjectionKind.DirectoryNamesakes)
+        {
+            await RefreshDirectoryNamesakesProjectionAsync();
+            return;
+        }
+
         if (currentProjection is { Kind: ProjectionKind.DirectoryPair, Primary: { } firstDirectory, Secondary: { } secondDirectory })
         {
             var leftTask = BuildDirectoryExplorerNodeAsync(firstDirectory);
@@ -129,6 +145,13 @@ public partial class MainWindow
             LeftTree.ItemsSource = new[] { left }; RightTree.ItemsSource = new[] { right };
             SetPairProjectionState(ProjectionKind.BranchPair, firstBranch, left.Files, secondBranch, right.Files);
             ProjectionTitle.Text = $"Branch Pair — {(await sharedTask):N0} shared Groups";
+            return;
+        }
+
+        if (currentProjection is { Kind: ProjectionKind.Directory, Primary: null }
+            && currentDirectoryProjectionScopes.Count > 1)
+        {
+            await RefreshMultipleDirectoryProjectionAsync();
             return;
         }
 
