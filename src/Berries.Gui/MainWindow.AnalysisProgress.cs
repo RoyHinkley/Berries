@@ -38,7 +38,10 @@ public partial class MainWindow
         Dispatcher.UIThread.Post(() =>
         {
             UpdateCapabilities();
-            UpdatePivotCapabilities();
+            if (IsDirectoryNamesakesProjection())
+                UpdateDirectoryNamesakePivotCapabilities();
+            else
+                UpdatePivotCapabilities();
             SuggestButton.IsEnabled = HighestRankedUnseenSuggestion() is not null;
             if (controller.Suggestions is { IsComplete: true } && !portraitCommandBusy && !NavigationIsActive)
             {
