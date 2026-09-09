@@ -2,7 +2,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Berries.Core;
 using Berries.Core.Domain;
+using Berries.Core.Queries;
 using Berries.FileSystem.Abstractions;
 using Berries.Projection;
 
@@ -13,6 +15,10 @@ public partial class MainWindow
     private readonly HashSet<string> selectedDirectoryNamesakeNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<FileSystemPath> selectedDirectoryNamesakeOccurrences = [];
     private readonly Dictionary<ExplorerNode, DirectoryNamesakeSelectionTarget> directoryNamesakeTargets = [];
+    private readonly Dictionary<string, ExplorerNode> directoryNamesakeNameNodes = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ExplorerNode> directoryNamesakeOccurrenceNodes = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> directoryNamesakeOccurrenceNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DirectoryNamesakeProjection> directoryNamesakesByName = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<DirectoryNamesakeProjection> currentDirectoryNamesakes = [];
     private BerriesSession? directoryNamesakeSelectionSession;
     private IReadOnlyList<FileSystemPath> currentDirectoryProjectionScopes = [];
@@ -33,23 +39,33 @@ public partial class MainWindow
 
         currentDirectoryNamesakes = namesakes;
         directoryNamesakeTargets.Clear();
+        directoryNamesakeNameNodes.Clear();
+        directoryNamesakeOccurrenceNodes.Clear();
+        directoryNamesakeOccurrenceNames.Clear();
+        directoryNamesakesByName.Clear();
 
         for (var i = 0; i < namesakes.Count; i++)
         {
             var namesake = namesakes[i];
             var node = nodes[i];
             directoryNamesakeTargets[node] = new DirectoryNamesakeSelectionTarget(namesake.Name, null);
+            directoryNamesakeNameNodes[namesake.Name] = node;
+            directoryNamesakesByName[namesake.Name] = namesake;
 
             for (var j = 0; j < namesake.Directories.Count; j++)
-                directoryNamesakeTargets[node.Children[j]] = new DirectoryNamesakeSelectionTarget(
-                    namesake.Name,
-                    namesake.Directories[j].Path);
+            {
+                var directory = namesake.Directories[j];
+                var child = node.Children[j];
+                var key = DirectoryPathKey(directory.Path);
+                directoryNamesakeTargets[child] = new DirectoryNamesakeSelectionTarget(namesake.Name, directory.Path);
+                directoryNamesakeOccurrenceNodes[key] = child;
+                directoryNamesakeOccurrenceNames[key] = namesake.Name;
+            }
         }
 
-        selectedDirectoryNamesakeNames.RemoveWhere(name =>
-            !namesakes.Any(namesake => namesake.Name.Equals(name, StringComparison.OrdinalIgnoreCase)));
+        selectedDirectoryNamesakeNames.RemoveWhere(name => !directoryNamesakesByName.ContainsKey(name));
         selectedDirectoryNamesakeOccurrences.RemoveAll(path =>
-            !namesakes.Any(namesake => namesake.Directories.Any(directory => fileSystem.PathsEqual(directory.Path, path))));
+            !directoryNamesakeOccurrenceNodes.ContainsKey(DirectoryPathKey(path)));
     }
 
     private bool ToggleDirectoryNamesakeSelection(ExplorerNode node)
@@ -100,14 +116,13 @@ public partial class MainWindow
                 return;
 
             ExplorerTree.SelectedItems.Clear();
-            foreach (var (node, target) in directoryNamesakeTargets)
-            {
-                var selected = target.Directory is null
-                    ? selectedDirectoryNamesakeNames.Contains(target.Name)
-                    : IsDirectoryOccurrenceSelected(target.Directory.Value);
-                if (selected)
+            foreach (var name in selectedDirectoryNamesakeNames)
+                if (directoryNamesakeNameNodes.TryGetValue(name, out var node))
                     ExplorerTree.SelectedItems.Add(node);
-            }
+
+            foreach (var path in selectedDirectoryNamesakeOccurrences)
+                if (directoryNamesakeOccurrenceNodes.TryGetValue(DirectoryPathKey(path), out var node))
+                    ExplorerTree.SelectedItems.Add(node);
         }
         finally
         {
@@ -152,13 +167,15 @@ public partial class MainWindow
     {
         if (selectedDirectoryNamesakeOccurrences.Count > 0)
         {
-            var affectedNamesakes = currentDirectoryNamesakes
-                .Where(namesake => namesake.Directories.Any(directory => IsDirectoryOccurrenceSelected(directory.Path)))
-                .ToArray();
+            var affectedNamesakes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var path in selectedDirectoryNamesakeOccurrences)
+                if (directoryNamesakeOccurrenceNames.TryGetValue(DirectoryPathKey(path), out var name))
+                    affectedNamesakes.Add(name);
 
-            foreach (var namesake in affectedNamesakes)
-                foreach (var directory in namesake.Directories)
-                    ToggleDirectoryOccurrence(directory.Path);
+            foreach (var name in affectedNamesakes)
+                if (directoryNamesakesByName.TryGetValue(name, out var namesake))
+                    foreach (var directory in namesake.Directories)
+                        ToggleDirectoryOccurrence(directory.Path);
             return;
         }
 
@@ -178,16 +195,13 @@ public partial class MainWindow
             return selectedDirectoryNamesakeOccurrences.ToArray();
 
         var result = new List<FileSystemPath>();
-        foreach (var namesake in currentDirectoryNamesakes)
+        foreach (var name in selectedDirectoryNamesakeNames)
         {
-            if (!selectedDirectoryNamesakeNames.Contains(namesake.Name))
+            if (!directoryNamesakesByName.TryGetValue(name, out var namesake))
                 continue;
 
             foreach (var directory in namesake.Directories)
-            {
-                if (!result.Any(existing => fileSystem.PathsEqual(existing, directory.Path)))
-                    result.Add(directory.Path);
-            }
+                result.Add(directory.Path);
         }
         return result;
     }
@@ -299,37 +313,38 @@ public partial class MainWindow
         if (choice == DirectoryNamesakeExcludeChoice.Cancel)
             return;
 
-        var files = DistinctFilesFast(directories.SelectMany(directory =>
-            Projections.FilesInContext(session.WorkingPortrait.Files, directory, true)));
-
-        if (choice == DirectoryNamesakeExcludeChoice.Permanent)
-        {
-            var patterns = selectedDirectoryNamesakeOccurrences.Count > 0
-                ? directories.Select(DirectoryPathExcludePattern)
-                : selectedDirectoryNamesakeNames.Select(name => $"/{name}/");
-            BerriesConfig.AddExcludePatterns(
-                Path.Combine(AppContext.BaseDirectory, "Berries.config"),
-                patterns);
-        }
+        var permanentPatterns = choice == DirectoryNamesakeExcludeChoice.Permanent
+            ? (selectedDirectoryNamesakeOccurrences.Count > 0
+                ? directories.Select(DirectoryPathExcludePattern).ToArray()
+                : selectedDirectoryNamesakeNames.Select(name => $"/{name}/").ToArray())
+            : [];
 
         ClearDirectoryNamesakeSelection();
-
-        if (files.Count == 0)
-        {
-            SynchronizeDirectoryNamesakeSelection();
-            UpdateDirectoryNamesakeSelectionSummary();
-            StatusText.Text = choice == DirectoryNamesakeExcludeChoice.Permanent
-                ? "Permanent exclusion added to config; no grouped files were present in the selected directories."
-                : "No grouped files were present in the selected directories.";
-            return;
-        }
+        var excludedFileCount = 0;
 
         await RunPortraitCommandAsync(
-            $"Excluding files beneath {directories.Count:N0} director{(directories.Count == 1 ? "y" : "ies")}...",
-            choice == DirectoryNamesakeExcludeChoice.Permanent
-                ? $"Excluded files beneath {directories.Count:N0} director{(directories.Count == 1 ? "y" : "ies")} and added the exclusion to config."
-                : $"Excluded files beneath {directories.Count:N0} director{(directories.Count == 1 ? "y" : "ies")} from this session.",
-            () => controller.ExcludeAsync(files));
+            $"Resolving {directories.Count:N0} selected director{(directories.Count == 1 ? "y" : "ies")}...",
+            null,
+            async () =>
+            {
+                var files = await MultiDirectoryQueries.FilesInBranchesAsync(
+                    session,
+                    directories,
+                    fileSystem,
+                    new Progress<OperationProgress>(ShowAnalysisProgress));
+                excludedFileCount = files.Count;
+
+                if (choice == DirectoryNamesakeExcludeChoice.Permanent)
+                    BerriesConfig.AddExcludePatterns(
+                        Path.Combine(AppContext.BaseDirectory, "Berries.config"),
+                        permanentPatterns);
+
+                if (files.Count > 0)
+                    await controller.ExcludeAsync(files);
+            },
+            () => choice == DirectoryNamesakeExcludeChoice.Permanent
+                ? $"Excluded {excludedFileCount:N0} grouped file(s) beneath {directories.Count:N0} director{(directories.Count == 1 ? "y" : "ies")} and added the exclusion to config."
+                : $"Excluded {excludedFileCount:N0} grouped file(s) beneath {directories.Count:N0} director{(directories.Count == 1 ? "y" : "ies")} from this session.");
     }
 
     private async Task<DirectoryNamesakeExcludeChoice> ShowDirectoryNamesakeExcludeDialogAsync()
@@ -374,6 +389,9 @@ public partial class MainWindow
 
         return await dialog.ShowDialog<DirectoryNamesakeExcludeChoice>(this);
     }
+
+    private string DirectoryPathKey(FileSystemPath path) =>
+        fileSystem.NormalizePath(path).Value;
 
     private static string DirectoryPathExcludePattern(FileSystemPath path)
     {
