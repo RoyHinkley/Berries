@@ -55,6 +55,60 @@ internal sealed class BerriesConfig
         return new BerriesConfig(path, patterns);
     }
 
+    public static void AddExcludePatterns(string path, IEnumerable<string> patterns)
+    {
+        var requested = patterns
+            .Select(pattern => pattern.Trim())
+            .Where(pattern => pattern.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (requested.Length == 0)
+            return;
+
+        var existing = Load(path).ExcludePatterns.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var additions = requested.Where(pattern => !existing.Contains(pattern)).ToArray();
+        if (additions.Length == 0)
+            return;
+
+        var lines = File.Exists(path)
+            ? File.ReadAllLines(path).ToList()
+            : new List<string>();
+
+        var sectionStart = -1;
+        var sectionEnd = lines.Count;
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var line = lines[i].Trim();
+            if (!line.StartsWith('[') || !line.EndsWith(']'))
+                continue;
+
+            if (sectionStart < 0)
+            {
+                if (line[1..^1].Trim().Equals("exclude", StringComparison.OrdinalIgnoreCase))
+                    sectionStart = i;
+            }
+            else
+            {
+                sectionEnd = i;
+                break;
+            }
+        }
+
+        if (sectionStart < 0)
+        {
+            if (lines.Count > 0 && lines[^1].Length > 0)
+                lines.Add(string.Empty);
+            lines.Add("[exclude]");
+            lines.AddRange(additions);
+        }
+        else
+        {
+            lines.InsertRange(sectionEnd, additions);
+        }
+
+        File.WriteAllLines(path, lines);
+    }
+
     public bool IsExcluded(FileSystemPath path)
     {
         if (ExcludePatterns.Count == 0)
