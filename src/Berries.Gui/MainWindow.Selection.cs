@@ -33,19 +33,47 @@ public partial class MainWindow
         if (current is not TreeViewItem { DataContext: ExplorerNode node }) return;
 
         focusedNode = node;
-        session.Selection.Toggle(node.Files);
-        SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
+        if (IsDirectoryNamesakesProjection())
+        {
+            if (!ToggleDirectoryNamesakeSelection(node)) return;
+        }
+        else
+        {
+            session.Selection.Toggle(node.Files);
+        }
+
+        SynchronizeVisibleSelection();
+        UpdateSelectionSummary();
+        UpdateCapabilities();
         e.Handled = true;
     }
 
     private void ClearSelectionButton_Click(object? sender, RoutedEventArgs e)
     {
         if (controller.Session is not { } session) return;
-        session.Selection.Clear(); SynchronizeVisibleSelection(); UpdateSelectionSummary(); UpdateCapabilities();
+
+        if (IsDirectoryNamesakesProjection())
+            ClearDirectoryNamesakeSelection();
+        else
+            session.Selection.Clear();
+
+        SynchronizeVisibleSelection();
+        UpdateSelectionSummary();
+        UpdateCapabilities();
     }
 
     private async void InvertSelectedCopies_Click(object? sender, RoutedEventArgs e)
     {
+        if (IsDirectoryNamesakesProjection())
+        {
+            if (!HasDirectoryNamesakeSelection) return;
+            InvertDirectoryNamesakeSelection();
+            SynchronizeVisibleSelection();
+            UpdateSelectionSummary();
+            UpdateCapabilities();
+            return;
+        }
+
         if (controller.Session is not { } session || session.Selection.IsEmpty) return;
         if (!await ConfirmOutsideSelectionAsync("Invert selected copies")) return;
         session.InvertSelectedCopies();
@@ -133,6 +161,12 @@ public partial class MainWindow
 
     private void SynchronizeVisibleSelection()
     {
+        if (IsDirectoryNamesakesProjection())
+        {
+            SynchronizeDirectoryNamesakeSelection();
+            return;
+        }
+
         if (controller.Session is not { } session) return;
         synchronizingSelection = true;
         try
@@ -151,6 +185,12 @@ public partial class MainWindow
 
     private void UpdateSelectionSummary()
     {
+        if (IsDirectoryNamesakesProjection())
+        {
+            UpdateDirectoryNamesakeSelectionSummary();
+            return;
+        }
+
         var session = controller.Session;
         if (session is null || session.Selection.IsEmpty)
         {
@@ -166,6 +206,8 @@ public partial class MainWindow
 
     private void SetSelectionCapabilities(bool hasSelection)
     {
+        InvertSelectedCopiesMenu.Header = "Invert Selected Copies  ⓘ";
+        InvertAllGroupsMenu.IsVisible = true;
         ClearSelectionButton.IsEnabled = hasSelection;
         InvertButton.IsEnabled = hasSelection;
         InvertSelectedCopiesMenu.IsEnabled = hasSelection;
