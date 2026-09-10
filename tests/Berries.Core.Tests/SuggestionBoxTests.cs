@@ -33,7 +33,9 @@ public sealed class SuggestionBoxTests
 
         var second = Assert.IsType<BranchPairSuggestionCandidate>(box.TakeNext(7)!.Candidate);
         Assert.Same(analyzerFavored, second.BranchPair);
-        Assert.Null(box.TakeNext(7));
+
+        var cycled = Assert.IsType<BranchPairSuggestionCandidate>(box.TakeNext(7)!.Candidate);
+        Assert.Same(suggestionFavored, cycled.BranchPair);
     }
 
     [Fact]
