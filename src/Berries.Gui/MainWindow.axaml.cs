@@ -464,5 +464,6 @@ public sealed class ExplorerNode(
     public string Label { get; } = label;
     public IReadOnlyList<FileInstance> Files { get; set; } = files ?? [];
     public FileSystemPath? SemanticPath { get; } = semanticPath;
+    public bool IsExpanded { get; set; }
     public List<ExplorerNode> Children { get; } = [];
 }
