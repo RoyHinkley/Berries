@@ -90,6 +90,16 @@ The best Branch Pair often does not come from the highest-ranked Seed. This dist
 
 Targeted search is part of the product design, not merely a performance shortcut: the useful question is normally local and comprehensible, while exhaustive Branch-Pair enumeration produces large populations of weak or redundant relationships.
 
+## Directory Namesakes
+
+A cheap Directory Namesake index has survived the structural research as useful evidence in its own right. It groups recurring Directory leaf names and exposes their concrete occurrences without asserting why they recur. This can reveal both familiar broad categories such as `obj` or `.git` and duplicated structures the user did not already know about.
+
+The production value is therefore to surface potentially high-leverage facts about the Corpus, not to infer exclusion intent. The user remains responsible for deciding whether a recurring name represents generated material, an intentional deployment, a duplicated tree, or something else.
+
+### Structural experiments
+
+The richer structural analyzers remain research tools rather than requirements for the basic Directory Namesakes feature.
+
 ## Directory Namesake structure experiment
 
 A Directory Namesake is a recurring Directory leaf name. Name equality alone is weak evidence: conventional names such as `src`, `include`, `lib`, or `images` may occur hundreds of times without implying that their Directories are related.
