@@ -25,6 +25,7 @@ The placeholder is not the **Corpus Roots projection**. Corpus Roots is a full B
 Current projections are:
 
     Groups
+    Directory Namesakes
     Directory
     Branch
     Corpus Roots
@@ -34,12 +35,13 @@ Current projections are:
 A Projection is presentation/navigation state, not a Case.
 
 - **Groups** — one root per Group, with current files beneath it.
-- **Directory** — grouped files directly in one Directory.
+- **Directory Namesakes** — recurring Directory leaf names, with each concrete occurrence beneath its Namesake.
+- **Directory** — grouped files directly in one Directory. A Namesake selection may Pivot to a multi-root Directory view containing all effective selected Directories.
 - **Branch** — grouped files beneath one Directory hierarchy.
 - **Corpus Roots** — one Branch-style tree for each Corpus root.
 - **Directory Pair / Branch Pair** — two scopes shown side by side.
 
-Structural nodes are selection shortcuts over represented files; selection itself always denotes files.
+Except in Directory Namesakes, structural nodes are selection shortcuts over represented files and semantic Selection denotes files. Directory Namesakes intentionally uses separate directory-selection semantics and does not alter persistent file Selection.
 
 ### Selection portrayal
 
@@ -53,6 +55,24 @@ A visible Explorer node is highlighted exactly when it represents at least one f
 - selected descendant leaves remain highlighted when their ancestors are only partially selected.
 
 Highlighting an internal node does not create a separate structural selection state. It reports that the node's complete represented file set is already present in semantic selection.
+
+### Directory Namesakes selection
+
+Directory Namesakes is the exception to ordinary file-selection semantics:
+
+- selecting a Namesake row selects that recurring directory-name category;
+- selecting an occurrence row selects that exact Directory;
+- if one or more occurrences are selected, they are the effective Directory selection and any selected Namesakes are ignored for Directory-resolving operations;
+- otherwise selected Namesakes resolve to all of their occurrences;
+- Invert with Namesakes only complements the selected Namesake rows;
+- Invert with occurrences complements occurrences only within Namesakes having at least one selected occurrence; selected Namesake rows are ignored;
+- Groups is always available and ignores Directory Namesakes selection;
+- Directory is available for one or more effective Directories and may display several selected Directories as roots in one Directory view;
+- ordinary Delete and Move are disabled in Directory Namesakes; Pivot to an ordinary Directory/Branch view for file dispositions.
+
+Exclude is specialized in this view. Session-only Exclude resolves grouped files beneath the effective Directories and uses the ordinary session Exclude machinery. Permanent Exclude additionally writes an equivalent rule to `[exclude]` in `Berries.config`. A Namesake such as `obj` is persisted as `/obj/`; the trailing separator is directory-specific, whereas separator-free `obj` retains the broader path-component semantics.
+
+Tree expansion state belongs to `ExplorerNode`, not recyclable Avalonia `TreeViewItem` containers. `IsExpanded` is bound two-way so virtualization cannot transfer expansion state between rows.
 
 ## Suggestions and navigation
 
