@@ -59,6 +59,8 @@ Logical presentation size and realized Avalonia control count are different conc
 
 Large Explorer trees must use virtualized item panels so off-screen roots do not acquire visual containers merely because they exist in the projection. This is a functional scaling requirement: a nonvirtualized `TreeView` can turn inexpensive collection publication into repeated realization/layout work proportional to the entire tree.
 
+State that semantically belongs to a logical Explorer node must not live only on a recyclable Avalonia item container. In particular, expansion is stored on `ExplorerNode` and `TreeViewItem.IsExpanded` is bound two-way; otherwise virtualization can make expanding one row appear to expand or collapse another.
+
 GUI construction may publish known presentation nodes incrementally in bounded batches when useful for cancellation and early display. Batching does not replace virtualization; both control different costs.
 
 ## Projection caching and prewarming
