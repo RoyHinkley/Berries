@@ -95,9 +95,15 @@ A **Situation** is optional human context such as backup, migration, reorganizat
 
 A **disposition** is the coherent operational outcome chosen for a Case. Berries does not require Situation classification before direct Explorer operations.
 
+### Directory Namesake
+
+A Directory leaf name occurring in more than one Directory represented by the scanned Corpus. Directory Namesakes are structural evidence, not content identity and not an inferred disposition.
+
+The Directory Namesakes projection is a deliberate directory-selection view. A selected Namesake denotes all of its current occurrences; explicitly selected occurrences take precedence over selected Namesakes when an operation needs concrete Directories. This specialized selection is projection-local and does not modify persistent file Selection.
+
 ### Projection
 
-A UI-independent organization of Working-Portrait material for Explorer presentation. Current projections are Groups, Directory, Branch, Corpus Roots, Directory Pair, and Branch Pair.
+A UI-independent organization of Working-Portrait material for Explorer presentation. Current production projections include Groups, Directory Namesakes, Directory, Branch, Corpus Roots, Directory Pair, and Branch Pair. Namesake Structure and Namesake MinHash remain research views.
 
 `ProjectionState` is navigation/presentation state only; it is not a Case and carries no disposition authority.
 
@@ -107,7 +113,9 @@ A UI-independent organization of Working-Portrait material for Explorer presenta
 
 ### Selection
 
-A persistent set of files in the current Working Portrait. Selection is independent of projection. Structural Explorer nodes are shorthand for their represented files.
+Ordinary semantic Selection is a persistent set of files in the current Working Portrait. In ordinary projections, structural Explorer nodes are shorthand for their represented files and Selection persists across projection changes.
+
+Directory Namesakes deliberately substitutes projection-local directory selection. Namesake rows select recurring directory-name categories; occurrence rows select exact Directories. If any occurrences are selected, they are the effective Directory selection and selected Namesakes are ignored for Directory-resolving operations. Otherwise selected Namesakes resolve to all of their occurrences. This state does not alter ordinary file Selection.
 
 ### Exclude
 
@@ -151,7 +159,7 @@ The explicit physical commitment boundary. No physical filesystem modification o
 3. Initially unique files are retained only as fixed per-Directory counts after discovery.
 4. Working Portrait is reconstructible from Initial Portrait plus ordered portrait operations.
 5. Group identity is established once per session; membership may be any nonnegative count.
-6. Selection always denotes files and persists across projections.
+6. Ordinary Selection denotes files and persists across ordinary projections; Directory Namesakes has separate projection-local Namesake/Directory selection that never mutates file Selection.
 7. Case is bounded disposition authority; Projection is presentation/navigation. They are not interchangeable.
 8. Exclude changes the Working Portrait without creating a filesystem Action.
 9. Delete and Move change the Working Portrait immediately and contribute physical Actions.
