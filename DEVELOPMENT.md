@@ -141,7 +141,7 @@ Each Branch Pair search round examines the top 10 eligible Seeds, finds each See
 
 - Group identity is established once per session; operations change membership, not identity.
 - Initially unique `FileInstance`s are pruned after their per-Directory counts are retained.
-- Selection always denotes files and persists across projections.
+- Ordinary Selection denotes files and persists across ordinary projections. Directory Namesakes has separate projection-local Namesake/Directory selection and must not mutate `BerriesSession.Selection`.
 - Projection is navigation, not Case/disposition authority.
 - Exclude/Delete/Move change the Working Portrait immediately; there is no Apply state.
 - No physical filesystem modification occurs before Execute.
@@ -176,18 +176,40 @@ If `DirPair` is present there is no single inferred Directory, but those two Dir
 
 Commands using an inferred Directory should not offer a no-op projection. In particular, when the inferred Directory is already the top-level Directory of the current Directory view, disable the Directory pivot; Branch remains available, and Best Branch Pair becomes available when its contextual counterpart result has been found. Conversely, in a Branch view rooted at the inferred Directory, disable Branch while leaving Directory available.
 
+## Present status — Directory Namesakes
+
+Directory Namesakes has moved from structural research into a bounded production feature. The cheap projection groups recurring Directory leaf names and shows each concrete occurrence. The richer Namesake Structure and Namesake MinHash views remain research artifacts and are not prerequisites for the production feature.
+
+The production Directory Namesakes view deliberately substitutes directory-selection semantics for ordinary file Selection:
+
+- Namesake rows and occurrence rows have separate GUI-local selection state; `BerriesSession.Selection` is untouched.
+- Explicit occurrence selection takes precedence over selected Namesakes when concrete Directories are required.
+- Invert complements Namesakes when only Namesakes are selected; with occurrence selection it complements occurrences only within the affected Namesakes.
+- Groups ignores Namesake selection and opens the default Groups view.
+- Directory accepts one or more effective Directories; the multi-Directory implementation scans Groups once rather than once per selected Directory.
+- Delete and Move are disabled in Directory Namesakes.
+- Exclude resolves grouped files beneath all effective Directories in one pass and reuses the existing session Exclude operation.
+- Permanent Exclude also appends equivalent rules to `Berries.config`. A Namesake is emitted as a directory-specific rule such as `/obj/`; a trailing separator now means the match must have a descendant component.
+- Best Directory Pair / Best Branch Pair and Branch are currently disabled from Directory Namesakes because their existing commands have different seed semantics; do not silently reinterpret them.
+- Suggest remains controlled solely by Suggestion availability.
+
+Large-tree behavior remains virtualized. Expansion state is now stored on `ExplorerNode.IsExpanded` and bound two-way to `TreeViewItem.IsExpanded`; recyclable visual containers must not own logical expansion state.
+
+The existing `SuggestionBox.TakeNext()` contract is cyclic. After all current Suggestions have been seen it starts again at the highest-ranked Suggestion; the stale unit test expecting `null` after exhaustion was updated.
+
 ## Near-term work
 
 Keep this section concise, but preserve unresolved design decisions until they are settled.
 
-- Contextual counterpart search: infer a current Directory Seed using the contract above. Start low-priority Core searches opportunistically; cancel immediately when the inferred Directory changes or disappears. Reuse the Branch Counterpart search machinery rather than maintaining a second Branch Pair algorithm. Slice long work finely enough for effectively immediate cancellation. Enable Best Directory Pair / Best Branch Pair only after a current-seed result exists and the resulting pair differs from the current view.
-- Pair construction from selection: when `BerriesSelection.SelectedDirectories.DirPair` is present, allow viewing those Directories as either a Directory Pair or Branch Pair.
-- Projection titles should include useful numerical context; decide the appropriate counts/metrics for every projection type rather than adding ad-hoc title data.
-- Add a Suggestion analyzer for repeated Directory names. Develop what constitutes a useful same-name Directory Case, including occurrence count, duplicate contribution, likely Exclude disposition, ranking, and possible persistent exclusion.
-- Persistent exclusions: retain simple path-pattern configuration. Consider an unobtrusive `Exclude always` path that writes an expressible exclusion rule for the user; ordinary Exclude should remain simple. README must prominently explain that configuration exists, why early exclusions matter, and give advisable syntax examples such as `/LICENSE` for any file or Directory named `LICENSE`.
-- Add an explicit acquisition setting for excluding zero-length files; empty content is a compelling exception to pathname-only exclusion because all empty files collapse into one analytically uninformative Group.
-- Toolbar/action organization: separate Invert from disposition buttons; group Move with Exclude/Delete. Keep Undo conceptually separate pending final layout.
-- Continue real-corpus validation of heterogeneous Suggestion quality and design a common comparison metric based on decision leverage rather than producer-supplied scores.
-- Revisit whether Suggest and Pivot remain separate navigation concepts once viewed-case Back/Forward semantics are clear. Back/Forward stays deferred until its desired behavior has demonstrated utility.
-- Continue auditing navigation paths for stale-request races.
-- Decide whether session persistence provides enough user value to justify Save/Load.
+1. **Finish direct user interaction in Directory Namesakes.** First verify the new node-owned expand/collapse behavior in both Groups and Directory Namesakes. Then diagnose and correct the reported Namesake selection/navigation problems before extending the feature.
+2. **Exercise the specialized selection contract.** Test selection isolation from ordinary file Selection, Namesake-only selection, occurrence-only selection, mixed selection precedence, and all Invert cases.
+3. **Exercise Exclude end to end.** Verify session Exclude/Undo, permanent Namesake rules such as `/obj/`, path-specific occurrence rules, no-grouped-file cases, and the distinction between `/obj/` and separator-free `obj` on a fresh scan.
+4. **Exercise multi-Directory Pivot and scale.** Verify one root per selected Directory, ordinary file semantics after the Pivot, and bounded behavior with high-occurrence Namesakes such as `src`. Preserve the single-pass implementations; avoid Directory-count × Groups/files algorithms.
+5. **Resolve remaining Pivot semantics deliberately.** Decide whether explicit two-Directory selection should acquire direct Directory Pair / Branch Pair navigation and whether Branch/Roots have useful meanings from Namesake selection. Existing “Best Pair” commands must not be repurposed accidentally.
+6. Contextual counterpart search and ordinary pair construction from `BerriesSelection.SelectedDirectories` remain separate ordinary-selection work.
+7. Projection titles should include useful numerical context; decide counts/metrics systematically.
+8. Consider whether cheap Directory Namesake evidence should eventually feed Suggestions. Do not require MinHash or structural-coherence research, and do not infer exclusion intent.
+9. Add an explicit acquisition setting for excluding zero-length files.
+10. Continue real-corpus validation of heterogeneous Suggestion quality and design a common comparison metric based on decision leverage.
+11. Revisit Back/Forward only after navigation semantics demonstrate enough value; continue auditing stale-request races.
+12. Decide whether session persistence provides enough user value to justify Save/Load.
