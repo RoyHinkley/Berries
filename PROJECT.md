@@ -21,6 +21,7 @@ A Suggestion means **worth your attention**, not **the next required action**.
 Current projections are:
 
     Groups
+    Directory Namesakes
     Directory
     Branch
     Corpus Roots
@@ -42,7 +43,7 @@ No physical filesystem modification occurs until **Execute**.
 2. **Portrait-first.** The Initial Portrait is fixed for a session. The Working Portrait is deterministically reconstructed from it plus ordered portrait operations.
 3. **Groups are session-stable identities.** Group membership may fall to one or zero; Groups are not rediscovered after primary discovery.
 4. **Unique files are summarized after discovery.** Their fixed per-Directory counts remain for structural statistics; their individual `FileInstance`s are pruned from the session Portrait.
-5. **Selection always means files** and persists across projections.
+5. **Ordinary Selection means files** and persists across ordinary projections. Directory Namesakes is a deliberate specialized view: its local selection denotes Namesake categories or concrete Directory occurrences and never mutates persistent file Selection.
 6. **Projection is navigation, not authority.** A Case is a bounded duplicate problem considered for one coherent disposition; a displayed projection need not itself be a Case.
 7. **Suggestions guide attention, not workflow.** The user remains free to follow recognizable structure.
 8. **Operations are explicit.** Exclude/Delete/Move change the Working Portrait immediately; there is no Keep, Accept, or Apply state.
