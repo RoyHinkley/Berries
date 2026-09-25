@@ -104,7 +104,7 @@
               </TreeView.Styles>
               <TreeView.ItemsPanel>
                 <ItemsPanelTemplate>
-                  <VirtualizingStackPanel />
+                  <local:BerriesVirtualizingStackPanel />
                 </ItemsPanelTemplate>
               </TreeView.ItemsPanel>
               <TreeView.ItemTemplate>
@@ -126,7 +126,7 @@
                 </TreeView.Styles>
                 <TreeView.ItemsPanel>
                   <ItemsPanelTemplate>
-                    <VirtualizingStackPanel />
+                    <local:BerriesVirtualizingStackPanel />
                   </ItemsPanelTemplate>
                 </TreeView.ItemsPanel>
                 <TreeView.ItemTemplate>
@@ -146,7 +146,7 @@
                 </TreeView.Styles>
                 <TreeView.ItemsPanel>
                   <ItemsPanelTemplate>
-                    <VirtualizingStackPanel />
+                    <local:BerriesVirtualizingStackPanel />
                   </ItemsPanelTemplate>
                 </TreeView.ItemsPanel>
                 <TreeView.ItemTemplate>
