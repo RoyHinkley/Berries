@@ -104,7 +104,7 @@
               </TreeView.Styles>
               <TreeView.ItemsPanel>
                 <ItemsPanelTemplate>
-                  <VirtualizingStackPanel />
+                  <StackPanel />
                 </ItemsPanelTemplate>
               </TreeView.ItemsPanel>
               <TreeView.ItemTemplate>
