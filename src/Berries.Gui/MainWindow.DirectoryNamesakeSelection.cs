@@ -109,7 +109,7 @@ public partial class MainWindow
 
     private void SynchronizeDirectoryNamesakeSelection()
     {
-        SynchronizeRealizedSelection(
+        SynchronizeRowSelection(
             ExplorerTree,
             node => directoryNamesakeTargets.TryGetValue(node, out var target)
                 && (target.Directory is null
