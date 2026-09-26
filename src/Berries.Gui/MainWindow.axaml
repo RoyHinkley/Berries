@@ -100,12 +100,11 @@
               <TreeView.Styles>
                 <Style Selector="TreeViewItem" x:DataType="local:ExplorerNode">
                   <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-                <Setter Property="Focusable" Value="False" />
                 </Style>
               </TreeView.Styles>
               <TreeView.ItemsPanel>
                 <ItemsPanelTemplate>
-                  <VirtualizingStackPanel />
+                  <local:BerriesVirtualizingStackPanel />
                 </ItemsPanelTemplate>
               </TreeView.ItemsPanel>
               <TreeView.ItemTemplate>
@@ -123,12 +122,11 @@
                 <TreeView.Styles>
                   <Style Selector="TreeViewItem" x:DataType="local:ExplorerNode">
                     <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-                <Setter Property="Focusable" Value="False" />
                   </Style>
                 </TreeView.Styles>
                 <TreeView.ItemsPanel>
                   <ItemsPanelTemplate>
-                    <VirtualizingStackPanel />
+                    <local:BerriesVirtualizingStackPanel />
                   </ItemsPanelTemplate>
                 </TreeView.ItemsPanel>
                 <TreeView.ItemTemplate>
@@ -144,12 +142,11 @@
                 <TreeView.Styles>
                   <Style Selector="TreeViewItem" x:DataType="local:ExplorerNode">
                     <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-                <Setter Property="Focusable" Value="False" />
                   </Style>
                 </TreeView.Styles>
                 <TreeView.ItemsPanel>
                   <ItemsPanelTemplate>
-                    <VirtualizingStackPanel />
+                    <local:BerriesVirtualizingStackPanel />
                   </ItemsPanelTemplate>
                 </TreeView.ItemsPanel>
                 <TreeView.ItemTemplate>
