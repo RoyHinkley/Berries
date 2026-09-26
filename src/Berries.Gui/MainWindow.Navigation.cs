@@ -34,11 +34,6 @@ public partial class MainWindow
             && Projections.CorpusRootsMatch(corpus, roots.Select(root => new FileSystemPath(root)));
     }
 
-    private void ExplorerSelectionChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (!synchronizingSelection) UpdateCapabilities();
-    }
-
     private void UpdatePivotCapabilities()
     {
         var session = controller.Session;
