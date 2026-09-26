@@ -1,9 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.VisualTree;
 using Berries.Core.Domain;
 using Berries.Projection;
 
@@ -17,20 +15,22 @@ public partial class MainWindow
     private void ExplorerNode_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (controller.Session is not { } session
-            || e.GetCurrentPoint(sender as Visual).Properties.PointerUpdateKind != PointerUpdateKind.LeftButtonPressed
+            || sender is not BerriesTreeView tree
+            || e.GetCurrentPoint(tree).Properties.PointerUpdateKind != PointerUpdateKind.LeftButtonPressed
             || e.Source is not Visual source)
             return;
 
         Visual? current = source;
-        while (current is not null && current is not TreeViewItem)
+        while (current is not null && current is not ListBoxItem)
         {
             // The disclosure button owns expansion/collapse and must not also toggle selection.
             if (current is ToggleButton) return;
             current = current.GetVisualParent();
         }
 
-        if (current is not TreeViewItem { DataContext: ExplorerNode node }) return;
+        if (current is not ListBoxItem { DataContext: ExplorerRow row }) return;
 
+        var node = row.Node;
         focusedNode = node;
         if (IsDirectoryNamesakesProjection())
         {
@@ -44,6 +44,20 @@ public partial class MainWindow
         SynchronizeVisibleSelection();
         UpdateSelectionSummary();
         UpdateCapabilities();
+        e.Handled = true;
+    }
+
+    private void ExplorerDisclosure_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleButton { DataContext: ExplorerRow row } button)
+            return;
+
+        var tree = button.FindAncestorOfType<BerriesTreeView>();
+        if (tree is null)
+            return;
+
+        tree.ToggleExpansion(row.Node);
+        SynchronizeVisibleSelection();
         e.Handled = true;
     }
 
@@ -152,7 +166,7 @@ public partial class MainWindow
         return await dialog.ShowDialog<bool>(this);
     }
 
-    private IEnumerable<TreeView> ActiveTrees()
+    private IEnumerable<BerriesTreeView> ActiveTrees()
     {
         if (currentProjection?.IsPair == true) { yield return LeftTree; yield return RightTree; }
         else yield return ExplorerTree;
@@ -168,18 +182,19 @@ public partial class MainWindow
 
         if (controller.Session is not { } session) return;
         foreach (var tree in ActiveTrees())
-            SynchronizeRealizedSelection(
+            SynchronizeRowSelection(
                 tree,
                 node => node.Files.Count > 0 && node.Files.All(session.Selection.Contains));
     }
 
-    private static void SynchronizeRealizedSelection(
-        TreeView tree,
+    private static void SynchronizeRowSelection(
+        BerriesTreeView tree,
         Func<ExplorerNode, bool> isSelected)
     {
-        foreach (var item in tree.GetVisualDescendants().OfType<TreeViewItem>())
-            if (item.DataContext is ExplorerNode node)
-                SelectingItemsControl.SetIsSelected(item, isSelected(node));
+        tree.SelectedItems.Clear();
+        foreach (var row in tree.Rows)
+            if (isSelected(row.Node))
+                tree.SelectedItems.Add(row);
     }
 
     private void UpdateSelectionSummary()
