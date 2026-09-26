@@ -168,19 +168,19 @@ public partial class MainWindow
         }
 
         if (controller.Session is not { } session) return;
-        synchronizingSelection = true;
-        try
-        {
-            foreach (var tree in ActiveTrees())
-            {
-                if (tree.SelectedItems is null) continue;
-                tree.SelectedItems.Clear();
-                foreach (var node in EnumerateNodes(tree.ItemsSource)
-                    .Where(node => node.Files.Count > 0 && node.Files.All(session.Selection.Contains)))
-                    tree.SelectedItems.Add(node);
-            }
-        }
-        finally { synchronizingSelection = false; }
+        foreach (var tree in ActiveTrees())
+            SynchronizeRealizedSelection(
+                tree,
+                node => node.Files.Count > 0 && node.Files.All(session.Selection.Contains));
+    }
+
+    private static void SynchronizeRealizedSelection(
+        TreeView tree,
+        Func<ExplorerNode, bool> isSelected)
+    {
+        foreach (var item in tree.GetVisualDescendants().OfType<TreeViewItem>())
+            if (item.DataContext is ExplorerNode node)
+                SelectingItemsControl.SetIsSelected(item, isSelected(node));
     }
 
     private void UpdateSelectionSummary()
