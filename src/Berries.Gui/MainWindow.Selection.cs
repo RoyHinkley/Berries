@@ -12,7 +12,6 @@ namespace Berries.Gui;
 public partial class MainWindow
 {
     private ExplorerNode? focusedNode;
-    private bool synchronizingSelection;
     private ProjectionState? currentProjection;
 
     private void ExplorerNode_PointerPressed(object? sender, PointerPressedEventArgs e)
