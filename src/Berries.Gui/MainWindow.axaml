@@ -96,64 +96,64 @@
           </StackPanel>
 
           <Grid x:Name="SingleExplorer" Grid.Row="1">
-            <local:BerriesTreeView x:Name="ExplorerTree" SelectionMode="Multiple" PointerPressed="ExplorerNode_PointerPressed">
-              <TreeView.Styles>
-                <Style Selector="TreeViewItem" x:DataType="local:ExplorerNode">
-                  <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-                </Style>
-              </TreeView.Styles>
-              <TreeView.ItemsPanel>
+            <local:BerriesTreeView x:Name="ExplorerTree" PointerPressed="ExplorerNode_PointerPressed">
+              <ListBox.ItemsPanel>
                 <ItemsPanelTemplate>
                   <VirtualizingStackPanel />
                 </ItemsPanelTemplate>
-              </TreeView.ItemsPanel>
-              <TreeView.ItemTemplate>
-                <TreeDataTemplate x:DataType="local:ExplorerNode" ItemsSource="{Binding Children}">
-                  <TextBlock Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" />
-                </TreeDataTemplate>
-              </TreeView.ItemTemplate>
+              </ListBox.ItemsPanel>
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="local:ExplorerRow">
+                  <Grid Margin="{Binding Indent}" ColumnDefinitions="18,*">
+                    <ToggleButton Grid.Column="0" IsVisible="{Binding HasChildren}" IsChecked="{Binding Node.IsExpanded}" Click="ExplorerDisclosure_Click" Padding="0" MinWidth="16" MinHeight="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                      <TextBlock Text="›" FontSize="16" />
+                    </ToggleButton>
+                    <TextBlock Grid.Column="1" Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
             </local:BerriesTreeView>
           </Grid>
 
           <Grid x:Name="PairExplorer" Grid.Row="1" IsVisible="False" ColumnDefinitions="*,*" ColumnSpacing="14">
             <Grid RowDefinitions="Auto,*">
               <StackPanel x:Name="LeftScopeBreadcrumbs" Orientation="Horizontal" Spacing="4" Margin="2,0,0,8" />
-              <local:BerriesTreeView x:Name="LeftTree" Grid.Row="1" SelectionMode="Multiple" PointerPressed="ExplorerNode_PointerPressed">
-                <TreeView.Styles>
-                  <Style Selector="TreeViewItem" x:DataType="local:ExplorerNode">
-                    <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-                  </Style>
-                </TreeView.Styles>
-                <TreeView.ItemsPanel>
+              <local:BerriesTreeView x:Name="LeftTree" Grid.Row="1" PointerPressed="ExplorerNode_PointerPressed">
+                <ListBox.ItemsPanel>
                   <ItemsPanelTemplate>
                     <VirtualizingStackPanel />
                   </ItemsPanelTemplate>
-                </TreeView.ItemsPanel>
-                <TreeView.ItemTemplate>
-                  <TreeDataTemplate x:DataType="local:ExplorerNode" ItemsSource="{Binding Children}">
-                    <TextBlock Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" />
-                  </TreeDataTemplate>
-                </TreeView.ItemTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="local:ExplorerRow">
+                    <Grid Margin="{Binding Indent}" ColumnDefinitions="18,*">
+                      <ToggleButton Grid.Column="0" IsVisible="{Binding HasChildren}" IsChecked="{Binding Node.IsExpanded}" Click="ExplorerDisclosure_Click" Padding="0" MinWidth="16" MinHeight="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="›" FontSize="16" />
+                      </ToggleButton>
+                      <TextBlock Grid.Column="1" Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center" />
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
               </local:BerriesTreeView>
             </Grid>
             <Grid Grid.Column="1" RowDefinitions="Auto,*">
               <StackPanel x:Name="RightScopeBreadcrumbs" Orientation="Horizontal" Spacing="4" Margin="2,0,0,8" />
-              <local:BerriesTreeView x:Name="RightTree" Grid.Row="1" SelectionMode="Multiple" PointerPressed="ExplorerNode_PointerPressed">
-                <TreeView.Styles>
-                  <Style Selector="TreeViewItem" x:DataType="local:ExplorerNode">
-                    <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-                  </Style>
-                </TreeView.Styles>
-                <TreeView.ItemsPanel>
+              <local:BerriesTreeView x:Name="RightTree" Grid.Row="1" PointerPressed="ExplorerNode_PointerPressed">
+                <ListBox.ItemsPanel>
                   <ItemsPanelTemplate>
                     <VirtualizingStackPanel />
                   </ItemsPanelTemplate>
-                </TreeView.ItemsPanel>
-                <TreeView.ItemTemplate>
-                  <TreeDataTemplate x:DataType="local:ExplorerNode" ItemsSource="{Binding Children}">
-                    <TextBlock Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" />
-                  </TreeDataTemplate>
-                </TreeView.ItemTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="local:ExplorerRow">
+                    <Grid Margin="{Binding Indent}" ColumnDefinitions="18,*">
+                      <ToggleButton Grid.Column="0" IsVisible="{Binding HasChildren}" IsChecked="{Binding Node.IsExpanded}" Click="ExplorerDisclosure_Click" Padding="0" MinWidth="16" MinHeight="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="›" FontSize="16" />
+                      </ToggleButton>
+                      <TextBlock Grid.Column="1" Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center" />
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
               </local:BerriesTreeView>
             </Grid>
           </Grid>
