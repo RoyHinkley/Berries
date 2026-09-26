@@ -109,25 +109,12 @@ public partial class MainWindow
 
     private void SynchronizeDirectoryNamesakeSelection()
     {
-        synchronizingSelection = true;
-        try
-        {
-            if (ExplorerTree.SelectedItems is null)
-                return;
-
-            ExplorerTree.SelectedItems.Clear();
-            foreach (var name in selectedDirectoryNamesakeNames)
-                if (directoryNamesakeNameNodes.TryGetValue(name, out var node))
-                    ExplorerTree.SelectedItems.Add(node);
-
-            foreach (var path in selectedDirectoryNamesakeOccurrences)
-                if (directoryNamesakeOccurrenceNodes.TryGetValue(DirectoryPathKey(path), out var node))
-                    ExplorerTree.SelectedItems.Add(node);
-        }
-        finally
-        {
-            synchronizingSelection = false;
-        }
+        SynchronizeRealizedSelection(
+            ExplorerTree,
+            node => directoryNamesakeTargets.TryGetValue(node, out var target)
+                && (target.Directory is null
+                    ? selectedDirectoryNamesakeNames.Contains(target.Name)
+                    : IsDirectoryOccurrenceSelected(target.Directory.Value)));
     }
 
     private void UpdateDirectoryNamesakeSelectionSummary()
