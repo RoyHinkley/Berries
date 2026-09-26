@@ -1,60 +1,96 @@
-using System.Diagnostics;
+using System.Collections;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Input;
-using Avalonia.Interactivity;
-using Avalonia.VisualTree;
+using Avalonia.Controls.Primitives;
 
 namespace Berries.Gui;
 
 /// <summary>
-/// TreeView whose semantic selection is controlled by Berries rather than by
-/// Avalonia's native TreeView selection model.
+/// Virtualized flat presentation of an ExplorerNode hierarchy.
+///
+/// Avalonia TreeView virtualizes top-level items, so an expanded root becomes one
+/// very tall virtualized item. That makes the virtualizer's size estimates unstable
+/// when branches expand. This control instead virtualizes the visible rows directly.
 /// </summary>
-public sealed class BerriesTreeView : TreeView
+public sealed class BerriesTreeView : ListBox
 {
-    private ScrollViewer? diagnosticScrollViewer;
-    private double diagnosticOffsetBefore;
-    private string? diagnosticNode;
-    private bool diagnosticLayoutPending;
+    private readonly ObservableCollection<ExplorerRow> rows = [];
+    private IEnumerable? hierarchyItemsSource;
+    private INotifyCollectionChanged? hierarchyNotifier;
 
     public BerriesTreeView()
     {
-        AddHandler(TreeViewItem.ExpandedEvent, ExpansionChanged, RoutingStrategies.Bubble);
-        AddHandler(TreeViewItem.CollapsedEvent, ExpansionChanged, RoutingStrategies.Bubble);
-        LayoutUpdated += DiagnosticLayoutUpdated;
+        base.ItemsSource = rows;
+        SelectionMode = SelectionMode.Multiple;
     }
 
-    protected override Type StyleKeyOverride => typeof(TreeView);
+    protected override Type StyleKeyOverride => typeof(ListBox);
 
-    protected override bool ShouldTriggerSelection(Visual selectable, PointerEventArgs eventArgs) => false;
-
-    protected override bool ShouldTriggerSelection(Visual selectable, KeyEventArgs eventArgs) => false;
-
-    private void ExpansionChanged(object? sender, RoutedEventArgs e)
+    public new IEnumerable? ItemsSource
     {
-        if (e.Source is not TreeViewItem item)
-            return;
+        get => hierarchyItemsSource;
+        set
+        {
+            if (ReferenceEquals(hierarchyItemsSource, value))
+                return;
 
-        diagnosticScrollViewer ??= this.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
-        if (diagnosticScrollViewer is null)
-            return;
+            if (hierarchyNotifier is not null)
+                hierarchyNotifier.CollectionChanged -= HierarchyCollectionChanged;
 
-        diagnosticOffsetBefore = diagnosticScrollViewer.Offset.Y;
-        diagnosticNode = (item.DataContext as ExplorerNode)?.Label ?? "<unknown>";
-        diagnosticLayoutPending = true;
+            hierarchyItemsSource = value;
+            hierarchyNotifier = value as INotifyCollectionChanged;
 
-        Debug.WriteLine(
-            $"BERRIES TREE EXPANSION before: node={diagnosticNode}, offset={diagnosticOffsetBefore:F2}");
+            if (hierarchyNotifier is not null)
+                hierarchyNotifier.CollectionChanged += HierarchyCollectionChanged;
+
+            RebuildRows();
+        }
     }
 
-    private void DiagnosticLayoutUpdated(object? sender, EventArgs e)
+    public IReadOnlyList<ExplorerRow> Rows => rows;
+
+    public void ToggleExpansion(ExplorerNode node)
     {
-        if (!diagnosticLayoutPending || diagnosticScrollViewer is null)
+        if (node.Children.Count == 0)
             return;
 
-        diagnosticLayoutPending = false;
-        Debug.WriteLine(
-            $"BERRIES TREE EXPANSION after:  node={diagnosticNode}, offset={diagnosticScrollViewer.Offset.Y:F2}");
+        node.IsExpanded = !node.IsExpanded;
+        RebuildRows();
     }
+
+    public void RefreshRows() => RebuildRows();
+
+    private void HierarchyCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+        RebuildRows();
+
+    private void RebuildRows()
+    {
+        rows.Clear();
+
+        if (hierarchyItemsSource is null)
+            return;
+
+        foreach (var node in hierarchyItemsSource.OfType<ExplorerNode>())
+            AppendVisible(node, 0);
+    }
+
+    private void AppendVisible(ExplorerNode node, int depth)
+    {
+        rows.Add(new ExplorerRow(node, depth));
+
+        if (!node.IsExpanded)
+            return;
+
+        foreach (var child in node.Children)
+            AppendVisible(child, depth + 1);
+    }
+}
+
+public sealed record ExplorerRow(ExplorerNode Node, int Depth)
+{
+    public string Label => Node.Label;
+    public bool HasChildren => Node.Children.Count > 0;
+    public Thickness Indent => new(Depth * 18, 0, 0, 0);
 }
