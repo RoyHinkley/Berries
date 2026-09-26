@@ -67,7 +67,7 @@ public sealed class BerriesTreeView : TreeView
             return;
 
         var maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
-        var newY = Math.Clamp(scrollViewer.Offset.Y + delta, 0, maxY);
+        var newY = Math.Clamp(scrollViewer.Offset.Y - delta, 0, maxY);
         scrollViewer.Offset = scrollViewer.Offset.WithY(newY);
     }
 }
