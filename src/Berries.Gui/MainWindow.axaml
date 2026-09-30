@@ -128,12 +128,14 @@
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="local:ExplorerRow">
-                    <Grid Margin="{Binding Indent}" ColumnDefinitions="18,*">
+                    <Border Background="{DynamicResource ListBoxItemSelectedBackground}" IsVisible="{Binding IsSelected}">
+<Grid Margin="{Binding Indent}" ColumnDefinitions="18,*">
                       <Border Grid.Column="0" IsVisible="{Binding HasChildren}" PointerPressed="ExplorerDisclosure_PointerPressed" Background="Transparent">
                         <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
                       </Border>
                       <TextBlock Grid.Column="1" Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center" />
                     </Grid>
+</Border>
                   </DataTemplate>
                 </ListBox.ItemTemplate>
               </local:ExplorerList>
@@ -148,12 +150,14 @@
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="local:ExplorerRow">
-                    <Grid Margin="{Binding Indent}" ColumnDefinitions="18,*">
+                    <Border Background="{DynamicResource ListBoxItemSelectedBackground}" IsVisible="{Binding IsSelected}">
+<Grid Margin="{Binding Indent}" ColumnDefinitions="18,*">
                       <Border Grid.Column="0" IsVisible="{Binding HasChildren}" PointerPressed="ExplorerDisclosure_PointerPressed" Background="Transparent">
                         <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
                       </Border>
                       <TextBlock Grid.Column="1" Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center" />
                     </Grid>
+</Border>
                   </DataTemplate>
                 </ListBox.ItemTemplate>
               </local:ExplorerList>
