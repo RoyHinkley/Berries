@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
@@ -192,10 +193,14 @@ public partial class MainWindow
         BerriesTreeView tree,
         Func<ExplorerNode, bool> isSelected)
     {
-        tree.SelectedItems.Clear();
+        var selectedItems = tree.SelectedItems;
+        if (selectedItems is null)
+            return;
+
+        selectedItems.Clear();
         foreach (var row in tree.Rows)
             if (isSelected(row.Node))
-                tree.SelectedItems.Add(row);
+                selectedItems.Add(row);
     }
 
     private void UpdateSelectionSummary()
