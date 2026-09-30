@@ -168,7 +168,7 @@ public partial class MainWindow
         return await dialog.ShowDialog<bool>(this);
     }
 
-    private IEnumerable<ExplorerList> ActiveTrees()
+    private IEnumerable<ExplorerList> ActiveExplorerLists()
     {
         if (currentProjection?.IsPair == true) { yield return LeftTree; yield return RightTree; }
         else yield return ExplorerTree;
@@ -183,9 +183,9 @@ public partial class MainWindow
         }
 
         if (controller.Session is not { } session) return;
-        foreach (var tree in ActiveTrees())
+        foreach (var list in ActiveExplorerLists())
             SynchronizeRowSelection(
-                tree,
+                list,
                 node => node.Files.Count > 0 && node.Files.All(session.Selection.Contains));
     }
 
