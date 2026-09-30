@@ -62,8 +62,64 @@ public sealed class BerriesTreeView : ListBox
 
     public void RefreshRows() => RebuildRows();
 
-    private void HierarchyCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+    private void HierarchyCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        // Groups are published incrementally into an ObservableCollection. Appending a
+        // collapsed top-level node is also exactly one visible-row append; rebuilding
+        // all preceding rows here would make incremental publication O(N²).
+        if (e.Action == NotifyCollectionChangedAction.Add
+            && e.NewItems is not null
+            && e.NewStartingIndex >= 0)
+        {
+            var insertAt = VisibleRowIndexForRoot(e.NewStartingIndex);
+            foreach (var node in e.NewItems.OfType<ExplorerNode>())
+            {
+                var added = FlattenVisible(node, 0);
+                foreach (var row in added)
+                    rows.Insert(insertAt++, row);
+            }
+            return;
+        }
+
         RebuildRows();
+    }
+
+    private int VisibleRowIndexForRoot(int rootIndex)
+    {
+        if (hierarchyItemsSource is not IList roots)
+            return rows.Count;
+
+        var visible = 0;
+        for (var i = 0; i < rootIndex && i < roots.Count; i++)
+            if (roots[i] is ExplorerNode node)
+                visible += CountVisible(node);
+
+        return visible;
+    }
+
+    private static int CountVisible(ExplorerNode node)
+    {
+        var count = 1;
+        if (node.IsExpanded)
+            foreach (var child in node.Children)
+                count += CountVisible(child);
+        return count;
+    }
+
+    private static List<ExplorerRow> FlattenVisible(ExplorerNode node, int depth)
+    {
+        var result = new List<ExplorerRow>();
+        AppendVisible(node, depth, result);
+        return result;
+    }
+
+    private static void AppendVisible(ExplorerNode node, int depth, List<ExplorerRow> result)
+    {
+        result.Add(new ExplorerRow(node, depth));
+        if (node.IsExpanded)
+            foreach (var child in node.Children)
+                AppendVisible(child, depth + 1, result);
+    }
 
     private void RebuildRows()
     {
