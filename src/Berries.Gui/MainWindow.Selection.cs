@@ -193,14 +193,8 @@ public partial class MainWindow
         ExplorerList tree,
         Func<ExplorerNode, bool> isSelected)
     {
-        var selectedItems = tree.SelectedItems;
-        if (selectedItems is null)
-            return;
-
-        selectedItems.Clear();
         foreach (var row in tree.Rows)
-            if (isSelected(row.Node))
-                selectedItems.Add(row);
+            row.IsSelected = isSelected(row.Node);
     }
 
     private void UpdateSelectionSummary()
