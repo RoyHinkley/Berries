@@ -469,14 +469,26 @@ public partial class MainWindow : Window
     private void ExitMenu_Click(object? sender, RoutedEventArgs e) => Close();
 }
 
+/// <summary>
+/// Logical Explorer hierarchy node, independent of Avalonia item-container lifetime.
+/// </summary>
 public sealed class ExplorerNode(
     string label,
     IReadOnlyList<FileInstance>? files = null,
     FileSystemPath? semanticPath = null)
 {
+    /// <summary>Gets the presentation label.</summary>
     public string Label { get; } = label;
+
+    /// <summary>Gets or sets the semantic files represented by this node.</summary>
     public IReadOnlyList<FileInstance> Files { get; set; } = files ?? [];
+
+    /// <summary>Gets the filesystem scope represented by this node, when applicable.</summary>
     public FileSystemPath? SemanticPath { get; } = semanticPath;
+
+    /// <summary>Gets or sets logical expansion state retained independently of row realization.</summary>
     public bool IsExpanded { get; set; }
+
+    /// <summary>Gets the logical child nodes.</summary>
     public List<ExplorerNode> Children { get; } = [];
 }
