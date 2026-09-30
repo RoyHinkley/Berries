@@ -147,7 +147,7 @@ public partial class MainWindow
             var nodes = new ObservableCollection<ExplorerNode>();
             ExplorerTree.ItemsSource = nodes;
             await Task.Yield();
-            await BuildGroupsExplorerTreeAsync(groups, nodes, 0, operation);
+            await BuildGroupsExplorerNodesAsync(groups, nodes, 0, operation);
 
             if (!IsCurrentNavigation(operation))
                 throw new OperationCanceledException(operation.Token);
