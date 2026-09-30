@@ -21,13 +21,16 @@ public sealed class ExplorerList : ListBox
     private IEnumerable? hierarchyItemsSource;
     private INotifyCollectionChanged? hierarchyNotifier;
 
+    /// <summary>Creates an Explorer control backed by its flattened visible-row collection.</summary>
     public ExplorerList()
     {
         base.ItemsSource = rows;
     }
 
+    /// <inheritdoc />
     protected override Type StyleKeyOverride => typeof(ListBox);
 
+    /// <summary>Gets or sets the logical root-node collection presented by this control.</summary>
     public new IEnumerable? ItemsSource
     {
         get => hierarchyItemsSource;
@@ -49,8 +52,12 @@ public sealed class ExplorerList : ListBox
         }
     }
 
+    /// <summary>Gets the currently visible flattened rows in display order.</summary>
     public IReadOnlyList<ExplorerRow> Rows => rows;
 
+    /// <summary>
+    /// Toggles a visible node by inserting or removing only its contiguous descendant rows.
+    /// </summary>
     public void ToggleExpansion(ExplorerNode node)
     {
         if (node.Children.Count == 0)
@@ -92,6 +99,7 @@ public sealed class ExplorerList : ListBox
         }
     }
 
+    /// <summary>Rebuilds visible rows from the current logical hierarchy and expansion state.</summary>
     public void RefreshRows() => RebuildRows();
 
     private void HierarchyCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -176,16 +184,30 @@ public sealed class ExplorerList : ListBox
     }
 }
 
+/// <summary>
+/// GUI row produced by flattening a visible <see cref="ExplorerNode"/> at a hierarchy depth.
+/// Selection is derived presentation state and is recomputed from semantic selection.
+/// </summary>
 public sealed class ExplorerRow(ExplorerNode node, int depth) : INotifyPropertyChanged
 {
     private bool isSelected;
 
+    /// <summary>Gets the logical node represented by this row.</summary>
     public ExplorerNode Node { get; } = node;
+
+    /// <summary>Gets the zero-based hierarchy depth used for indentation.</summary>
     public int Depth { get; } = depth;
+
+    /// <summary>Gets the displayed node label.</summary>
     public string Label => Node.Label;
+
+    /// <summary>Gets whether the logical node can be expanded.</summary>
     public bool HasChildren => Node.Children.Count > 0;
+
+    /// <summary>Gets the row indentation implied by <see cref="Depth"/>.</summary>
     public Thickness Indent => new(Depth * 18, 0, 0, 0);
 
+    /// <summary>Gets or sets whether semantic selection rules currently highlight this row.</summary>
     public bool IsSelected
     {
         get => isSelected;
@@ -199,6 +221,7 @@ public sealed class ExplorerRow(ExplorerNode node, int depth) : INotifyPropertyC
         }
     }
 
+    /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
