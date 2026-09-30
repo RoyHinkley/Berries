@@ -32,7 +32,7 @@ public partial class MainWindow
 
     private void ExplorerNode_ContextRequested(object? sender, RoutedEventArgs e)
     {
-        if (sender is not Control { DataContext: ExplorerNode node } control)
+        if (sender is not Control { DataContext: ExplorerRow { Node: var node } } control)
             return;
 
         focusedNode = node;
