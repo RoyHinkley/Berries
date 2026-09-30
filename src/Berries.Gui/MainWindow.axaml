@@ -105,9 +105,9 @@
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="local:ExplorerRow">
                   <Grid Margin="{Binding Indent}" ColumnDefinitions="18,*">
-                    <ToggleButton Grid.Column="0" IsVisible="{Binding HasChildren}" IsChecked="{Binding Node.IsExpanded}" Click="ExplorerDisclosure_Click" Padding="0" MinWidth="16" MinHeight="16" HorizontalAlignment="Center" VerticalAlignment="Center">
-                      <TextBlock Text="›" FontSize="16" />
-                    </ToggleButton>
+                    <Border Grid.Column="0" IsVisible="{Binding HasChildren}" PointerPressed="ExplorerDisclosure_PointerPressed" Background="Transparent">
+                      <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
                     <TextBlock Grid.Column="1" Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center" />
                   </Grid>
                 </DataTemplate>
@@ -127,9 +127,9 @@
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="local:ExplorerRow">
                     <Grid Margin="{Binding Indent}" ColumnDefinitions="18,*">
-                      <ToggleButton Grid.Column="0" IsVisible="{Binding HasChildren}" IsChecked="{Binding Node.IsExpanded}" Click="ExplorerDisclosure_Click" Padding="0" MinWidth="16" MinHeight="16" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="›" FontSize="16" />
-                      </ToggleButton>
+                      <Border Grid.Column="0" IsVisible="{Binding HasChildren}" PointerPressed="ExplorerDisclosure_PointerPressed" Background="Transparent">
+                        <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                      </Border>
                       <TextBlock Grid.Column="1" Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center" />
                     </Grid>
                   </DataTemplate>
@@ -147,9 +147,9 @@
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="local:ExplorerRow">
                     <Grid Margin="{Binding Indent}" ColumnDefinitions="18,*">
-                      <ToggleButton Grid.Column="0" IsVisible="{Binding HasChildren}" IsChecked="{Binding Node.IsExpanded}" Click="ExplorerDisclosure_Click" Padding="0" MinWidth="16" MinHeight="16" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="›" FontSize="16" />
-                      </ToggleButton>
+                      <Border Grid.Column="0" IsVisible="{Binding HasChildren}" PointerPressed="ExplorerDisclosure_PointerPressed" Background="Transparent">
+                        <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                      </Border>
                       <TextBlock Grid.Column="1" Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center" />
                     </Grid>
                   </DataTemplate>
