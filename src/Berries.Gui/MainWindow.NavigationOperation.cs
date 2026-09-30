@@ -68,7 +68,7 @@ public partial class MainWindow
         return groupsExplorerCache;
     }
 
-    private async Task BuildGroupsExplorerTreeAsync(
+    private async Task BuildGroupsExplorerNodesAsync(
         IReadOnlyList<GroupProjection> groups,
         ObservableCollection<ExplorerNode> nodes,
         int startIndex,
@@ -81,8 +81,8 @@ public partial class MainWindow
         var buildTime = TimeSpan.Zero;
         var publishTime = TimeSpan.Zero;
         var yieldTime = TimeSpan.Zero;
-        operation.Mark($"Groups tree start ({completed:N0}/{total:N0})");
-        ShowNavigationProgress(operation, new OperationProgress("Building Groups tree", completed, total));
+        operation.Mark($"Groups nodes start ({completed:N0}/{total:N0})");
+        ShowNavigationProgress(operation, new OperationProgress("Building Groups view", completed, total));
 
         while (completed < total)
         {
@@ -112,7 +112,7 @@ public partial class MainWindow
 
             completed += batch.Length;
             builtThrough?.Invoke(completed);
-            ShowNavigationProgress(operation, new OperationProgress("Building Groups tree", completed, total));
+            ShowNavigationProgress(operation, new OperationProgress("Building Groups view", completed, total));
             publishTime += phase.Elapsed;
 
             // Yield at input priority: pending input can run, but continued tree construction
@@ -123,7 +123,7 @@ public partial class MainWindow
         }
 
         operation.Mark(
-            $"Groups tree complete ({completed:N0}/{total:N0}); "
+            $"Groups nodes complete ({completed:N0}/{total:N0}); "
             + $"build {buildTime.TotalMilliseconds:N1} ms, "
             + $"publish {publishTime.TotalMilliseconds:N1} ms, "
             + $"dispatcher wait {yieldTime.TotalMilliseconds:N1} ms");
