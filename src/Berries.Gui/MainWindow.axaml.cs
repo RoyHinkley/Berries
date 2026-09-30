@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Platform.Storage;
@@ -24,6 +25,18 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // ListBoxItem handles pointer presses for its native selection before the
+        // event reaches ExplorerList. Explorer selection has different semantics,
+        // so observe handled presses and project our semantic selection back onto
+        // the rows after native bookkeeping has occurred.
+        ExplorerTree.AddHandler(InputElement.PointerPressedEvent, ExplorerNode_PointerPressed,
+            RoutingStrategies.Bubble, handledEventsToo: true);
+        LeftTree.AddHandler(InputElement.PointerPressedEvent, ExplorerNode_PointerPressed,
+            RoutingStrategies.Bubble, handledEventsToo: true);
+        RightTree.AddHandler(InputElement.PointerPressedEvent, ExplorerNode_PointerPressed,
+            RoutingStrategies.Bubble, handledEventsToo: true);
+
         var engine = new BerriesEngine(fileSystem);
         controller = new BerriesApplication(
             fileSystem,
