@@ -47,6 +47,7 @@ public partial class MainWindow
             {
                 StatusProgress.IsVisible = false;
                 StatusProgress.IsIndeterminate = false;
+                StatusText.Text = string.Empty;
             }
         });
 
