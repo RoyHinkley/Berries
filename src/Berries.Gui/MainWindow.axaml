@@ -108,9 +108,19 @@
                     <Border Background="{DynamicResource SystemControlHighlightListAccentLowBrush}" IsVisible="{Binding IsSelected}" />
                     <Grid Margin="{Binding Indent}" ColumnDefinitions="18,*">
                       <Border Grid.Column="0" IsVisible="{Binding HasChildren}" PointerPressed="ExplorerDisclosure_PointerPressed" Background="Transparent">
-                        <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <Grid>
+                          <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                          <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Foreground="{DynamicResource SystemControlHighlightAltBaseHighBrush}"
+                                     IsVisible="{Binding IsSelected}" />
+                        </Grid>
                       </Border>
-                      <TextBlock Grid.Column="1" Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center" />
+                      <Grid Grid.Column="1">
+                        <TextBlock Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SystemControlHighlightAltBaseHighBrush}"
+                                   IsVisible="{Binding IsSelected}" />
+                      </Grid>
                     </Grid>
                   </Grid>
                 </DataTemplate>
@@ -133,9 +143,19 @@
                     <Border Background="{DynamicResource SystemControlHighlightListAccentLowBrush}" IsVisible="{Binding IsSelected}" />
                     <Grid Margin="{Binding Indent}" ColumnDefinitions="18,*">
                       <Border Grid.Column="0" IsVisible="{Binding HasChildren}" PointerPressed="ExplorerDisclosure_PointerPressed" Background="Transparent">
-                        <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <Grid>
+                          <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                          <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Foreground="{DynamicResource SystemControlHighlightAltBaseHighBrush}"
+                                     IsVisible="{Binding IsSelected}" />
+                        </Grid>
                       </Border>
-                      <TextBlock Grid.Column="1" Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center" />
+                      <Grid Grid.Column="1">
+                        <TextBlock Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SystemControlHighlightAltBaseHighBrush}"
+                                   IsVisible="{Binding IsSelected}" />
+                      </Grid>
                     </Grid>
                   </Grid>
                   </DataTemplate>
@@ -156,9 +176,19 @@
                     <Border Background="{DynamicResource SystemControlHighlightListAccentLowBrush}" IsVisible="{Binding IsSelected}" />
                     <Grid Margin="{Binding Indent}" ColumnDefinitions="18,*">
                       <Border Grid.Column="0" IsVisible="{Binding HasChildren}" PointerPressed="ExplorerDisclosure_PointerPressed" Background="Transparent">
-                        <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <Grid>
+                          <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                          <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Foreground="{DynamicResource SystemControlHighlightAltBaseHighBrush}"
+                                     IsVisible="{Binding IsSelected}" />
+                        </Grid>
                       </Border>
-                      <TextBlock Grid.Column="1" Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center" />
+                      <Grid Grid.Column="1">
+                        <TextBlock Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Label}" ContextRequested="ExplorerNode_ContextRequested" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SystemControlHighlightAltBaseHighBrush}"
+                                   IsVisible="{Binding IsSelected}" />
+                      </Grid>
                     </Grid>
                   </Grid>
                   </DataTemplate>
