@@ -105,7 +105,7 @@
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="local:ExplorerRow">
                   <Grid>
-                    <Border Background="{DynamicResource ListBoxItemSelectedBackground}" IsVisible="{Binding IsSelected}" />
+                    <Border Background="{DynamicResource SystemControlHighlightListAccentLowBrush}" IsVisible="{Binding IsSelected}" />
                     <Grid Margin="{Binding Indent}" ColumnDefinitions="18,*">
                       <Border Grid.Column="0" IsVisible="{Binding HasChildren}" PointerPressed="ExplorerDisclosure_PointerPressed" Background="Transparent">
                         <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -130,7 +130,7 @@
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="local:ExplorerRow">
                     <Grid>
-                    <Border Background="{DynamicResource ListBoxItemSelectedBackground}" IsVisible="{Binding IsSelected}" />
+                    <Border Background="{DynamicResource SystemControlHighlightListAccentLowBrush}" IsVisible="{Binding IsSelected}" />
                     <Grid Margin="{Binding Indent}" ColumnDefinitions="18,*">
                       <Border Grid.Column="0" IsVisible="{Binding HasChildren}" PointerPressed="ExplorerDisclosure_PointerPressed" Background="Transparent">
                         <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -153,7 +153,7 @@
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="local:ExplorerRow">
                     <Grid>
-                    <Border Background="{DynamicResource ListBoxItemSelectedBackground}" IsVisible="{Binding IsSelected}" />
+                    <Border Background="{DynamicResource SystemControlHighlightListAccentLowBrush}" IsVisible="{Binding IsSelected}" />
                     <Grid Margin="{Binding Indent}" ColumnDefinitions="18,*">
                       <Border Grid.Column="0" IsVisible="{Binding HasChildren}" PointerPressed="ExplorerDisclosure_PointerPressed" Background="Transparent">
                         <TextBlock Text="›" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
