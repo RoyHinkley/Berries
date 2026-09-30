@@ -114,11 +114,19 @@ A successful Exclude/Delete/Move/Undo rebuilds the Working Portrait, advances ge
 
 ## Explorer responsiveness
 
-The GUI uses virtualized `TreeView` item panels. Do not remove virtualization from large Explorer trees: logical projections may contain many thousands of roots, and realizing all of them destroys responsiveness even when projection computation is cheap.
+The Explorer deliberately does **not** use Avalonia `TreeView`. `TreeView` virtualizes top-level containers, making an expanded branch one variable-height virtualized item; changing that height caused data-dependent viewport remapping at an unchanged scroll offset. Disabling virtualization fixes the symptom but does not scale.
 
-Groups GUI nodes are constructed/published incrementally in bounded batches and cached for the current Working Portrait. Navigation is generation-owned: only the newest request may publish visible state.
+`ExplorerList` instead flattens the currently visible `ExplorerNode` hierarchy into depth-tagged `ExplorerRow` objects and virtualizes those rows individually. Expansion mutates only the contiguous descendant-row range. Preserve this structure: do not replace it with a virtualized `TreeView`, rebuild the complete row collection on each expansion, or make native `ListBox` selection authoritative.
+
+Groups GUI nodes are constructed/published incrementally in bounded batches and cached for the current Working Portrait. The flat adapter must handle append publication incrementally; rebuilding all visible rows for each appended root creates an O(N²) GUI regression. Navigation is generation-owned: only the newest request may publish visible state.
+
+Selection highlighting is derived presentation state. After semantic selection changes, recompute visible rows from ordinary file Selection or the Directory Namesakes selection rules rather than trusting native `ListBoxItem.IsSelected`.
 
 Timing instrumentation around navigation/projection phases is intentionally retained. It is low-cost diagnostic infrastructure and should normally remain available in debug output.
+
+## Documentation practice
+
+Public identifiers should have concise XML documentation describing purpose or semantics where the identifier itself is not sufficient. Document non-obvious invariants, ownership, side effects, scaling behavior, and framework workarounds at their natural implementation point. Avoid formulaic comments that merely restate a clear name, and omit redundant parameter comments when the parameter's meaning is already evident.
 
 ## Analysis mathematics
 
@@ -193,7 +201,7 @@ The production Directory Namesakes view deliberately substitutes directory-selec
 - Best Directory Pair / Best Branch Pair and Branch are currently disabled from Directory Namesakes because their existing commands have different seed semantics; do not silently reinterpret them.
 - Suggest remains controlled solely by Suggestion availability.
 
-Large-tree behavior remains virtualized. Expansion state is now stored on `ExplorerNode.IsExpanded` and bound two-way to `TreeViewItem.IsExpanded`; recyclable visual containers must not own logical expansion state.
+Large-tree behavior uses `ExplorerList`: logical expansion remains on `ExplorerNode`, while the control virtualizes flattened visible `ExplorerRow`s and mutates only the affected descendant-row range.
 
 The existing `SuggestionBox.TakeNext()` contract is cyclic. After all current Suggestions have been seen it starts again at the highest-ranked Suggestion; the stale unit test expecting `null` after exhaustion was updated.
 
@@ -201,7 +209,7 @@ The existing `SuggestionBox.TakeNext()` contract is cyclic. After all current Su
 
 Keep this section concise, but preserve unresolved design decisions until they are settled.
 
-1. **Finish direct user interaction in Directory Namesakes.** First verify the new node-owned expand/collapse behavior in both Groups and Directory Namesakes. Then diagnose and correct the reported Namesake selection/navigation problems before extending the feature.
+1. **Finish direct user interaction in Directory Namesakes.** Expand/collapse now behaves correctly across Explorer data sources using the flat virtualized `ExplorerList`; continue validation of Namesake selection/navigation before extending the feature.
 2. **Exercise the specialized selection contract.** Test selection isolation from ordinary file Selection, Namesake-only selection, occurrence-only selection, mixed selection precedence, and all Invert cases.
 3. **Exercise Exclude end to end.** Verify session Exclude/Undo, permanent Namesake rules such as `/obj/`, path-specific occurrence rules, no-grouped-file cases, and the distinction between `/obj/` and separator-free `obj` on a fresh scan.
 4. **Exercise multi-Directory Pivot and scale.** Verify one root per selected Directory, ordinary file semantics after the Pivot, and bounded behavior with high-occurrence Namesakes such as `src`. Preserve the single-pass implementations; avoid Directory-count × Groups/files algorithms.
