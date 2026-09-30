@@ -96,7 +96,7 @@
           </StackPanel>
 
           <Grid x:Name="SingleExplorer" Grid.Row="1">
-            <local:ExplorerList x:Name="ExplorerTree" PointerPressed="ExplorerNode_PointerPressed">
+            <local:ExplorerList x:Name="ExplorerTree">
               <ListBox.Styles>
                 <Style Selector="ListBoxItem" x:DataType="local:ExplorerRow">
                   <Setter Property="IsSelected" Value="{Binding IsSelected}" />
@@ -123,7 +123,7 @@
           <Grid x:Name="PairExplorer" Grid.Row="1" IsVisible="False" ColumnDefinitions="*,*" ColumnSpacing="14">
             <Grid RowDefinitions="Auto,*">
               <StackPanel x:Name="LeftScopeBreadcrumbs" Orientation="Horizontal" Spacing="4" Margin="2,0,0,8" />
-              <local:ExplorerList x:Name="LeftTree" Grid.Row="1" PointerPressed="ExplorerNode_PointerPressed">
+              <local:ExplorerList x:Name="LeftTree" Grid.Row="1">
                 <ListBox.Styles>
                 <Style Selector="ListBoxItem" x:DataType="local:ExplorerRow">
                   <Setter Property="IsSelected" Value="{Binding IsSelected}" />
@@ -148,7 +148,7 @@
             </Grid>
             <Grid Grid.Column="1" RowDefinitions="Auto,*">
               <StackPanel x:Name="RightScopeBreadcrumbs" Orientation="Horizontal" Spacing="4" Margin="2,0,0,8" />
-              <local:ExplorerList x:Name="RightTree" Grid.Row="1" PointerPressed="ExplorerNode_PointerPressed">
+              <local:ExplorerList x:Name="RightTree" Grid.Row="1">
                 <ListBox.Styles>
                 <Style Selector="ListBoxItem" x:DataType="local:ExplorerRow">
                   <Setter Property="IsSelected" Value="{Binding IsSelected}" />
