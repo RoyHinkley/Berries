@@ -45,7 +45,7 @@ Except in Directory Namesakes, structural nodes are selection shortcuts over rep
 
 ### Selection portrayal
 
-Semantic selection is a persistent set of files in the Working Portrait. Avalonia `TreeView` selection is only its visible portrayal and is reconstructed whenever the view or semantic selection changes.
+Semantic selection is a persistent set of files in the Working Portrait. Explorer row highlighting is only its visible portrayal and is reconstructed whenever the view or semantic selection changes; native Avalonia `ListBox` selection is not authoritative.
 
 A visible Explorer node is highlighted exactly when it represents at least one file and every file represented by that node is selected. Therefore:
 
@@ -72,7 +72,7 @@ Directory Namesakes is the exception to ordinary file-selection semantics:
 
 Exclude is specialized in this view. Session-only Exclude resolves grouped files beneath the effective Directories and uses the ordinary session Exclude machinery. Permanent Exclude additionally writes an equivalent rule to `[exclude]` in `Berries.config`. A Namesake such as `obj` is persisted as `/obj/`; the trailing separator is directory-specific, whereas separator-free `obj` retains the broader path-component semantics.
 
-Tree expansion state belongs to `ExplorerNode`, not recyclable Avalonia `TreeViewItem` containers. `IsExpanded` is bound two-way so virtualization cannot transfer expansion state between rows.
+Expansion state belongs to `ExplorerNode`. `ExplorerList` flattens only currently visible nodes into independently virtualized rows; expanding or collapsing a node inserts or removes only its visible descendant rows, preserving viewport stability.
 
 ## Suggestions and navigation
 
