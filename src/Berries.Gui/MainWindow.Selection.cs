@@ -16,7 +16,7 @@ public partial class MainWindow
     private void ExplorerNode_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (controller.Session is not { } session
-            || sender is not BerriesTreeView tree
+            || sender is not ExplorerList tree
             || e.GetCurrentPoint(tree).Properties.PointerUpdateKind != PointerUpdateKind.LeftButtonPressed
             || e.Source is not Visual source)
             return;
@@ -54,7 +54,7 @@ public partial class MainWindow
             || e.GetCurrentPoint(disclosure).Properties.PointerUpdateKind != PointerUpdateKind.LeftButtonPressed)
             return;
 
-        var tree = disclosure.FindAncestorOfType<BerriesTreeView>();
+        var tree = disclosure.FindAncestorOfType<ExplorerList>();
         if (tree is null)
             return;
 
@@ -168,7 +168,7 @@ public partial class MainWindow
         return await dialog.ShowDialog<bool>(this);
     }
 
-    private IEnumerable<BerriesTreeView> ActiveTrees()
+    private IEnumerable<ExplorerList> ActiveTrees()
     {
         if (currentProjection?.IsPair == true) { yield return LeftTree; yield return RightTree; }
         else yield return ExplorerTree;
@@ -190,7 +190,7 @@ public partial class MainWindow
     }
 
     private static void SynchronizeRowSelection(
-        BerriesTreeView tree,
+        ExplorerList tree,
         Func<ExplorerNode, bool> isSelected)
     {
         var selectedItems = tree.SelectedItems;
