@@ -35,7 +35,7 @@ Placement is determined by meaning, not cost or async implementation:
 - **Projection** owns UI-independent transformations whose result exists specifically for presentation.
 - **Gui** owns genuinely GUI-specific construction and control state.
 
-Examples: hashing and Branch relationship scoring are Core; presentation ordering and a UI-independent Branch hierarchy are Projection; `ExplorerNode` creation and `TreeView` binding are Gui.
+Examples: hashing and Branch relationship scoring are Core; presentation ordering and a UI-independent Branch hierarchy are Projection; `ExplorerNode` construction and `ExplorerList` realization are Gui.
 
 Expensive GUI-specific work remains GUI work. It must be made responsive there rather than moved downward merely because it is expensive.
 
@@ -55,13 +55,15 @@ The layer doing the work reports progress as data. The GUI owns status-bar prese
 
 ## Explorer realization
 
-Logical presentation size and realized Avalonia control count are different concerns.
+Logical hierarchy size and realized Avalonia control count are different concerns. Large Explorer populations must remain virtualized.
 
-Large Explorer trees must use virtualized item panels so off-screen roots do not acquire visual containers merely because they exist in the projection. This is a functional scaling requirement: a nonvirtualized `TreeView` can turn inexpensive collection publication into repeated realization/layout work proportional to the entire tree.
+Avalonia `TreeView` is unsuitable for this Explorer: its outer `VirtualizingStackPanel` virtualizes top-level `TreeViewItem` containers, so an expanded root is one variable-height virtualized item rather than a sequence of independently virtualized visible rows. Expansion changes that item's height and can change the virtualizer's estimated mapping from an unchanged scroll offset to logical content. In practice this produced large, data-dependent viewport jumps even though the `ScrollViewer.Offset` itself did not change. Disabling virtualization removed the symptom but is not viable for large Corpora.
 
-State that semantically belongs to a logical Explorer node must not live only on a recyclable Avalonia item container. In particular, expansion is stored on `ExplorerNode` and `TreeViewItem.IsExpanded` is bound two-way; otherwise virtualization can make expanding one row appear to expand or collapse another.
+The GUI therefore keeps the logical hierarchy in `ExplorerNode` but presents it through `ExplorerList`, a flat virtualized `ListBox` of visible `ExplorerRow` objects carrying node and depth. Expansion state belongs to `ExplorerNode`; expanding or collapsing inserts/removes only the branch's contiguous visible descendant rows. Rebuilding the whole flat collection on expansion is prohibited because it destabilizes the viewport and performs unnecessary work.
 
-GUI construction may publish known presentation nodes incrementally in bounded batches when useful for cancellation and early display. Batching does not replace virtualization; both control different costs.
+Groups nodes may be published incrementally in bounded batches. `ExplorerList` must incorporate ordinary append publication incrementally rather than rebuilding all prior rows for every collection notification; otherwise incremental Groups construction degenerates toward O(N²). Batching and virtualization control different costs and both remain required.
+
+Explorer selection is semantic application state, not native `ListBox` selection. After semantic selection changes, visible row highlighting is recomputed from the applicable selection rules. Directory Namesakes retains its separate projection-local Namesake/occurrence semantics. Native Avalonia selection state must not become authoritative or be allowed to determine persistent highlighting.
 
 ## Projection caching and prewarming
 
