@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
@@ -26,7 +25,7 @@ public partial class MainWindow
         while (current is not null && current is not ListBoxItem)
         {
             // The disclosure button owns expansion/collapse and must not also toggle selection.
-            if (current is ToggleButton) return;
+            if (current is Border { DataContext: ExplorerRow }) return;
             current = current.GetVisualParent();
         }
 
@@ -49,12 +48,13 @@ public partial class MainWindow
         e.Handled = true;
     }
 
-    private void ExplorerDisclosure_Click(object? sender, RoutedEventArgs e)
+    private void ExplorerDisclosure_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (sender is not ToggleButton { DataContext: ExplorerRow row } button)
+        if (sender is not Border { DataContext: ExplorerRow row } disclosure
+            || e.GetCurrentPoint(disclosure).Properties.PointerUpdateKind != PointerUpdateKind.LeftButtonPressed)
             return;
 
-        var tree = button.FindAncestorOfType<BerriesTreeView>();
+        var tree = disclosure.FindAncestorOfType<BerriesTreeView>();
         if (tree is null)
             return;
 
