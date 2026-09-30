@@ -56,8 +56,40 @@ public sealed class BerriesTreeView : ListBox
         if (node.Children.Count == 0)
             return;
 
-        node.IsExpanded = !node.IsExpanded;
-        RebuildRows();
+        var rowIndex = -1;
+        for (var i = 0; i < rows.Count; i++)
+        {
+            if (ReferenceEquals(rows[i].Node, node))
+            {
+                rowIndex = i;
+                break;
+            }
+        }
+
+        if (rowIndex < 0)
+            return;
+
+        var depth = rows[rowIndex].Depth;
+        if (node.IsExpanded)
+        {
+            node.IsExpanded = false;
+
+            // Visible descendants are contiguous in the flat list. Remove only them;
+            // preserving all rows above the branch keeps the virtualizer's viewport
+            // mapping stable.
+            while (rowIndex + 1 < rows.Count && rows[rowIndex + 1].Depth > depth)
+                rows.RemoveAt(rowIndex + 1);
+            return;
+        }
+
+        node.IsExpanded = true;
+        var insertAt = rowIndex + 1;
+        foreach (var child in node.Children)
+        {
+            var added = FlattenVisible(child, depth + 1);
+            foreach (var row in added)
+                rows.Insert(insertAt++, row);
+        }
     }
 
     public void RefreshRows() => RebuildRows();
