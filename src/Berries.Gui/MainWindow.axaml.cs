@@ -26,16 +26,14 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        // ListBoxItem handles pointer presses for its native selection before the
-        // event reaches ExplorerList. Explorer selection has different semantics,
-        // so observe handled presses and project our semantic selection back onto
-        // the rows after native bookkeeping has occurred.
+        // Explorer selection has application-defined semantics. Intercept row presses
+        // during tunneling so ListBoxItem never applies its native selection model.
         ExplorerTree.AddHandler(InputElement.PointerPressedEvent, ExplorerNode_PointerPressed,
-            RoutingStrategies.Bubble, handledEventsToo: true);
+            RoutingStrategies.Tunnel, handledEventsToo: true);
         LeftTree.AddHandler(InputElement.PointerPressedEvent, ExplorerNode_PointerPressed,
-            RoutingStrategies.Bubble, handledEventsToo: true);
+            RoutingStrategies.Tunnel, handledEventsToo: true);
         RightTree.AddHandler(InputElement.PointerPressedEvent, ExplorerNode_PointerPressed,
-            RoutingStrategies.Bubble, handledEventsToo: true);
+            RoutingStrategies.Tunnel, handledEventsToo: true);
 
         var engine = new BerriesEngine(fileSystem);
         controller = new BerriesApplication(
