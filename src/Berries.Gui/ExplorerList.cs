@@ -5,8 +5,6 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Input;
-using Avalonia.Interactivity;
 
 namespace Berries.Gui;
 
@@ -31,11 +29,6 @@ public sealed class ExplorerList : ListBox
 
     /// <inheritdoc />
     protected override Type StyleKeyOverride => typeof(ListBox);
-
-    /// <summary>
-    /// Suppresses native ListBox selection; Explorer selection is application-defined semantic state.
-    /// </summary>
-    protected override bool ShouldTriggerSelection(InputElement source, RoutedEventArgs e) => false;
 
     /// <summary>Gets or sets the logical root-node collection presented by this control.</summary>
     public new IEnumerable? ItemsSource
