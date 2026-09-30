@@ -1,9 +1,10 @@
 using System.Collections;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 
 namespace Berries.Gui;
 
@@ -23,7 +24,6 @@ public sealed class ExplorerList : ListBox
     public ExplorerList()
     {
         base.ItemsSource = rows;
-        SelectionMode = SelectionMode.Multiple;
     }
 
     protected override Type StyleKeyOverride => typeof(ListBox);
@@ -176,9 +176,31 @@ public sealed class ExplorerList : ListBox
     }
 }
 
-public sealed record ExplorerRow(ExplorerNode Node, int Depth)
+public sealed class ExplorerRow(ExplorerNode node, int depth) : INotifyPropertyChanged
 {
+    private bool isSelected;
+
+    public ExplorerNode Node { get; } = node;
+    public int Depth { get; } = depth;
     public string Label => Node.Label;
     public bool HasChildren => Node.Children.Count > 0;
     public Thickness Indent => new(Depth * 18, 0, 0, 0);
+
+    public bool IsSelected
+    {
+        get => isSelected;
+        set
+        {
+            if (isSelected == value)
+                return;
+
+            isSelected = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }
