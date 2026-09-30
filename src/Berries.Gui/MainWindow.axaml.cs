@@ -210,13 +210,13 @@ public partial class MainWindow : Window
             operation.Mark($"Groups ItemsSource assigned ({cache.Nodes.Count:N0} cached nodes)");
             await Task.Yield();
             operation.Mark("Groups first UI yield returned");
-            await BuildGroupsExplorerTreeAsync(
+            await BuildGroupsExplorerNodesAsync(
                 groups,
                 cache.Nodes,
                 cache.BuiltCount,
                 operation,
                 completed => cache.BuiltCount = completed);
-            operation.Mark("Groups tree available");
+            operation.Mark("Groups nodes available");
 
             if (!IsCurrentNavigation(operation))
                 throw new OperationCanceledException(operation.Token);
